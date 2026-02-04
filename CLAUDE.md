@@ -1,28 +1,42 @@
 # Coterie
 
-Industry intelligence app — a personal CRM for mapping professional landscapes.
+Industry intelligence app — a relationship mapping tool for professional landscapes.
 
 ## Overview
 
 Coterie maps relationships between companies, people, and projects. Designed for professionals who need to understand who's where, what's in development, and how it all connects.
 
-**Currently focused on Hollywood/entertainment**, but the data model is industry-agnostic.
+**Industry-agnostic** data model, currently seeded for Hollywood/entertainment.
 
 See `docs/PRODUCT_PLAN.md` for full product vision and roadmap.
+
+## Architecture: Canonical + Override
+
+The core architecture is a **shared canonical database** with **per-user overrides**:
+
+- **Canonical tables** (`objects`, `relationships`) = shared truth, maintained/vetted
+- **Override tables** (`objects_overrides`, `relationships_overrides`) = per-user customizations layered on top
+- **What the user sees** = canonical + their overrides merged together
+
+User-created entities live in the override tables with `object_id = NULL`. When corroborated by enough users, they get promoted to canonical.
+
+Map coordinates are always per-user (in overrides), never canonical.
 
 ## Tier Structure
 
 | Tier | Description | Status |
 |------|-------------|--------|
-| **Free** | Local-only, self-maintained | In development |
-| **Pro** | Cloud-synced, crowd-vetted canonical data | Planned |
+| **Pro** | Cloud-synced, canonical data + user overrides, coterie sharing | **In development** |
+| **Free** | Carved from Pro — local-only subset | Planned |
 | **Studio** | Pro + AI-powered automation | Planned |
+
+Strategy: build Pro first. Easier to carve a local Free tier out of a working networked app than to retrofit networking onto a local app.
 
 ## Tech Stack
 
 - **Mac App**: SwiftUI
-- **Local Storage**: SQLite (via SQLite3 C API)
-- **Cloud Backend**: Supabase (PostgreSQL) — for Pro/Studio tiers
+- **Local Storage**: SQLite (via SQLite3 C API) — Free tier / offline
+- **Cloud Backend**: Supabase (PostgreSQL) — Pro/Studio tiers
 - **AI**: Claude API (Haiku for classification)
 
 ## Project Structure
@@ -51,7 +65,7 @@ coterie/
 ├── scripts/
 │   └── known_landscape.json    # Seed data
 └── supabase/
-    ├── migrations/             # Database schema
+    ├── migrations/             # Database schema (Pro-tier)
     └── seed.sql                # Sample data
 ```
 
@@ -72,16 +86,52 @@ Types (extensible):
 
 Example: Netflix is class=`company` with types=[`streamer`, `studio`]
 
-### Schema
+### Schema (Pro tier)
 
-```sql
-object_classes     -- company, person, project
-object_types       -- studio, executive, feature, etc.
-objects            -- all entities (id, class, name, data, map_x, map_y)
-object_type_assignments  -- many-to-many: object ↔ types
-relationships      -- connects objects (source_id, target_id, type)
-relationship_types -- employed_by, produces, represents, etc.
+**Taxonomy & canonical data:**
 ```
+industries             -- entertainment, tech, finance, etc.
+object_classes         -- company, person, project (fixed)
+object_types           -- studio, executive, feature, etc. (extensible)
+objects                -- canonical entities (name, class, data, is_active)
+object_industries      -- many-to-many: object ↔ industries
+object_type_assignments -- many-to-many: object ↔ types
+relationship_types     -- employed_by, produces, represents, etc.
+relationships          -- canonical connections (source, target, type, is_active)
+```
+
+**Maps (curated packages):**
+```
+maps                   -- named packages ("Hollywood Majors", "NYC Indie")
+map_objects            -- objects in each map + default x/y coordinates
+```
+
+**User layer:**
+```
+profiles               -- extends Supabase auth (display_name, industry)
+user_maps              -- which maps a user has installed
+objects_overrides       -- per-user: overrides (object_id set) + user-created (object_id NULL)
+relationships_overrides -- per-user: overrides + user-created connections
+```
+
+**Social:**
+```
+coteries               -- sharing groups (named after the app!)
+coterie_members        -- who's in which coterie (owner/member roles)
+```
+
+**Other:**
+```
+log_entries            -- per-user activity log
+```
+
+### Key design decisions
+
+- **Soft delete** (`is_active`) on objects, relationships, and overrides — never lose data
+- **Override tables do double duty**: `object_id = NULL` means user-created entity; `object_id` set means override of canonical
+- **Map coordinates always live in overrides**, never canonical — everyone has their own layout
+- **`relationships_overrides` source/target have no FK** — can reference either `objects.id` or `objects_overrides.id`; resolved at app layer
+- **Industries scope onboarding**, not data — all users share one database, industry is a lens/filter
 
 ### Key Relationships
 
@@ -91,6 +141,16 @@ relationship_types -- employed_by, produces, represents, etc.
 - `attached_to`: person → project
 - `represents`: company → person
 - `reports_to`: person → person
+
+## User Experience (Pro)
+
+1. User signs up, picks their industry
+2. Installs a map package → objects_overrides seeded with default coordinates
+3. Customizes via overrides (drag, rename, add notes)
+4. Creates new objects → fuzzy-match wizard ("Is this any of these existing objects?")
+5. Invites others into a **Coterie** → shared visibility into each other's overrides
+6. Eventually: user-created objects vetted and promoted to canonical
+7. Eventually: users can check their maps against canonical for updates (diff/merge UI)
 
 ## Running Locally
 
@@ -117,9 +177,9 @@ open http://127.0.0.1:54323
 
 ## Current Status
 
-### Implemented
+### Implemented (v0.1 — local Free tier)
 - [x] Graph data model (class/type taxonomy)
-- [x] Local SQLite database with seed data (Free tier)
+- [x] Local SQLite database with seed data
 - [x] LocalDatabase service (full CRUD + type assignments)
 - [x] MapView with draggable cards, connections, zoom/pan
     - Distinct shapes per class (rectangles=companies, ovals=people, octagons=projects)
@@ -131,17 +191,19 @@ open http://127.0.0.1:54323
     - Auto-creates companies and employed_by relationships
 - [x] News feed with RSS aggregation
 - [x] Claude API integration for article classification
-- [x] Supabase schema (for future Pro/Studio tiers)
+- [x] Pro-tier Supabase schema (canonical + overrides + maps + coteries)
 
 ### In Progress
-- [ ] CRUD UI for objects/relationships (next up!)
-- [ ] Polish and ship v1.0
+- [ ] Pro-tier development (cloud-first architecture)
+- [ ] CRUD UI for objects/relationships
 
-### Planned (Pro/Studio)
-- [ ] Cloud sync
-- [ ] Canonical object database
+### Planned
+- [ ] Map packages with curated default layouts
+- [ ] Coterie sharing (groups)
+- [ ] Canonical promotion pipeline (user-created → vetted → canonical)
+- [ ] Canon check / diff-merge UI
+- [ ] Free tier (carved from Pro)
 - [ ] AI contact intelligence (see `docs/STUDIO_CONTACT_INTELLIGENCE.md`)
-- [ ] Friend sharing
 
 ## Known Landscape
 
@@ -151,6 +213,17 @@ Curated seed data in `scripts/known_landscape.json`:
 - **Notable** (~60): Genre specialists, independents
 - **Agencies** (8): CAA, WME, UTA, etc.
 - **Management** (8): Management 360, Brillstein, etc.
+
+## Market Position
+
+Not a traditional CRM (no sales pipeline). Coterie is a **relationship intelligence tool** / **professional landscape mapper**. Closest comparisons:
+
+- **Studio System / IMDbPro**: Have the data but no graph visualization, read-only, enterprise pricing
+- **Affinity / Attio**: Graph-based relationship tools but for VC/sales, no entertainment awareness
+- **Kumu**: Visual network canvas but no data model or domain intelligence
+- **Personal CRMs (Dex, Clay)**: Track your contacts, not the landscape itself
+
+Coterie's gap: visual relationship graph + structured data model + individual-scale + industry-aware + local-first option.
 
 ## API Keys
 

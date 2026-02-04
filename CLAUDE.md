@@ -142,6 +142,17 @@ log_entries            -- per-user activity log
 - `represents`: company → person
 - `reports_to`: person → person
 
+## Platform Strategy
+
+**Now:** SwiftUI Mac app (power user, map building — immediate users are Hollywood/Mac people)
+**Soon-ish:** iPad support (SwiftUI gives this almost for free)
+**Later:** Web app (Vite + React) as cross-platform companion — responsive, works on phones/PCs/anything with a browser
+**Probably never needed:** Native Android/Windows apps
+
+Rationale: The Mac app is the power-user canvas (drag objects, build maps, do real work). The web client is a read-heavy companion (look up a person, check relationships before a meeting). They're different enough that sharing a UI framework wouldn't save much. Supabase as backend means both clients talk to the same API — the data layer is shared, only UI differs.
+
+**Open question (as of 2026-02-03):** Matt is sleeping on whether to commit to this strategy vs. alternatives (Tauri+SvelteKit, React Native, full web-first). Decision pending.
+
 ## User Experience (Pro)
 
 1. User signs up, picks their industry

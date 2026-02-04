@@ -240,3 +240,48 @@ Coterie's gap: visual relationship graph + structured data model + individual-sc
 
 - **Supabase**: Default local dev keys (no setup needed)
 - **Claude API**: User provides in Settings (stored in Keychain)
+
+---
+
+## Last Session: 2026-02-03
+
+> When starting a new session, read this section for continuity. At handoff, fold any lasting decisions into the sections above, then replace this section with the new session's conversation.
+
+### What we did
+
+1. **Full project refresher** — walked through the codebase, all views/services/models, what's built vs. planned.
+
+2. **Market research** — investigated whether Coterie is a "CRM" (it isn't — no sales pipeline). Researched competitors across five categories:
+   - **Studio System / IMDbPro**: Have entertainment data but no graph visualization, read-only, enterprise pricing
+   - **Personal CRMs (Dex, Clay)**: Flat contact lists, no relationship-between-entities modeling
+   - **Affinity / Attio**: Graph-based relationship tools for VC/sales. Attio raised $116M proving graph CRM is viable. Neither has entertainment awareness or a visual canvas.
+   - **Kumu**: Beautiful network canvas but it's a blank diagramming tool — no data model, no domain intelligence
+   - **Coterie's gap**: Nobody combines visual relationship graph + structured data model + individual-scale + industry-aware. Studio System has the data but no graph UI. Kumu has the canvas but no data model.
+
+3. **Strategic decision: build Pro first** — easier to carve a local Free tier out of a working networked app than the reverse. First use case: Matt sharing data with his brother (who is also his writing partner).
+
+4. **Industry-agnostic design** — `industries` table scopes onboarding, but all users share one database. Industry is a lens/filter, not a silo.
+
+5. **Canonical + override architecture** — the big architectural breakthrough:
+   - `objects` / `relationships` = canonical shared truth
+   - `objects_overrides` / `relationships_overrides` = per-user layer (same fields, nullable, plus user-only fields like notes/tags)
+   - User sees canonical merged with their overrides
+   - User-created entities: `objects_overrides` rows with `object_id = NULL` — keeps canonical table pure. Promotion to canonical happens when enough users corroborate the same entity.
+   - Deduplication at creation: fuzzy-match wizard ("Is this any of these existing objects?")
+
+6. **Maps table** — curated packages of objects with default x/y coordinates. Solves onboarding, monetization (sell map packages), and the spaghetti-map problem. No `map_relationships` needed — infer from which objects are present.
+
+7. **Soft delete** — `is_active BOOLEAN DEFAULT TRUE` on objects, relationships, and override tables. Needed for canonical promotion flow and audit trail. Not on taxonomy tables.
+
+8. **Wrote and committed the Pro schema** — `20260203000000_pro_schema.sql` with 15 tables. Deleted old migration. Pushed to GitHub.
+
+9. **Platform strategy discussion** — evaluated SwiftUI-only, Tauri+SvelteKit, React Native, web-first, and SwiftUI+web-later. Claude recommended SwiftUI for Mac (power canvas) + Vite/React web client later (cross-platform companion). **Matt is sleeping on this decision.**
+
+### Open threads for next session
+
+1. **Platform strategy decision** — commit to SwiftUI + web later? Or pivot?
+2. **RLS policies** — stubbed as TODO in migration, need writing before multi-user
+3. **Canon check UX (Step 8)** — diff/merge UI for users to sync against canonical updates. TBD.
+4. **Canonical promotion pipeline** — how does quorum work? Manual review first? Automated later?
+5. **LocalDatabase.swift** — needs to be updated/replaced with Supabase service layer once Pro dev starts
+6. **Handoff skill** — wasn't loading in this session. Matt should check Claude Code settings for the Coterie project directory.

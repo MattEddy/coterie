@@ -15,7 +15,6 @@
 DROP VIEW IF EXISTS objects_with_types CASCADE;
 DROP TABLE IF EXISTS coterie_members CASCADE;
 DROP TABLE IF EXISTS coteries CASCADE;
-DROP TABLE IF EXISTS user_maps CASCADE;
 DROP TABLE IF EXISTS map_objects CASCADE;
 DROP TABLE IF EXISTS maps CASCADE;
 DROP TABLE IF EXISTS object_industries CASCADE;
@@ -238,27 +237,41 @@ CREATE INDEX idx_relationships_type ON relationships(type);
 CREATE INDEX idx_relationships_active ON relationships(is_active);
 
 -- =============================================================================
--- MAPS (curated packages of objects with default positions)
+-- MAPS (unified: store packages, user maps, shared maps)
 -- =============================================================================
--- A map is a downloadable starting point: "Hollywood Majors", "NYC Indie", etc.
--- Users install maps, which seeds their overrides with default coordinates.
+-- A map is a named collection of objects. Can be:
+--   - Store package: user_id IS NULL, is_published = TRUE, has relative coords
+--   - User map: user_id set, is a filter/subset of the user's Landscape
+--   - Installed/shared: user_id set, source_map_id points to the original
+--
+-- When a user installs a package or accepts a shared map:
+--   1. A new maps row is created (user_id = them, source_map_id = original)
+--   2. map_objects are copied from the source
+--   3. Relative coords are translated to absolute Landscape positions (objects_overrides)
+--   4. The map lives in the user's collection as a named filter
 
 CREATE TABLE maps (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     description TEXT,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     industry_id TEXT REFERENCES industries(id),
+    source_map_id UUID REFERENCES maps(id),
+    is_published BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX idx_maps_user ON maps(user_id);
+CREATE INDEX idx_maps_published ON maps(is_published) WHERE is_published = TRUE;
+
 CREATE TABLE map_objects (
     map_id UUID NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
-    object_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-    default_x DOUBLE PRECISION NOT NULL,
-    default_y DOUBLE PRECISION NOT NULL,
-    PRIMARY KEY (map_id, object_id)
+    object_ref_id UUID NOT NULL,  -- objects.id or objects_overrides.id (resolved at app layer)
+    relative_x DOUBLE PRECISION,  -- NULL for filter-only maps, set for packages/shared
+    relative_y DOUBLE PRECISION,
+    PRIMARY KEY (map_id, object_ref_id)
 );
 
 -- =============================================================================
@@ -272,17 +285,6 @@ CREATE TABLE profiles (
     industry_id TEXT REFERENCES industries(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- =============================================================================
--- USER MAPS (which maps a user has installed)
--- =============================================================================
-
-CREATE TABLE user_maps (
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    map_id UUID NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
-    installed_at TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (user_id, map_id)
 );
 
 -- =============================================================================

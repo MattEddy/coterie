@@ -2,9 +2,9 @@
 -- Canonical + user override architecture, industry-agnostic, coterie sharing
 --
 -- Key concepts:
---   - objects/relationships = canonical truth (we maintain)
---   - objects_overrides/relationships_overrides = per-user layer (overrides + user-created)
---   - maps = curated packages of objects with default positions
+--   - objects/connections = canonical truth (we maintain)
+--   - objects_overrides/connections_overrides = per-user layer (overrides + user-created)
+--   - maps = unified: store packages, user maps, shared maps
 --   - coteries = sharing groups
 --   - industries = scoping for onboarding + map packages
 
@@ -13,24 +13,34 @@
 -- =============================================================================
 
 DROP VIEW IF EXISTS objects_with_types CASCADE;
+DROP TABLE IF EXISTS coteries_maps CASCADE;
 DROP TABLE IF EXISTS coterie_members CASCADE;
 DROP TABLE IF EXISTS coteries CASCADE;
-DROP TABLE IF EXISTS map_objects CASCADE;
+DROP TABLE IF EXISTS maps_objects CASCADE;
 DROP TABLE IF EXISTS maps CASCADE;
-DROP TABLE IF EXISTS object_industries CASCADE;
-DROP TABLE IF EXISTS relationships_overrides CASCADE;
+DROP TABLE IF EXISTS objects_industries CASCADE;
+DROP TABLE IF EXISTS connections_overrides CASCADE;
 DROP TABLE IF EXISTS objects_overrides CASCADE;
 DROP TABLE IF EXISTS profiles CASCADE;
 DROP TABLE IF EXISTS log_entries CASCADE;
-DROP TABLE IF EXISTS object_type_assignments CASCADE;
-DROP TABLE IF EXISTS relationships CASCADE;
+DROP TABLE IF EXISTS objects_types CASCADE;
+DROP TABLE IF EXISTS connections CASCADE;
 DROP TABLE IF EXISTS objects CASCADE;
-DROP TABLE IF EXISTS relationship_types CASCADE;
-DROP TABLE IF EXISTS object_types CASCADE;
-DROP TABLE IF EXISTS object_classes CASCADE;
+DROP TABLE IF EXISTS connection_types CASCADE;
+DROP TABLE IF EXISTS types CASCADE;
+DROP TABLE IF EXISTS classes CASCADE;
 DROP TABLE IF EXISTS industries CASCADE;
 
 -- Legacy cleanup
+DROP TABLE IF EXISTS object_type_assignments CASCADE;
+DROP TABLE IF EXISTS object_industries CASCADE;
+DROP TABLE IF EXISTS map_objects CASCADE;
+DROP TABLE IF EXISTS relationship_types CASCADE;
+DROP TABLE IF EXISTS relationships_overrides CASCADE;
+DROP TABLE IF EXISTS relationships CASCADE;
+DROP TABLE IF EXISTS object_types CASCADE;
+DROP TABLE IF EXISTS object_classes CASCADE;
+DROP TABLE IF EXISTS user_maps CASCADE;
 DROP TABLE IF EXISTS projects CASCADE;
 DROP TABLE IF EXISTS people CASCADE;
 DROP TABLE IF EXISTS companies CASCADE;
@@ -59,10 +69,10 @@ INSERT INTO industries (id, display_name, icon, color) VALUES
     ('media', 'Media & Journalism', 'newspaper', '#7C3AED');
 
 -- =============================================================================
--- OBJECT CLASSES (fixed: company, person, project)
+-- CLASSES (fixed: company, person, project)
 -- =============================================================================
 
-CREATE TABLE object_classes (
+CREATE TABLE classes (
     id TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
     icon TEXT,
@@ -70,26 +80,26 @@ CREATE TABLE object_classes (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO object_classes (id, display_name, icon, color) VALUES
+INSERT INTO classes (id, display_name, icon, color) VALUES
     ('company', 'Company', 'building.2', '#3B82F6'),
     ('person', 'Person', 'person.fill', '#10B981'),
     ('project', 'Project', 'film', '#F59E0B');
 
 -- =============================================================================
--- OBJECT TYPES (extensible variants within a class)
+-- TYPES (extensible variants within a class)
 -- =============================================================================
 
-CREATE TABLE object_types (
+CREATE TABLE types (
     id TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
-    class TEXT NOT NULL REFERENCES object_classes(id),
+    class TEXT NOT NULL REFERENCES classes(id),
     icon TEXT,
     color TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Company types
-INSERT INTO object_types (id, display_name, class, icon, color) VALUES
+INSERT INTO types (id, display_name, class, icon, color) VALUES
     ('studio', 'Studio', 'company', 'building.2.fill', '#3B82F6'),
     ('parent_company', 'Parent Company', 'company', 'building.columns', '#1E40AF'),
     ('network', 'Network', 'company', 'tv', '#7C3AED'),
@@ -102,7 +112,7 @@ INSERT INTO object_types (id, display_name, class, icon, color) VALUES
     ('guild_union', 'Guild/Union', 'company', 'person.badge.shield.checkmark', '#6B7280');
 
 -- Person types
-INSERT INTO object_types (id, display_name, class, icon, color) VALUES
+INSERT INTO types (id, display_name, class, icon, color) VALUES
     ('executive', 'Executive', 'person', 'person.badge.key', '#1E40AF'),
     ('producer', 'Producer', 'person', 'person.crop.rectangle', '#7C3AED'),
     ('creative', 'Creative', 'person', 'pencil.and.outline', '#059669'),
@@ -113,7 +123,7 @@ INSERT INTO object_types (id, display_name, class, icon, color) VALUES
     ('investor', 'Investor', 'person', 'chart.line.uptrend.xyaxis', '#0891B2');
 
 -- Project types
-INSERT INTO object_types (id, display_name, class, icon, color) VALUES
+INSERT INTO types (id, display_name, class, icon, color) VALUES
     ('feature', 'Feature', 'project', 'film', '#F59E0B'),
     ('tv_series', 'TV Series', 'project', 'tv', '#7C3AED'),
     ('limited_series', 'Limited Series', 'project', 'tv.inset.filled', '#DC2626'),
@@ -125,14 +135,22 @@ INSERT INTO object_types (id, display_name, class, icon, color) VALUES
 -- =============================================================================
 -- OBJECTS (canonical entities — the shared truth)
 -- =============================================================================
--- No map coordinates here — position is per-user (lives in overrides).
+-- No Landscape coordinates here — position is per-user (lives in overrides).
 -- No user ownership — canonical objects belong to everyone.
 
 CREATE TABLE objects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    class TEXT NOT NULL REFERENCES object_classes(id),
+    class TEXT NOT NULL REFERENCES classes(id),
     name TEXT NOT NULL,
-    data JSONB DEFAULT '{}',
+    title TEXT,                          -- subtitle/description: job title, company tagline, logline
+    status TEXT,                         -- lifecycle: active, development, released, defunct, etc.
+    phone TEXT,                          -- primary phone
+    phone_2 TEXT,                        -- secondary phone
+    email TEXT,                          -- primary email
+    website TEXT,                        -- primary URL
+    address TEXT,                        -- free-form location
+    photo_url TEXT,                      -- headshot / logo / poster
+    data JSONB DEFAULT '{}',            -- long tail: social links, genre, etc.
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -144,39 +162,39 @@ CREATE INDEX idx_objects_data ON objects USING GIN(data);
 CREATE INDEX idx_objects_active ON objects(is_active);
 
 -- =============================================================================
--- OBJECT INDUSTRIES (many-to-many: objects can span industries)
+-- OBJECTS_INDUSTRIES (many-to-many: objects can span industries)
 -- =============================================================================
 
-CREATE TABLE object_industries (
+CREATE TABLE objects_industries (
     object_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
     industry_id TEXT NOT NULL REFERENCES industries(id),
     PRIMARY KEY (object_id, industry_id)
 );
 
-CREATE INDEX idx_object_industries_industry ON object_industries(industry_id);
+CREATE INDEX idx_objects_industries_industry ON objects_industries(industry_id);
 
 -- =============================================================================
--- OBJECT TYPE ASSIGNMENTS (many-to-many: objects can have multiple types)
+-- OBJECTS_TYPES (many-to-many: objects can have multiple types)
 -- =============================================================================
 
-CREATE TABLE object_type_assignments (
+CREATE TABLE objects_types (
     object_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-    type_id TEXT NOT NULL REFERENCES object_types(id),
+    type_id TEXT NOT NULL REFERENCES types(id),
     is_primary BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (object_id, type_id)
 );
 
-CREATE INDEX idx_type_assignments_type ON object_type_assignments(type_id);
+CREATE INDEX idx_objects_types_type ON objects_types(type_id);
 
 -- Ensure type matches object's class
 CREATE OR REPLACE FUNCTION check_type_class_match()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM object_types ot
+        SELECT 1 FROM types t
         JOIN objects o ON o.id = NEW.object_id
-        WHERE ot.id = NEW.type_id AND ot.class = o.class
+        WHERE t.id = NEW.type_id AND t.class = o.class
     ) THEN
         RAISE EXCEPTION 'Type % does not match object class', NEW.type_id;
     END IF;
@@ -185,14 +203,14 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER check_type_class_match_trigger
-    BEFORE INSERT OR UPDATE ON object_type_assignments
+    BEFORE INSERT OR UPDATE ON objects_types
     FOR EACH ROW EXECUTE FUNCTION check_type_class_match();
 
 -- =============================================================================
--- RELATIONSHIP TYPES
+-- CONNECTION TYPES (kinds of connections between objects)
 -- =============================================================================
 
-CREATE TABLE relationship_types (
+CREATE TABLE connection_types (
     id TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
     valid_source_classes TEXT[],
@@ -202,7 +220,7 @@ CREATE TABLE relationship_types (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO relationship_types (id, display_name, valid_source_classes, valid_target_classes, icon) VALUES
+INSERT INTO connection_types (id, display_name, valid_source_classes, valid_target_classes, icon) VALUES
     ('owns', 'Owns', '{company}', '{company}', 'arrow.down.circle'),
     ('division_of', 'Division Of', '{company}', '{company}', 'square.grid.2x2'),
     ('employed_by', 'Employed By', '{person}', '{company}', 'briefcase'),
@@ -216,14 +234,14 @@ INSERT INTO relationship_types (id, display_name, valid_source_classes, valid_ta
     ('related_to', 'Related To', NULL, NULL, 'link');
 
 -- =============================================================================
--- RELATIONSHIPS (canonical connections — the shared truth)
+-- CONNECTIONS (canonical connections — the shared truth)
 -- =============================================================================
 
-CREATE TABLE relationships (
+CREATE TABLE connections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
     target_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-    type TEXT NOT NULL REFERENCES relationship_types(id),
+    type TEXT NOT NULL REFERENCES connection_types(id),
     data JSONB DEFAULT '{}',
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -231,10 +249,37 @@ CREATE TABLE relationships (
     UNIQUE(source_id, target_id, type)
 );
 
-CREATE INDEX idx_relationships_source ON relationships(source_id);
-CREATE INDEX idx_relationships_target ON relationships(target_id);
-CREATE INDEX idx_relationships_type ON relationships(type);
-CREATE INDEX idx_relationships_active ON relationships(is_active);
+CREATE INDEX idx_connections_source ON connections(source_id);
+CREATE INDEX idx_connections_target ON connections(target_id);
+CREATE INDEX idx_connections_type ON connections(type);
+CREATE INDEX idx_connections_active ON connections(is_active);
+
+-- =============================================================================
+-- USER PROFILES
+-- =============================================================================
+-- Extends Supabase auth.users with app-specific data.
+-- All other tables FK to profiles.user_id (keeps relationships in public schema).
+
+CREATE TABLE profiles (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    display_name TEXT,
+    industry_id TEXT REFERENCES industries(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Auto-create profile on signup
+CREATE OR REPLACE FUNCTION create_profile_on_signup()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO profiles (user_id) VALUES (NEW.id);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION create_profile_on_signup();
 
 -- =============================================================================
 -- MAPS (unified: store packages, user maps, shared maps)
@@ -246,7 +291,7 @@ CREATE INDEX idx_relationships_active ON relationships(is_active);
 --
 -- When a user installs a package or accepts a shared map:
 --   1. A new maps row is created (user_id = them, source_map_id = original)
---   2. map_objects are copied from the source
+--   2. maps_objects are copied from the source
 --   3. Relative coords are translated to absolute Landscape positions (objects_overrides)
 --   4. The map lives in the user's collection as a named filter
 
@@ -254,7 +299,7 @@ CREATE TABLE maps (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     description TEXT,
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES profiles(user_id) ON DELETE CASCADE,
     industry_id TEXT REFERENCES industries(id),
     source_map_id UUID REFERENCES maps(id),
     is_published BOOLEAN DEFAULT FALSE,
@@ -266,25 +311,12 @@ CREATE TABLE maps (
 CREATE INDEX idx_maps_user ON maps(user_id);
 CREATE INDEX idx_maps_published ON maps(is_published) WHERE is_published = TRUE;
 
-CREATE TABLE map_objects (
+CREATE TABLE maps_objects (
     map_id UUID NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
     object_ref_id UUID NOT NULL,  -- objects.id or objects_overrides.id (resolved at app layer)
     relative_x DOUBLE PRECISION,  -- NULL for filter-only maps, set for packages/shared
     relative_y DOUBLE PRECISION,
     PRIMARY KEY (map_id, object_ref_id)
-);
-
--- =============================================================================
--- USER PROFILES
--- =============================================================================
--- Extends Supabase auth.users with app-specific data.
-
-CREATE TABLE profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    display_name TEXT,
-    industry_id TEXT REFERENCES industries(id),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- =============================================================================
@@ -296,26 +328,37 @@ CREATE TABLE profiles (
 --   2. User-created: object_id is NULL. This entity exists only for this user
 --      (and their coterie). class and name are required in this case.
 --
--- Map coordinates always live here — every user has their own layout.
+-- Landscape coordinates always live here — every user has their own layout.
 
 CREATE TABLE objects_overrides (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
     object_id UUID REFERENCES objects(id) ON DELETE CASCADE,
 
     -- Overridable fields (NULL = use canonical value)
     -- For user-created objects (object_id IS NULL), class and name are required.
     name TEXT,
-    class TEXT REFERENCES object_classes(id),
+    class TEXT REFERENCES classes(id),
+    title TEXT,
+    status TEXT,
+    phone TEXT,
+    phone_2 TEXT,
+    email TEXT,
+    website TEXT,
+    address TEXT,
+    photo_url TEXT,
     data JSONB,
 
-    -- Map position (always per-user)
+    -- Landscape position (always per-user)
     map_x DOUBLE PRECISION,
     map_y DOUBLE PRECISION,
 
-    -- User-only fields
-    notes TEXT,
-    tags TEXT[],
+    -- Coterie-visible fields
+    shared_notes TEXT,                  -- visible to coterie, attributed
+    tags TEXT[],                        -- visible to coterie
+
+    -- Private fields (never shared)
+    private_notes TEXT,                 -- never leaves your data
 
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -335,50 +378,51 @@ CREATE INDEX idx_objects_overrides_object ON objects_overrides(object_id);
 CREATE INDEX idx_objects_overrides_active ON objects_overrides(is_active);
 
 -- =============================================================================
--- RELATIONSHIPS OVERRIDES (per-user layer on top of canonical)
+-- CONNECTIONS OVERRIDES (per-user layer on top of canonical)
 -- =============================================================================
 -- Same two modes as objects_overrides:
---   1. Override: relationship_id points to canonical. Nullable fields override.
---   2. User-created: relationship_id is NULL. source/target/type are required.
+--   1. Override: connection_id points to canonical. Nullable fields override.
+--   2. User-created: connection_id is NULL. source/target/type are required.
 --
 -- Source and target are UUIDs that can reference either objects.id (canonical)
 -- or objects_overrides.id (user-created). No FK constraint here — the app
--- resolves references against both tables. This is a pragmatic tradeoff:
--- referential integrity for user-created cross-table refs is enforced at the
--- app layer, not the DB layer.
+-- resolves references against both tables.
 
-CREATE TABLE relationships_overrides (
+CREATE TABLE connections_overrides (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    relationship_id UUID REFERENCES relationships(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+    connection_id UUID REFERENCES connections(id) ON DELETE CASCADE,
 
-    -- For user-created relationships (relationship_id IS NULL)
+    -- For user-created connections (connection_id IS NULL)
     source_id UUID,
     target_id UUID,
-    type TEXT REFERENCES relationship_types(id),
+    type TEXT REFERENCES connection_types(id),
 
     -- Overridable
     data JSONB,
 
-    -- User-only fields
-    notes TEXT,
+    -- Coterie-visible fields
+    shared_notes TEXT,                  -- visible to coterie, attributed
+
+    -- Private fields (never shared)
+    private_notes TEXT,                 -- never leaves your data
 
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
-    UNIQUE(user_id, relationship_id)
+    UNIQUE(user_id, connection_id)
 );
 
--- User-created relationships must have source, target, and type
-ALTER TABLE relationships_overrides ADD CONSTRAINT user_created_rel_requires_fields
-    CHECK (relationship_id IS NOT NULL OR (source_id IS NOT NULL AND target_id IS NOT NULL AND type IS NOT NULL));
+-- User-created connections must have source, target, and type
+ALTER TABLE connections_overrides ADD CONSTRAINT user_created_bond_requires_fields
+    CHECK (connection_id IS NOT NULL OR (source_id IS NOT NULL AND target_id IS NOT NULL AND type IS NOT NULL));
 
-CREATE INDEX idx_rel_overrides_user ON relationships_overrides(user_id);
-CREATE INDEX idx_rel_overrides_relationship ON relationships_overrides(relationship_id);
-CREATE INDEX idx_rel_overrides_source ON relationships_overrides(source_id);
-CREATE INDEX idx_rel_overrides_target ON relationships_overrides(target_id);
-CREATE INDEX idx_rel_overrides_active ON relationships_overrides(is_active);
+CREATE INDEX idx_connections_overrides_user ON connections_overrides(user_id);
+CREATE INDEX idx_connections_overrides_bond ON connections_overrides(connection_id);
+CREATE INDEX idx_connections_overrides_source ON connections_overrides(source_id);
+CREATE INDEX idx_connections_overrides_target ON connections_overrides(target_id);
+CREATE INDEX idx_connections_overrides_active ON connections_overrides(is_active);
 
 -- =============================================================================
 -- COTERIES (sharing groups)
@@ -387,7 +431,7 @@ CREATE INDEX idx_rel_overrides_active ON relationships_overrides(is_active);
 CREATE TABLE coteries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
-    owner_id UUID NOT NULL REFERENCES auth.users(id),
+    owner_id UUID NOT NULL REFERENCES profiles(user_id),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -395,7 +439,7 @@ CREATE TABLE coteries (
 
 CREATE TABLE coterie_members (
     coterie_id UUID NOT NULL REFERENCES coteries(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'member',  -- 'owner', 'member'
     joined_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (coterie_id, user_id)
@@ -403,13 +447,21 @@ CREATE TABLE coterie_members (
 
 CREATE INDEX idx_coterie_members_user ON coterie_members(user_id);
 
+-- Maps shared with coteries
+CREATE TABLE coteries_maps (
+    coterie_id UUID NOT NULL REFERENCES coteries(id) ON DELETE CASCADE,
+    map_id UUID NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+    shared_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (coterie_id, map_id)
+);
+
 -- =============================================================================
 -- LOG ENTRIES (per-user activity log)
 -- =============================================================================
 
 CREATE TABLE log_entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     entry_date DATE DEFAULT CURRENT_DATE,
     linked_objects UUID[] DEFAULT '{}',
@@ -428,13 +480,15 @@ CREATE INDEX idx_log_entries_linked ON log_entries USING GIN(linked_objects);
 -- Canonical objects with their types as an array
 CREATE VIEW objects_with_types AS
 SELECT
-    o.*,
+    o.id, o.class, o.name, o.title, o.status,
+    o.phone, o.phone_2, o.email, o.website, o.address, o.photo_url,
+    o.data, o.is_active, o.created_at, o.updated_at,
     COALESCE(
-        array_agg(ota.type_id) FILTER (WHERE ota.type_id IS NOT NULL),
+        array_agg(ot.type_id) FILTER (WHERE ot.type_id IS NOT NULL),
         '{}'::TEXT[]
     ) AS types
 FROM objects o
-LEFT JOIN object_type_assignments ota ON ota.object_id = o.id
+LEFT JOIN objects_types ot ON ot.object_id = o.id
 WHERE o.is_active = TRUE
 GROUP BY o.id;
 
@@ -454,16 +508,16 @@ CREATE TRIGGER objects_updated_at
     BEFORE UPDATE ON objects
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE TRIGGER relationships_updated_at
-    BEFORE UPDATE ON relationships
+CREATE TRIGGER connections_updated_at
+    BEFORE UPDATE ON connections
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 CREATE TRIGGER objects_overrides_updated_at
     BEFORE UPDATE ON objects_overrides
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE TRIGGER relationships_overrides_updated_at
-    BEFORE UPDATE ON relationships_overrides
+CREATE TRIGGER connections_overrides_updated_at
+    BEFORE UPDATE ON connections_overrides
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 CREATE TRIGGER log_entries_updated_at
@@ -485,8 +539,9 @@ CREATE TRIGGER coteries_updated_at
 -- =============================================================================
 -- TODO: Row Level Security (RLS)
 -- =============================================================================
--- Canonical tables (objects, relationships, taxonomy): readable by all authenticated users
+-- Canonical tables (objects, connections, taxonomy): readable by all authenticated users
 -- Override tables: users can read/write their own + read coterie members' overrides
+--   (excluding private_notes — never returned for other users)
 -- Maps: readable by all authenticated users
 -- Profiles: users can read all, write their own
 -- Coteries: members can read, owner can write

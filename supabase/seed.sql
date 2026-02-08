@@ -1,12 +1,12 @@
 -- Seed data for Coterie
 
--- Sample Companies
-INSERT INTO objects (id, class, name, title, website) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'company', 'Disney', 'Major Studio & Streamer', 'disney.com'),
-    ('22222222-2222-2222-2222-222222222222', 'company', 'Warner Bros', 'Major Studio', 'warnerbros.com'),
-    ('33333333-3333-3333-3333-333333333333', 'company', 'Netflix', 'Streamer & Studio', 'netflix.com'),
-    ('44444444-4444-4444-4444-444444444444', 'company', 'CAA', 'Talent Agency', 'caa.com'),
-    ('55555555-5555-5555-5555-555555555555', 'company', 'Bad Robot', 'Production Company', 'badrobot.com');
+-- Sample Companies (is_canon = true for platform-seeded data)
+INSERT INTO objects (id, class, name, title, website, is_canon) VALUES
+    ('11111111-1111-1111-1111-111111111111', 'company', 'Disney', 'Major Studio & Streamer', 'disney.com', true),
+    ('22222222-2222-2222-2222-222222222222', 'company', 'Warner Bros', 'Major Studio', 'warnerbros.com', true),
+    ('33333333-3333-3333-3333-333333333333', 'company', 'Netflix', 'Streamer & Studio', 'netflix.com', true),
+    ('44444444-4444-4444-4444-444444444444', 'company', 'CAA', 'Talent Agency', 'caa.com', true),
+    ('55555555-5555-5555-5555-555555555555', 'company', 'Bad Robot', 'Production Company', 'badrobot.com', true);
 
 -- Assign types to companies (can have multiple!)
 INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
@@ -25,11 +25,11 @@ INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
     ('55555555-5555-5555-5555-555555555555', 'production_company', true);
 
 -- Sample People
-INSERT INTO objects (id, class, name, title, status) VALUES
-    ('aaaa1111-1111-1111-1111-111111111111', 'person', 'Alan Bergman', 'Co-Chairman, Disney Entertainment', 'active'),
-    ('aaaa2222-2222-2222-2222-222222222222', 'person', 'Dana Walden', 'Co-Chairman, Disney Entertainment', 'active'),
-    ('aaaa3333-3333-3333-3333-333333333333', 'person', 'J.J. Abrams', 'Founder, Bad Robot', 'active'),
-    ('aaaa4444-4444-4444-4444-444444444444', 'person', 'Bryan Lourd', 'Co-Chairman, CAA', 'active');
+INSERT INTO objects (id, class, name, title, status, is_canon) VALUES
+    ('aaaa1111-1111-1111-1111-111111111111', 'person', 'Alan Bergman', 'Co-Chairman, Disney Entertainment', 'active', true),
+    ('aaaa2222-2222-2222-2222-222222222222', 'person', 'Dana Walden', 'Co-Chairman, Disney Entertainment', 'active', true),
+    ('aaaa3333-3333-3333-3333-333333333333', 'person', 'J.J. Abrams', 'Founder, Bad Robot', 'active', true),
+    ('aaaa4444-4444-4444-4444-444444444444', 'person', 'Bryan Lourd', 'Co-Chairman, CAA', 'active', true);
 
 -- Assign types to people
 INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
@@ -41,9 +41,9 @@ INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
     ('aaaa4444-4444-4444-4444-444444444444', 'executive', false);
 
 -- Sample Projects
-INSERT INTO objects (id, class, name, title, status) VALUES
-    ('bbbb1111-1111-1111-1111-111111111111', 'project', 'Avatar 3', 'The next chapter in the Avatar saga', 'production'),
-    ('bbbb2222-2222-2222-2222-222222222222', 'project', 'Stranger Things 5', 'Final season of the hit series', 'production');
+INSERT INTO objects (id, class, name, title, status, is_canon) VALUES
+    ('bbbb1111-1111-1111-1111-111111111111', 'project', 'Avatar 3', 'The next chapter in the Avatar saga', 'production', true),
+    ('bbbb2222-2222-2222-2222-222222222222', 'project', 'Stranger Things 5', 'Final season of the hit series', 'production', true);
 
 -- Assign types to projects
 INSERT INTO objects_types (object_id, type_id, is_primary) VALUES

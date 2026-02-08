@@ -20,7 +20,7 @@ The core architecture is a **shared entity registry** with **per-user overrides*
 - **Override tables** (`objects_overrides`, `connections_overrides`) = per-user customizations layered on top
 - **What the user sees** = registry + their overrides merged together
 
-Every object gets a row in the `objects` table from the moment it's created — whether by the platform operators or by a user. A `provenance` column distinguishes trust levels (`canonical` = vetted/maintained, `community` = user-created, `personal` = not yet shared). A `created_by` column tracks origin. This means `objects_overrides.object_id` is **always set** — there are no orphan objects without a canonical parent.
+Every object gets a row in the `objects` table from the moment it's created — whether by the platform operators or by a user. An `is_canon` boolean distinguishes vetted/maintained objects from user-created ones. A `created_by` column tracks who created the object (NULL = platform-seeded). This means `objects_overrides.object_id` is **always set** — there are no orphan objects without a registry parent.
 
 Landscape coordinates are always per-user (in overrides), never canonical.
 
@@ -183,7 +183,7 @@ When two coterie members independently create the same real-world entity, the di
 industries             -- entertainment, tech, finance, etc.
 classes                -- company, person, project (fixed)
 types                  -- studio, executive, feature, etc. (extensible)
-objects                -- ALL entities (provenance: canonical/community/personal, created_by)
+objects                -- ALL entities (is_canon boolean, created_by tracks origin)
 objects_industries     -- many-to-many: object ↔ industries
 objects_types          -- many-to-many: object ↔ types
 connection_types       -- employed_by, produces, represents, etc.
@@ -234,7 +234,7 @@ Commonly displayed/filtered fields are real columns. Rare/variable fields live i
 ### Key design decisions
 
 - **Soft delete** (`is_active`) on objects, connections, and overrides — never lose data
-- **Every object gets a canonical row** — `objects` is an entity registry, not curated truth. `provenance` column distinguishes trust levels. No orphan objects, ever.
+- **Every object gets a registry row** — `objects` is an entity registry, not curated truth. `is_canon` boolean distinguishes vetted from user-created. No orphan objects, ever.
 - **`objects_overrides.object_id` is always set** — no more `NULL` = user-created pattern. Overrides always point to an `objects` row.
 - **Landscape coordinates always live in overrides**, never canonical — everyone has their own layout
 - **`connections_overrides` source/target have no FK** — can reference any `objects.id`; flexible for user-created connections
@@ -262,14 +262,14 @@ Commonly displayed/filtered fields are real columns. Rare/variable fields live i
 1. User signs up, picks their industry → profile auto-created
 2. Installs a map package → "stamps" it onto their Landscape, placing the cluster where they want
 3. Customizes via overrides (drag, rename, add notes)
-4. Creates new objects → `objects` row (provenance=`personal`) + `objects_overrides` row; fuzzy-match wizard ("Is this any of these existing objects?")
+4. Creates new objects → `objects` row (`is_canon=false`, `created_by=user`) + `objects_overrides` row; fuzzy-match wizard ("Is this any of these existing objects?")
 5. Creates user maps as filtered views of their Landscape ("Children's Animation", "Literary Agents")
 6. Invites others into a **Coterie** → shares maps via `coteries_maps`
 7. Coterie member "accepts and places" the shared map → same installation flow as packages
 8. Sees coterie intel (shared notes, tags, factual data) on shared objects — always visible, attributed
 9. Reviews coterie dissonances (structural differences) — accept, dismiss, or sync all
 10. Checks Dissonance View to see where their data differs from coterie members
-11. Eventually: community-created objects with enough corroboration get promoted to `canonical` provenance
+11. Eventually: user-created objects with enough corroboration get promoted (`is_canon = true`)
 12. Eventually: operator dedup merges duplicate community objects into single canonical rows
 13. Eventually: users can check their Landscape against canonical for updates (diff/merge UI)
 
@@ -313,7 +313,7 @@ When ready to deploy:
 - [x] GitHub CLI (`gh`) installed, global CLAUDE.md backed up to gist
 - [x] `/backup-global` skill for pushing CLAUDE.md to gist
 - [x] Coterie sharing system fully designed (intel channel, updates channel, dissonance view)
-- [x] Canonical promotion model: entity registry (all objects get `objects` row from birth, `provenance` column)
+- [x] Canonical promotion model: entity registry (all objects get `objects` row from birth, `is_canon` + `created_by`)
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -396,7 +396,7 @@ Picked up from previous session (2026-02-07 session 1). All architecture decisio
 
 **The canonical promotion breakthrough.** Traced through what happens when Billy "accepts" CIG from the coterie. CIG is user-created (`object_id = NULL` in Matt's overrides) — an orphan with no canonical parent. Billy can't reference it because there's no shared `objects.id` to join on. The `objects.id` IS the connective tissue that makes coterie sharing work.
 
-Evaluated four approaches, from "promote on accept" to "everything is canonical from birth." Matt landed on **Option 4: every object gets an `objects` row from the moment it's created.** The `objects` table becomes an entity registry (not curated truth). A `provenance` column distinguishes trust: `canonical` (vetted), `community` (user-shared), `personal` (creator only). A `created_by` column tracks origin.
+Evaluated four approaches, from "promote on accept" to "everything is canonical from birth." Matt landed on **Option 4: every object gets an `objects` row from the moment it's created.** The `objects` table becomes an entity registry (not curated truth). Discussed `provenance` column with three levels vs. a simple boolean — Matt chose **`is_canon BOOLEAN`** (simpler, less cryptic) + **`created_by UUID`** (NULL = platform-seeded). The "community vs personal" distinction is implicit in the map/coterie structure, not stored on the object.
 
 **What this kills:** The `object_id = NULL` orphan pattern. The "resolved at app layer" ambiguity on `maps_objects.object_ref_id`. The entire category of orphan resolution complexity. `objects_overrides.object_id` is now ALWAYS set.
 
@@ -404,9 +404,11 @@ Evaluated four approaches, from "promote on accept" to "everything is canonical 
 
 ### Files Modified
 - `CLAUDE.md` — Major update: entity registry model, full coterie sharing system design, updated schema descriptions, key design decisions, status
+- `supabase/migrations/20260203000000_pro_schema.sql` — Entity registry model: `is_canon` + `created_by` on objects, `object_id` NOT NULL on overrides, FKs on maps_objects and connections_overrides, `coterie_reviews` table
+- `supabase/seed.sql` — Added `is_canon = true` to all platform-seeded objects
 
 ### Open Items / Next Steps
-1. **Update schema** — Add `provenance` + `created_by` to `objects`, remove `object_id = NULL` pattern from overrides, add `coterie_reviews` table, update seed data
+1. ~~**Update schema**~~ — Done: `is_canon` + `created_by` on objects, orphan pattern removed, `coterie_reviews` table added
 2. **Scaffold the web app** — Vite + React, connect to local Supabase
 3. **Supabase client integration** — auth, queries
 4. **React Flow canvas** — map rendering, zoom/pan, search-to-zoom

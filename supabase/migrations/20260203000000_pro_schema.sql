@@ -1,11 +1,13 @@
 -- Migration: Pro-tier schema
--- Canonical + user override architecture, industry-agnostic, coterie sharing
+-- Entity registry + user override architecture, industry-agnostic, coterie sharing
 --
 -- Key concepts:
---   - objects/connections = canonical truth (we maintain)
+--   - objects = entity registry (is_canon distinguishes vetted from user-created)
+--   - connections = canonical connections between objects
 --   - objects_overrides/connections_overrides = per-user layer (overrides + user-created)
 --   - maps = unified: store packages, user maps, shared maps
---   - coteries = sharing groups
+--   - coteries = sharing groups with diff-based dissonance detection
+--   - coterie_reviews = tracks user responses to dissonances
 --   - industries = scoping for onboarding + map packages
 
 -- =============================================================================
@@ -13,6 +15,7 @@
 -- =============================================================================
 
 DROP VIEW IF EXISTS objects_with_types CASCADE;
+DROP TABLE IF EXISTS coterie_reviews CASCADE;
 DROP TABLE IF EXISTS coteries_maps CASCADE;
 DROP TABLE IF EXISTS coterie_members CASCADE;
 DROP TABLE IF EXISTS coteries CASCADE;
@@ -133,10 +136,12 @@ INSERT INTO types (id, display_name, class, icon, color) VALUES
     ('unscripted', 'Unscripted', 'project', 'person.wave.2', '#EA580C');
 
 -- =============================================================================
--- OBJECTS (canonical entities — the shared truth)
+-- OBJECTS (entity registry — all entities, vetted and user-created)
 -- =============================================================================
+-- Every object gets a row here from the moment it's created.
+-- is_canon = true for vetted/maintained entities, false for user-created.
+-- created_by tracks who created it (NULL = platform-seeded).
 -- No Landscape coordinates here — position is per-user (lives in overrides).
--- No user ownership — canonical objects belong to everyone.
 
 CREATE TABLE objects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -151,6 +156,8 @@ CREATE TABLE objects (
     address TEXT,                        -- free-form location
     photo_url TEXT,                      -- headshot / logo / poster
     data JSONB DEFAULT '{}',            -- long tail: social links, genre, etc.
+    is_canon BOOLEAN DEFAULT FALSE,     -- vetted/maintained by platform operators
+    created_by UUID,                    -- NULL = platform-seeded; FK to profiles added after profiles table exists
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -160,6 +167,8 @@ CREATE INDEX idx_objects_class ON objects(class);
 CREATE INDEX idx_objects_name ON objects(name);
 CREATE INDEX idx_objects_data ON objects USING GIN(data);
 CREATE INDEX idx_objects_active ON objects(is_active);
+CREATE INDEX idx_objects_canon ON objects(is_canon);
+CREATE INDEX idx_objects_created_by ON objects(created_by);
 
 -- =============================================================================
 -- OBJECTS_INDUSTRIES (many-to-many: objects can span industries)
@@ -313,32 +322,26 @@ CREATE INDEX idx_maps_published ON maps(is_published) WHERE is_published = TRUE;
 
 CREATE TABLE maps_objects (
     map_id UUID NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
-    object_ref_id UUID NOT NULL,  -- objects.id or objects_overrides.id (resolved at app layer)
-    relative_x DOUBLE PRECISION,  -- NULL for filter-only maps, set for packages/shared
+    object_ref_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,  -- always objects.id (entity registry model)
+    relative_x DOUBLE PRECISION,  -- NULL for user maps (derived at install time), set for store packages
     relative_y DOUBLE PRECISION,
     PRIMARY KEY (map_id, object_ref_id)
 );
 
 -- =============================================================================
--- OBJECTS OVERRIDES (per-user layer on top of canonical)
+-- OBJECTS OVERRIDES (per-user layer on top of the entity registry)
 -- =============================================================================
--- Two modes:
---   1. Override: object_id points to a canonical row. Nullable fields override
---      canonical values; NULL means "use canonical."
---   2. User-created: object_id is NULL. This entity exists only for this user
---      (and their coterie). class and name are required in this case.
---
+-- Every override points to an objects row (object_id is always set).
+-- Nullable fields override registry values; NULL means "use registry value."
 -- Landscape coordinates always live here — every user has their own layout.
 
 CREATE TABLE objects_overrides (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
-    object_id UUID REFERENCES objects(id) ON DELETE CASCADE,
+    object_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
 
-    -- Overridable fields (NULL = use canonical value)
-    -- For user-created objects (object_id IS NULL), class and name are required.
+    -- Overridable fields (NULL = use registry value)
     name TEXT,
-    class TEXT REFERENCES classes(id),
     title TEXT,
     status TEXT,
     phone TEXT,
@@ -364,14 +367,9 @@ CREATE TABLE objects_overrides (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
-    -- One override per user per canonical object (NULLs are exempt, allowing
-    -- multiple user-created objects per user — which is correct)
+    -- One override per user per object
     UNIQUE(user_id, object_id)
 );
-
--- User-created objects must have class and name
-ALTER TABLE objects_overrides ADD CONSTRAINT user_created_requires_class_name
-    CHECK (object_id IS NOT NULL OR (class IS NOT NULL AND name IS NOT NULL));
 
 CREATE INDEX idx_objects_overrides_user ON objects_overrides(user_id);
 CREATE INDEX idx_objects_overrides_object ON objects_overrides(object_id);
@@ -380,13 +378,11 @@ CREATE INDEX idx_objects_overrides_active ON objects_overrides(is_active);
 -- =============================================================================
 -- CONNECTIONS OVERRIDES (per-user layer on top of canonical)
 -- =============================================================================
--- Same two modes as objects_overrides:
+-- Two modes:
 --   1. Override: connection_id points to canonical. Nullable fields override.
 --   2. User-created: connection_id is NULL. source/target/type are required.
 --
--- Source and target are UUIDs that can reference either objects.id (canonical)
--- or objects_overrides.id (user-created). No FK constraint here — the app
--- resolves references against both tables.
+-- Source and target always reference objects.id (entity registry model).
 
 CREATE TABLE connections_overrides (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -394,8 +390,8 @@ CREATE TABLE connections_overrides (
     connection_id UUID REFERENCES connections(id) ON DELETE CASCADE,
 
     -- For user-created connections (connection_id IS NULL)
-    source_id UUID,
-    target_id UUID,
+    source_id UUID REFERENCES objects(id) ON DELETE CASCADE,
+    target_id UUID REFERENCES objects(id) ON DELETE CASCADE,
     type TEXT REFERENCES connection_types(id),
 
     -- Overridable
@@ -415,7 +411,7 @@ CREATE TABLE connections_overrides (
 );
 
 -- User-created connections must have source, target, and type
-ALTER TABLE connections_overrides ADD CONSTRAINT user_created_bond_requires_fields
+ALTER TABLE connections_overrides ADD CONSTRAINT user_created_connection_requires_fields
     CHECK (connection_id IS NOT NULL OR (source_id IS NOT NULL AND target_id IS NOT NULL AND type IS NOT NULL));
 
 CREATE INDEX idx_connections_overrides_user ON connections_overrides(user_id);
@@ -455,6 +451,31 @@ CREATE TABLE coteries_maps (
     PRIMARY KEY (coterie_id, map_id)
 );
 
+-- Coterie dissonance review states (diff-based updates channel)
+-- Tracks how a user has responded to each structural dissonance.
+-- Dissonances are detected via diff queries, not stored events.
+-- No row = unreviewed. Row with status = review state.
+CREATE TABLE coterie_reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+    source_user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+    ref_type TEXT NOT NULL CHECK (ref_type IN ('object_override', 'connection_override')),
+    ref_id UUID NOT NULL,             -- objects_overrides.id or connections_overrides.id
+    status TEXT NOT NULL CHECK (status IN ('dismissed', 'accepted')),
+    reviewed_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, source_user_id, ref_type, ref_id)
+);
+
+CREATE INDEX idx_coterie_reviews_user ON coterie_reviews(user_id);
+CREATE INDEX idx_coterie_reviews_source ON coterie_reviews(source_user_id);
+
+-- =============================================================================
+-- DEFERRED FOREIGN KEYS
+-- =============================================================================
+-- objects.created_by references profiles, but objects is created before profiles.
+ALTER TABLE objects ADD CONSTRAINT fk_objects_created_by
+    FOREIGN KEY (created_by) REFERENCES profiles(user_id);
+
 -- =============================================================================
 -- LOG ENTRIES (per-user activity log)
 -- =============================================================================
@@ -477,12 +498,12 @@ CREATE INDEX idx_log_entries_linked ON log_entries USING GIN(linked_objects);
 -- HELPER VIEWS
 -- =============================================================================
 
--- Canonical objects with their types as an array
+-- Objects with their types as an array
 CREATE VIEW objects_with_types AS
 SELECT
     o.id, o.class, o.name, o.title, o.status,
     o.phone, o.phone_2, o.email, o.website, o.address, o.photo_url,
-    o.data, o.is_active, o.created_at, o.updated_at,
+    o.data, o.is_canon, o.created_by, o.is_active, o.created_at, o.updated_at,
     COALESCE(
         array_agg(ot.type_id) FILTER (WHERE ot.type_id IS NOT NULL),
         '{}'::TEXT[]
@@ -536,12 +557,14 @@ CREATE TRIGGER coteries_updated_at
     BEFORE UPDATE ON coteries
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+
 -- =============================================================================
 -- TODO: Row Level Security (RLS)
 -- =============================================================================
--- Canonical tables (objects, connections, taxonomy): readable by all authenticated users
+-- Registry tables (objects, connections, taxonomy): readable by all authenticated users
 -- Override tables: users can read/write their own + read coterie members' overrides
---   (excluding private_notes — never returned for other users)
+--   (excluding private_notes — NEVER returned for other users)
 -- Maps: readable by all authenticated users
 -- Profiles: users can read all, write their own
 -- Coteries: members can read, owner can write
+-- Coterie reviews: users can read/write their own

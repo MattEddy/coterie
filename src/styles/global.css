@@ -10,6 +10,9 @@
   --color-company: #3b82f6;
   --color-person: #10b981;
   --color-project: #f59e0b;
+  --color-company-dim: #1a2744;
+  --color-person-dim: #152e25;
+  --color-project-dim: #3d2e0a;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', monospace;
   --radius: 8px;

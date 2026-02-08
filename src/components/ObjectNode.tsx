@@ -28,39 +28,40 @@ const classColors: Record<string, string> = {
   project: 'var(--color-project)',
 }
 
-const classIcons: Record<string, string> = {
-  company: '🏢',
-  person: '👤',
-  project: '🎬',
+const classStyles: Record<string, string> = {
+  company: styles.company,
+  person: styles.person,
+  project: styles.project,
 }
 
 function ObjectNode({ data, selected }: NodeProps) {
   const nodeData = data as unknown as ObjectNodeData
-  const color = classColors[nodeData.class] || '#888'
+  const shapeClass = classStyles[nodeData.class] || ''
 
   return (
     <>
-      <Handle type="target" position={Position.Top} className={styles.handle} />
+      <Handle type="target" position={Position.Top} id="top" className={styles.handle} />
+      <Handle type="target" position={Position.Left} id="left" className={styles.handle} />
+      <Handle type="source" position={Position.Top} id="top" className={styles.handle} />
+      <Handle type="source" position={Position.Left} id="left" className={styles.handle} />
       <div
-        className={`${styles.card} ${selected ? styles.selected : ''}`}
-        style={{ borderColor: selected ? color : 'var(--color-border)' }}
+        className={`${styles.card} ${shapeClass} ${selected ? styles.selected : ''}`}
       >
-        <div className={styles.header}>
-          <span className={styles.icon}>{classIcons[nodeData.class] || '•'}</span>
-          <span className={styles.name}>{nodeData.name}</span>
-        </div>
-        {nodeData.title && (
-          <p className={styles.title}>{nodeData.title}</p>
-        )}
+        <span className={styles.name}>{nodeData.name}</span>
         {nodeData.types.length > 0 && (
           <div className={styles.types}>
-            {nodeData.types.map(t => (
-              <span key={t} className={styles.type} style={{ color }}>{t.replace(/_/g, ' ')}</span>
+            {nodeData.types.map((t, i) => (
+              <span key={t} className={styles.type}>
+                {i > 0 && ' · '}{t.replace(/_/g, ' ')}
+              </span>
             ))}
           </div>
         )}
       </div>
-      <Handle type="source" position={Position.Bottom} className={styles.handle} />
+      <Handle type="target" position={Position.Bottom} id="bottom" className={styles.handle} />
+      <Handle type="target" position={Position.Right} id="right" className={styles.handle} />
+      <Handle type="source" position={Position.Bottom} id="bottom" className={styles.handle} />
+      <Handle type="source" position={Position.Right} id="right" className={styles.handle} />
     </>
   )
 }

@@ -1,9 +1,7 @@
 .panel {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 300px;
-  max-height: calc(100% - 32px);
+  position: fixed;
+  width: 280px;
+  max-height: 400px;
   overflow-y: auto;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -95,4 +93,28 @@
   line-height: 1.5;
   margin-top: 4px;
   color: var(--color-text);
+}
+
+.relationshipAction {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.relationshipButton {
+  width: 100%;
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-accent);
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.relationshipButton:hover {
+  background: rgba(59, 130, 246, 0.15);
 }

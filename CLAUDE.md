@@ -12,15 +12,15 @@ The core UX: search for a person or company on your **Landscape** (the map), zoo
 
 See `docs/PRODUCT_PLAN.md` for full product vision and roadmap.
 
-## Architecture: Canonical + Override
+## Architecture: Entity Registry + Override
 
-The core architecture is a **shared canonical database** with **per-user overrides**:
+The core architecture is a **shared entity registry** with **per-user overrides**:
 
-- **Canonical tables** (`objects`, `relationships`) = shared truth, maintained/vetted
-- **Override tables** (`objects_overrides`, `relationships_overrides`) = per-user customizations layered on top
-- **What the user sees** = canonical + their overrides merged together
+- **Registry tables** (`objects`, `connections`) = every known entity, with provenance tracking
+- **Override tables** (`objects_overrides`, `connections_overrides`) = per-user customizations layered on top
+- **What the user sees** = registry + their overrides merged together
 
-User-created entities live in the override tables with `object_id = NULL`. When corroborated by enough users, they get promoted to canonical.
+Every object gets a row in the `objects` table from the moment it's created — whether by the platform operators or by a user. A `provenance` column distinguishes trust levels (`canonical` = vetted/maintained, `community` = user-created, `personal` = not yet shared). A `created_by` column tracks origin. This means `objects_overrides.object_id` is **always set** — there are no orphan objects without a canonical parent.
 
 Landscape coordinates are always per-user (in overrides), never canonical.
 
@@ -94,7 +94,7 @@ Example: Netflix is class=`company` with types=[`streamer`, `studio`]
 
 ### The Landscape
 
-The **Landscape** is the user's entire industry universe — one giant canvas with all their objects, relationships, and positions. It's not a table; it's the totality of canonical objects + the user's overrides. Every user has one Landscape. Positions live in `objects_overrides.map_x/map_y`.
+The **Landscape** is the user's entire industry universe — one giant canvas with all their objects, connections, and positions. It's not a table; it's the totality of canonical objects + the user's overrides. Every user has one Landscape. Positions live in `objects_overrides.map_x/map_y`.
 
 ### Maps (unified concept)
 
@@ -106,47 +106,109 @@ A **map** is a named collection of objects. One unified `maps` table serves thre
 | **User map** | Personal filtered view | Set | FALSE | No (just a filter) |
 | **Shared/installed** | Born from a package or coterie share | Set | FALSE | Sometimes |
 
-**Relative coordinates**: Store packages and shared maps use relative positions (internal geometry preserved). When installed, the user "places" the cluster on their Landscape like a stamp — the relative coords translate to absolute positions. This prevents purchased maps from scattering objects in insane locations relative to the user's existing layout.
+**Relative coordinates**: Store packages store relative positions in `maps_objects.relative_x/y` (internal geometry preserved, no owner Landscape to derive from). User maps do NOT store relative coords — they're derived on the fly from the owner's current `objects_overrides.map_x/map_y` at install time (subtract the centroid). This means recipients always get the owner's **current** layout, not a stale snapshot.
 
-When a user installs a package:
-1. New objects get seeded into their Landscape (objects_overrides)
-2. Objects they already have → untouched (their overrides win)
-3. A user map is auto-created in their collection (linked via `source_map_id`)
-4. The installed map becomes a named filter they can activate
+**Installation flow** (same mechanic for store packages AND coterie-shared maps — "accept and place"):
+1. Compute relative coords: from `maps_objects` (packages) or from owner's Landscape positions (user maps)
+2. User picks an anchor point on their Landscape
+3. For each object: already on their Landscape → **skip** (their overrides win); new → create `objects_overrides` with `map_x = anchor.x + relative_x`
+4. A user map is auto-created in their collection (linked via `source_map_id`)
+5. The installed map becomes a named filter they can activate
 
-User maps are the primary organizational unit for coterie sharing — "here's my Literary Agents map."
+User maps are the primary organizational unit for coterie sharing — "here's my Literary Agents map." Connected via `coteries_maps` join table.
+
+### Coterie Sharing Model
+
+#### Map Sharing
+
+Sharing a map to a coterie writes one row to `coteries_maps`. Recipients see a pending shared map (like receiving a package). They **accept and place** it — same installation mechanic as store packages. Objects they already have stay untouched; new objects land at the placed position. A personal copy of the map is created (`source_map_id` links to the original).
+
+Once objects overlap between coterie members (through shared maps), the two sharing channels activate.
+
+#### Channel 1: Coterie Intel (passive)
+
+Notes, tags, and factual data on shared objects are always visible to coterie members, attributed to the author. Read-only. No action needed — it just appears alongside your own data.
+
+**Implementation:** Pure query pattern, no extra tables. When viewing an object, join against coterie members' `objects_overrides` for that `object_id`. Return their `shared_notes`, `tags`, and factual fields (title, status, phone, etc.), each attributed via `user_id` → `profiles.display_name`. The `private_notes` column is **never selected** in coterie queries.
+
+#### Channel 2: Coterie Updates (diff-based)
+
+Structural changes — new objects, new/changed connections, deactivated connections, career moves — surface as dissonances between coterie members' data. Detected via **diff queries** (comparing overrides across coterie members on shared objects), not stored events.
+
+**Why diff-based:** Self-correcting. If Matt says Joe left Netflix, then realizes he was wrong and re-activates the connection, the dissonance evaporates automatically. No stale events to reconcile.
+
+**Three states per dissonance:**
+- **Unreviewed**: diff finds a dissonance, no `coterie_reviews` row exists
+- **Dismissed**: diff finds a dissonance, `coterie_reviews` row says `dismissed` (subtle indicator persists — dissonance is always visible, never hidden)
+- **Accepted**: `coterie_reviews` row says `accepted` — the change has been pulled into the recipient's overrides
+
+**What "accept" does for each change type:**
+- **New object**: Create an `objects_overrides` row pointing to the same `objects.id`, place on Landscape
+- **Deactivated connection**: Create a `connections_overrides` row marking it inactive in your view
+- **New connection**: Create a `connections_overrides` row with the same source/target/type
+
+**The `coterie_reviews` table** (one new table) tracks review state:
+```
+coterie_reviews        -- per-user response to each dissonance
+  user_id              -- the reviewer (Billy)
+  source_user_id       -- whose change this is (Matt)
+  ref_type             -- 'object_override' or 'connection_override'
+  ref_id               -- the specific override row
+  status               -- 'dismissed' or 'accepted'
+  reviewed_at
+```
+
+#### Dissonance View
+
+A dedicated view showing all places where your data differs from your coterie's — like `git diff` against your coterie. Includes both unreviewed and dismissed items. "Sync All" option for users who fully trust their coterie.
+
+#### Data privacy tiers on overrides
+
+- `shared_notes` — visible to coterie, attributed
+- `private_notes` — never leaves your data, excluded from coterie queries
+- `tags` — visible to coterie
+- All other override fields (title, status, phone, etc.) — coterie-visible as factual data
+
+#### Duplicate objects across coterie members
+
+When two coterie members independently create the same real-world entity, the dissonance view surfaces both. This is a natural instance of the broader dedup problem. Resolution paths:
+- **UX hint**: Fuzzy-match when surfacing dissonances ("Is this the same as your X?")
+- **Operator dedup**: Platform operators identify duplicate `objects` rows (similar names, overlapping connections) and merge — pick the winner, UPDATE all references, soft-delete the loser
+- **No schema changes needed** — merge is just UPDATE statements on `object_id` / `source_id` / `target_id` / `object_ref_id`
 
 ### Schema (Pro tier)
 
-**Taxonomy & canonical data:**
+**Entity registry & taxonomy:**
 ```
 industries             -- entertainment, tech, finance, etc.
-object_classes         -- company, person, project (fixed)
-object_types           -- studio, executive, feature, etc. (extensible)
-objects                -- canonical entities (name, class, data, is_active)
-object_industries      -- many-to-many: object ↔ industries
-object_type_assignments -- many-to-many: object ↔ types
-relationship_types     -- employed_by, produces, represents, etc.
-relationships          -- canonical connections (source, target, type, is_active)
+classes                -- company, person, project (fixed)
+types                  -- studio, executive, feature, etc. (extensible)
+objects                -- ALL entities (provenance: canonical/community/personal, created_by)
+objects_industries     -- many-to-many: object ↔ industries
+objects_types          -- many-to-many: object ↔ types
+connection_types       -- employed_by, produces, represents, etc.
+connections            -- canonical connections (source, target, type, is_active)
 ```
 
 **Maps:**
 ```
 maps                   -- unified: packages, user maps, shared maps
-map_objects            -- objects in each map + optional relative x/y
+maps_objects           -- objects in each map + optional relative x/y (packages only)
 ```
 
 **User layer:**
 ```
-profiles               -- extends Supabase auth (display_name, industry)
-objects_overrides       -- per-user: overrides + user-created + Landscape positions
-relationships_overrides -- per-user: overrides + user-created connections
+profiles               -- extends Supabase auth (user_id PK, display_name, industry)
+objects_overrides       -- per-user: overrides + Landscape positions + shared/private notes
+connections_overrides   -- per-user: overrides + user-created connections + shared/private notes
 ```
 
 **Social:**
 ```
 coteries               -- sharing groups
 coterie_members        -- who's in which coterie (owner/member roles)
+coteries_maps          -- maps shared with coteries
+coterie_reviews        -- per-user review state for coterie dissonances
 ```
 
 **Other:**
@@ -154,17 +216,39 @@ coterie_members        -- who's in which coterie (owner/member roles)
 log_entries            -- per-user activity log
 ```
 
+### Object fields (hybrid: columns + JSONB)
+
+Commonly displayed/filtered fields are real columns. Rare/variable fields live in `data` JSONB.
+
+| Column | Person | Company | Project |
+|---|---|---|---|
+| `title` | VP Production | Major Studio & Streamer | Sci-fi thriller set in 2040 |
+| `status` | Active / Left industry | Active / Acquired / Defunct | Development / Production / Released |
+| `phone` | Cell | Main line | — |
+| `phone_2` | Office | — | — |
+| `email` | Personal/work | General inquiries | — |
+| `website` | Personal site | Corporate site | Official page |
+| `address` | Office address | HQ | — |
+| `photo_url` | Headshot | Logo | Poster/key art |
+
 ### Key design decisions
 
-- **Soft delete** (`is_active`) on objects, relationships, and overrides — never lose data
-- **Override tables do double duty**: `object_id = NULL` means user-created entity; `object_id` set means override of canonical
+- **Soft delete** (`is_active`) on objects, connections, and overrides — never lose data
+- **Every object gets a canonical row** — `objects` is an entity registry, not curated truth. `provenance` column distinguishes trust levels. No orphan objects, ever.
+- **`objects_overrides.object_id` is always set** — no more `NULL` = user-created pattern. Overrides always point to an `objects` row.
 - **Landscape coordinates always live in overrides**, never canonical — everyone has their own layout
-- **`relationships_overrides` source/target have no FK** — can reference either `objects.id` or `objects_overrides.id`; resolved at app layer
-- **`map_objects.object_ref_id` has no FK** — same flexible reference pattern as relationships_overrides
+- **`connections_overrides` source/target have no FK** — can reference any `objects.id`; flexible for user-created connections
+- **`maps_objects.object_ref_id`** always references `objects.id` — no ambiguity about which table to look in
+- **Coterie sharing is diff-based** — dissonances computed from comparing overrides, not stored events. Self-correcting when changes are reversed.
+- **Coterie intel is a query pattern** — no extra table; join coterie members' overrides, exclude `private_notes`
+- **Map installation = "accept and place"** — same mechanic for store packages and coterie-shared maps
+- **Relative coords derived, not stored** (for user maps) — computed from owner's Landscape at install time; packages store them explicitly
 - **Industries scope onboarding**, not data — all users share one database, industry is a lens/filter
 - **Maps are catalogs, not canvases** — a map is a collection of objects (with optional relative positioning), not a separate coordinate space
+- **All FKs reference `profiles(user_id)`** not `auth.users(id)` — keeps all relationships in the public schema
+- **Auto-create profile on signup** via trigger on `auth.users`
 
-### Key Relationships
+### Key Connection Types
 
 - `employed_by`: person → company
 - `has_deal_at`: company → company
@@ -175,14 +259,19 @@ log_entries            -- per-user activity log
 
 ## User Experience (Pro)
 
-1. User signs up, picks their industry
+1. User signs up, picks their industry → profile auto-created
 2. Installs a map package → "stamps" it onto their Landscape, placing the cluster where they want
 3. Customizes via overrides (drag, rename, add notes)
-4. Creates new objects → fuzzy-match wizard ("Is this any of these existing objects?")
+4. Creates new objects → `objects` row (provenance=`personal`) + `objects_overrides` row; fuzzy-match wizard ("Is this any of these existing objects?")
 5. Creates user maps as filtered views of their Landscape ("Children's Animation", "Literary Agents")
-6. Invites others into a **Coterie** → shares maps, sees coterie members' overrides/notes
-7. Eventually: user-created objects vetted and promoted to canonical
-8. Eventually: users can check their Landscape against canonical for updates (diff/merge UI)
+6. Invites others into a **Coterie** → shares maps via `coteries_maps`
+7. Coterie member "accepts and places" the shared map → same installation flow as packages
+8. Sees coterie intel (shared notes, tags, factual data) on shared objects — always visible, attributed
+9. Reviews coterie dissonances (structural differences) — accept, dismiss, or sync all
+10. Checks Dissonance View to see where their data differs from coterie members
+11. Eventually: community-created objects with enough corroboration get promoted to `canonical` provenance
+12. Eventually: operator dedup merges duplicate community objects into single canonical rows
+13. Eventually: users can check their Landscape against canonical for updates (diff/merge UI)
 
 ## Running Locally
 
@@ -214,9 +303,17 @@ When ready to deploy:
 
 ### Implemented
 - [x] Graph data model (class/type taxonomy)
-- [x] Pro-tier Supabase schema (canonical + overrides + unified maps + coteries)
+- [x] Pro-tier Supabase schema (entity registry + overrides + unified maps + coteries)
+- [x] Expanded object fields (title, status, phone, email, website, address, photo_url)
+- [x] Shared/private notes split on override tables
+- [x] Auto-create profile trigger
+- [x] Coteries_maps join table for map sharing
 - [x] Seed data demonstrating the model
 - [x] Local Supabase running with Schema Visualizer
+- [x] GitHub CLI (`gh`) installed, global CLAUDE.md backed up to gist
+- [x] `/backup-global` skill for pushing CLAUDE.md to gist
+- [x] Coterie sharing system fully designed (intel channel, updates channel, dissonance view)
+- [x] Canonical promotion model: entity registry (all objects get `objects` row from birth, `provenance` column)
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -237,8 +334,9 @@ When ready to deploy:
 ### Planned
 - [ ] Map packages (store) with relative coordinates + stamp placement
 - [ ] User maps (filtered views of the Landscape)
-- [ ] Coterie sharing
-- [ ] Canonical promotion pipeline
+- [ ] Coterie sharing implementation (intel queries, diff-based updates, coterie_reviews table)
+- [ ] Dissonance View UI
+- [ ] Operator dedup tooling (merge duplicate community objects)
 - [ ] Canon check / diff-merge UI
 - [ ] Free tier (carved from Pro)
 - [ ] AI contact intelligence (see `docs/STUDIO_CONTACT_INTELLIGENCE.md`)
@@ -268,41 +366,53 @@ Coterie's gap: visual relationship graph + structured data model + individual-sc
 - **Supabase**: Default local dev keys (no setup needed)
 - **Claude API**: User provides in Settings (stored in Keychain)
 
+## Tooling
+
+- **Global CLAUDE.md backup**: `/backup-global` skill pushes `~/.claude/CLAUDE.md` to GitHub Gist `c3d658b951e148d8a93eed84bb0145ef`
+- **GitHub CLI**: `gh` installed, authenticated via HTTPS
+
 ---
 
-## Last Session: 2026-02-07
+## Recent Session
+**Date:** 2026-02-07 (session 2)
+**Branch:** main
 
-> When starting a new session, read this section for continuity. At handoff, fold any lasting decisions into the sections above, then replace this section with the new session's conversation.
+### Narrative
 
-### What we did
+Picked up from previous session (2026-02-07 session 1). All architecture decisions from that session were already captured in the permanent sections above. This session focused entirely on **designing the coterie sharing system** — the last major architectural gap.
 
-1. **Platform decision: web-first** — Evaluated SwiftUI vs web for Coterie's core UX. Matt clarified the primary interaction isn't map-tweaking but "I have a meeting with X — search, see their world." That's web's strength. The map matters (it IS the interface, Google Maps style — search zooms to objects, details float contextually), but doesn't need native-level rendering. Key factors:
-   - "Go to this URL" sharing vs app install — critical for onboarding coterie members
-   - Live hot-reload dev workflow (like Vivi with Expo) — Vite gives this in the browser
-   - Canvas libraries (React Flow) handle the map use case solidly
+**Approach: use-case-driven design.** Matt wanted to trace concrete scenarios through the data to figure out the implementation. Walked through three progressively complex use cases.
 
-2. **Local-first development** — Decided to build against local Supabase (Docker), deploy to cloud later. Single migration file during dev, `supabase db reset` to iterate. Proper incremental migrations start at production deployment.
+**Use case 1: Sharing a map.** Matt has a "Netflix" map with Joe Fancy (executive) and other objects. Creates a coterie with Billy, shares the map. Key decisions:
+- Shared maps use the same "accept and place" installation mechanic as store packages — one UX paradigm, not two
+- Relative coordinates for user maps are **derived on the fly** from the owner's current Landscape positions (subtract centroid), not stored. Recipients always get the owner's current layout. Store packages still store relative coords explicitly (no owner Landscape to derive from).
+- Objects the recipient already has → **skip** (their overrides win). New objects → create `objects_overrides` with computed positions.
 
-3. **The Landscape concept** — Named the user's entire industry universe "the Landscape." One canvas per user. Not a table — it's the totality of canonical + overrides.
+**Use case 2: Simple updates (phone number, notes).** Matt changes Joe Fancy's phone, updates shared_notes, adds a private note. All channel 1 (Intel) — just an UPDATE to one `objects_overrides` row. Billy sees the shared_notes and phone via a coterie query join. Private notes never selected. **Zero new rows, zero new tables.**
 
-4. **Maps redesign (big one)** — Identified three distinct concepts that were tangled:
-   - **The Landscape**: user's entire universe, one canvas, absolute positions
-   - **User Maps**: named filtered subsets of the Landscape ("Children's Animation"). Same positions, just hides non-members. Users will work in these a lot.
-   - **Map Packages**: curated catalogs for purchase/sharing
+**Use case 3: Structural change (career move).** Joe Fancy leaves Netflix for "Claude is God Productions" (CIG), a new company. Matt creates CIG, deactivates the Netflix connection (via override), creates a new connection to CIG. This is where Intel fails and the Updates channel is needed — Billy needs to **do something** (accept CIG onto his Landscape, deactivate his Netflix connection, etc.) or dismiss and live with the dissonance.
 
-   **Key insight**: purchased maps with absolute default positions would create chaos on an existing Landscape. Solution: **relative coordinates**. Packages are "stamps" — preserved internal geometry that the user places on their Landscape. Drop point becomes the anchor, relative coords translate to absolute.
+**Updates channel: diff-based.** Evaluated event-based vs diff-based. Chose diff because it's self-correcting (if Matt reverses a change, the dissonance evaporates — no stale events). PostgreSQL handles the diff queries easily at coterie scale (2-10 people, tens-to-hundreds of shared objects). One new table: `coterie_reviews` to track dismissed/accepted state per dissonance.
 
-5. **Unified maps table** — Realized packages, user maps, and shared maps are the same concept at different lifecycle stages. One `maps` table with `user_id` (NULL=store, set=user), `is_published`, and `source_map_id` (self-referencing for installed/shared). Dropped the old `user_maps` join table. `map_objects` now has nullable `relative_x/y`.
+**The canonical promotion breakthrough.** Traced through what happens when Billy "accepts" CIG from the coterie. CIG is user-created (`object_id = NULL` in Matt's overrides) — an orphan with no canonical parent. Billy can't reference it because there's no shared `objects.id` to join on. The `objects.id` IS the connective tissue that makes coterie sharing work.
 
-6. **Schema updated and deployed** — Updated migration, ran `supabase db reset`, Schema Visualizer working at `localhost:54323`.
+Evaluated four approaches, from "promote on accept" to "everything is canonical from birth." Matt landed on **Option 4: every object gets an `objects` row from the moment it's created.** The `objects` table becomes an entity registry (not curated truth). A `provenance` column distinguishes trust: `canonical` (vetted), `community` (user-shared), `personal` (creator only). A `created_by` column tracks origin.
 
-### Open threads for next session
+**What this kills:** The `object_id = NULL` orphan pattern. The "resolved at app layer" ambiguity on `maps_objects.object_ref_id`. The entire category of orphan resolution complexity. `objects_overrides.object_id` is now ALWAYS set.
 
-1. **Scaffold the web app** — Vite + React, connect to local Supabase
-2. **React Flow canvas** — map rendering, zoom/pan, search-to-zoom
-3. **Floating detail panel UX** — what shows when you click an object?
-4. **Auth** — set up local Supabase auth for dev (email/password, test users)
-5. **RLS policies** — write before multi-user (comments in migration stub the plan)
-6. **Merged view** — SQL view combining canonical + user overrides (needed for app queries)
-7. **Canonical promotion pipeline** — how quorum works (manual review first? automated later?)
-8. **Canon check UX** — diff/merge UI for users to sync against canonical updates
+**Duplicate objects across coterie members** (Matt and Billy both independently create CIG): not a crisis. The dissonance view surfaces it naturally. Resolution is a future merge operation (operator dedup or user-initiated "these are the same thing"). No schema changes needed — merge is just UPDATE statements.
+
+### Files Modified
+- `CLAUDE.md` — Major update: entity registry model, full coterie sharing system design, updated schema descriptions, key design decisions, status
+
+### Open Items / Next Steps
+1. **Update schema** — Add `provenance` + `created_by` to `objects`, remove `object_id = NULL` pattern from overrides, add `coterie_reviews` table, update seed data
+2. **Scaffold the web app** — Vite + React, connect to local Supabase
+3. **Supabase client integration** — auth, queries
+4. **React Flow canvas** — map rendering, zoom/pan, search-to-zoom
+5. **Floating detail panel UX** — what shows when you click an object on the Landscape?
+6. **Auth** — set up local Supabase auth for dev (email/password, test users)
+7. **RLS policies** — before multi-user (including excluding private_notes from coterie queries)
+8. **Merged view** — SQL view combining registry + user overrides (needed for app queries)
+9. **Coterie intel query** — SQL for pulling coterie members' shared data on viewed objects
+10. **Coterie diff query** — SQL for computing structural dissonances between members

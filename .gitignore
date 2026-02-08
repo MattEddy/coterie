@@ -16,8 +16,14 @@ Package.resolved
 .AppleDouble
 .LSOverride
 
+# Node
+node_modules/
+dist/
+
 # Secrets (never commit)
 .env
+.env.local
+.env.*.local
 *.key
 *.pem
 

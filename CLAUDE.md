@@ -61,6 +61,32 @@ Gold standard references: **Figma** (infinite canvas web app), **Google Maps** (
 
 ```
 coterie/
+├── index.html                  # Vite entry point
+├── package.json                # Dependencies (React 19, React Flow 12, Supabase)
+├── vite.config.ts
+├── tsconfig.json
+├── .env.local                  # VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY (gitignored)
+├── src/
+│   ├── main.tsx                # Entry point
+│   ├── App.tsx                 # Router + AuthProvider
+│   ├── lib/
+│   │   └── supabase.ts        # Supabase client
+│   ├── contexts/
+│   │   └── AuthContext.tsx     # Auth state provider (signIn/signOut, session listener)
+│   ├── pages/
+│   │   ├── Login.tsx           # Email/password login
+│   │   ├── Login.module.css
+│   │   ├── Landscape.tsx       # Main canvas page (top bar + canvas)
+│   │   └── Landscape.module.css
+│   ├── components/
+│   │   ├── Canvas.tsx          # React Flow wrapper (loads objects + connections, drag-to-save)
+│   │   ├── Canvas.module.css
+│   │   ├── ObjectNode.tsx      # Custom node (card with name, title, types, class color)
+│   │   ├── ObjectNode.module.css
+│   │   ├── DetailPanel.tsx     # Floating panel (object fields, notes — read-only)
+│   │   └── DetailPanel.module.css
+│   └── styles/
+│       └── global.css          # CSS variables, reset, dark theme
 ├── Coterie/                    # SwiftUI Mac app (v0.1 prototype, legacy)
 ├── docs/
 │   ├── PRODUCT_PLAN.md         # Full product roadmap
@@ -70,10 +96,8 @@ coterie/
 └── supabase/
     ├── migrations/
     │   └── 20260203000000_pro_schema.sql  # THE schema (edit directly during dev)
-    └── seed.sql                # Sample data
+    └── seed.sql                # Test users + seed data
 ```
-
-Web app (Vite + React) has not been scaffolded yet.
 
 ## Data Model (Graph-based)
 
@@ -293,6 +317,15 @@ postgresql://postgres:postgres@127.0.0.1:54322/postgres
 
 Single migration file (`20260203000000_pro_schema.sql`) — edit directly, `supabase db reset` to rebuild. No incremental migrations until production deployment. Seed data in `seed.sql` re-applied on every reset.
 
+```bash
+# Start web app dev server
+npm run dev    # → http://localhost:5173
+
+# Test credentials
+# matt@test.com / password123
+# billy@test.com / password123
+```
+
 When ready to deploy:
 1. Create Supabase cloud project
 2. `supabase db push` to deploy migrations
@@ -308,12 +341,20 @@ When ready to deploy:
 - [x] Shared/private notes split on override tables
 - [x] Auto-create profile trigger
 - [x] Coteries_maps join table for map sharing
-- [x] Seed data demonstrating the model
+- [x] Seed data demonstrating the model (test users with auth.identities)
 - [x] Local Supabase running with Schema Visualizer
 - [x] GitHub CLI (`gh`) installed, global CLAUDE.md backed up to gist
 - [x] `/backup-global` skill for pushing CLAUDE.md to gist
 - [x] Coterie sharing system fully designed (intel channel, updates channel, dissonance view)
 - [x] Canonical promotion model: entity registry (all objects get `objects` row from birth, `is_canon` + `created_by`)
+- [x] Vite + React + TypeScript web app scaffolded
+- [x] Supabase client integration (.env.local with local keys)
+- [x] Auth working (email/password login, AuthContext with session listener)
+- [x] React Flow canvas rendering seed data (objects as nodes, connections as edges)
+- [x] Custom ObjectNode component (class-based colors/icons, name, title, type badges)
+- [x] DetailPanel (floating read-only panel showing object fields + notes)
+- [x] Drag-to-reposition persists to Supabase (objects_overrides.map_x/map_y)
+- [x] CSS Modules styling throughout, dark theme
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -324,12 +365,10 @@ When ready to deploy:
 - [x] Local SQLite database
 
 ### Next Up
-- [ ] Scaffold Vite + React web app
-- [ ] Supabase client integration
-- [ ] Map canvas with React Flow
+- [ ] UI polish (node design, canvas feel, detail panel, typography)
 - [ ] Search → zoom → floating detail panel
-- [ ] Auth (email/password for local dev)
 - [ ] RLS policies (before multi-user)
+- [ ] Merged view SQL (registry + user overrides)
 
 ### Planned
 - [ ] Map packages (store) with relative coordinates + stamp placement
@@ -374,47 +413,52 @@ Coterie's gap: visual relationship graph + structured data model + individual-sc
 ---
 
 ## Recent Session
-**Date:** 2026-02-07 (session 2)
+**Date:** 2026-02-07 (session 3)
 **Branch:** main
 
 ### Narrative
 
-Picked up from previous session (2026-02-07 session 1). All architecture decisions from that session were already captured in the permanent sections above. This session focused entirely on **designing the coterie sharing system** — the last major architectural gap.
+Continued from session 2 (coterie sharing design, entity registry model). This session **scaffolded the entire web app** and got it running end-to-end.
 
-**Approach: use-case-driven design.** Matt wanted to trace concrete scenarios through the data to figure out the implementation. Walked through three progressively complex use cases.
+**Web app scaffold.** Built the full Vite + React + TypeScript app from scratch:
+- Supabase client (`src/lib/supabase.ts`) with `.env.local` for local dev keys
+- Auth system: `AuthContext` with session listener, `Login.tsx` with email/password form, `ProtectedRoute` wrapper in `App.tsx`
+- React Flow canvas (`Canvas.tsx`): loads objects with types and overrides via Supabase query (inner join on `objects_overrides` filtered by `user_id`), renders nodes and edges, saves positions on drag-end
+- Custom `ObjectNode` component with class-based colors (company=blue, person=green, project=yellow), emoji icons, name/title/type badges
+- `DetailPanel` floating panel showing object fields and notes (read-only)
+- Dark theme with CSS variables in `global.css`, CSS Modules throughout
+- Styling: chose CSS Modules over Tailwind — Matt finds Tailwind overkill for this project
 
-**Use case 1: Sharing a map.** Matt has a "Netflix" map with Joe Fancy (executive) and other objects. Creates a coterie with Billy, shares the map. Key decisions:
-- Shared maps use the same "accept and place" installation mechanic as store packages — one UX paradigm, not two
-- Relative coordinates for user maps are **derived on the fly** from the owner's current Landscape positions (subtract centroid), not stored. Recipients always get the owner's current layout. Store packages still store relative coords explicitly (no owner Landscape to derive from).
-- Objects the recipient already has → **skip** (their overrides win). New objects → create `objects_overrides` with computed positions.
+**Auth debugging.** Hit two issues with seeding test users into local Supabase:
+1. Newer Supabase requires `auth.identities` rows (not just `auth.users`) — added INSERT for identity rows
+2. GoTrue's Go code can't scan NULL into string columns — `email_change`, `email_change_token_new`, `recovery_token` needed explicit empty strings in the seed INSERT. `phone` must stay NULL (unique constraint). Diagnosed via `docker logs supabase_auth_coterie`.
 
-**Use case 2: Simple updates (phone number, notes).** Matt changes Joe Fancy's phone, updates shared_notes, adds a private note. All channel 1 (Intel) — just an UPDATE to one `objects_overrides` row. Billy sees the shared_notes and phone via a coterie query join. Private notes never selected. **Zero new rows, zero new tables.**
+**Result:** Login works, canvas renders all seed data (Disney, Warner Bros, Netflix, CAA, Bad Robot, people, projects) with connection edges. Drag-to-reposition persists to Supabase. Click a node → detail panel shows. Matt's reaction: "Holy macaroni. There it is. Wow."
 
-**Use case 3: Structural change (career move).** Joe Fancy leaves Netflix for "Claude is God Productions" (CIG), a new company. Matt creates CIG, deactivates the Netflix connection (via override), creates a new connection to CIG. This is where Intel fails and the Updates channel is needed — Billy needs to **do something** (accept CIG onto his Landscape, deactivate his Netflix connection, etc.) or dismiss and live with the dissonance.
+### Gotcha: Seeding Supabase Auth Users
+When inserting directly into `auth.users` for local dev, you MUST:
+1. Also insert into `auth.identities` with matching `user_id`, `provider='email'`, `provider_id=email`, and `identity_data` containing `sub` and `email`
+2. Set `email_change`, `email_change_token_new`, and `recovery_token` to `''` (empty string, not NULL) — GoTrue crashes on NULL string columns
+3. Leave `phone` as NULL (has a UNIQUE constraint — empty strings collide)
+4. Set `is_sso_user = false` explicitly
 
-**Updates channel: diff-based.** Evaluated event-based vs diff-based. Chose diff because it's self-correcting (if Matt reverses a change, the dissonance evaporates — no stale events). PostgreSQL handles the diff queries easily at coterie scale (2-10 people, tens-to-hundreds of shared objects). One new table: `coterie_reviews` to track dismissed/accepted state per dissonance.
-
-**The canonical promotion breakthrough.** Traced through what happens when Billy "accepts" CIG from the coterie. CIG is user-created (`object_id = NULL` in Matt's overrides) — an orphan with no canonical parent. Billy can't reference it because there's no shared `objects.id` to join on. The `objects.id` IS the connective tissue that makes coterie sharing work.
-
-Evaluated four approaches, from "promote on accept" to "everything is canonical from birth." Matt landed on **Option 4: every object gets an `objects` row from the moment it's created.** The `objects` table becomes an entity registry (not curated truth). Discussed `provenance` column with three levels vs. a simple boolean — Matt chose **`is_canon BOOLEAN`** (simpler, less cryptic) + **`created_by UUID`** (NULL = platform-seeded). The "community vs personal" distinction is implicit in the map/coterie structure, not stored on the object.
-
-**What this kills:** The `object_id = NULL` orphan pattern. The "resolved at app layer" ambiguity on `maps_objects.object_ref_id`. The entire category of orphan resolution complexity. `objects_overrides.object_id` is now ALWAYS set.
-
-**Duplicate objects across coterie members** (Matt and Billy both independently create CIG): not a crisis. The dissonance view surfaces it naturally. Resolution is a future merge operation (operator dedup or user-initiated "these are the same thing"). No schema changes needed — merge is just UPDATE statements.
+### Files Created
+- `package.json`, `vite.config.ts`, `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json` — Vite + React + TS config
+- `index.html` — Vite entry
+- `.env.local` — Local Supabase URL + anon key (gitignored)
+- `src/main.tsx`, `src/App.tsx`, `src/vite-env.d.ts`
+- `src/lib/supabase.ts`
+- `src/contexts/AuthContext.tsx`
+- `src/pages/Login.tsx`, `src/pages/Login.module.css`, `src/pages/Landscape.tsx`, `src/pages/Landscape.module.css`
+- `src/components/Canvas.tsx`, `src/components/Canvas.module.css`, `src/components/ObjectNode.tsx`, `src/components/ObjectNode.module.css`, `src/components/DetailPanel.tsx`, `src/components/DetailPanel.module.css`
+- `src/styles/global.css`
 
 ### Files Modified
-- `CLAUDE.md` — Major update: entity registry model, full coterie sharing system design, updated schema descriptions, key design decisions, status
-- `supabase/migrations/20260203000000_pro_schema.sql` — Entity registry model: `is_canon` + `created_by` on objects, `object_id` NOT NULL on overrides, FKs on maps_objects and connections_overrides, `coterie_reviews` table
-- `supabase/seed.sql` — Added `is_canon = true` to all platform-seeded objects
+- `.gitignore` — Added node_modules, dist, .env.local
+- `supabase/seed.sql` — Test users with auth.identities, GoTrue-compatible column values
 
 ### Open Items / Next Steps
-1. ~~**Update schema**~~ — Done: `is_canon` + `created_by` on objects, orphan pattern removed, `coterie_reviews` table added
-2. **Scaffold the web app** — Vite + React, connect to local Supabase
-3. **Supabase client integration** — auth, queries
-4. **React Flow canvas** — map rendering, zoom/pan, search-to-zoom
-5. **Floating detail panel UX** — what shows when you click an object on the Landscape?
-6. **Auth** — set up local Supabase auth for dev (email/password, test users)
-7. **RLS policies** — before multi-user (including excluding private_notes from coterie queries)
-8. **Merged view** — SQL view combining registry + user overrides (needed for app queries)
-9. **Coterie intel query** — SQL for pulling coterie members' shared data on viewed objects
-10. **Coterie diff query** — SQL for computing structural dissonances between members
+1. **UI polish** — node design, canvas feel, detail panel, typography, spacing (starting now)
+2. **Search → zoom** — search bar that finds objects and pans/zooms to them
+3. **RLS policies** — before multi-user
+4. **Merged view SQL** — registry + user overrides combined view

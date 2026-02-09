@@ -1,13 +1,20 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
 import { Pencil, Check, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { ObjectNodeData } from './ObjectNode'
 import styles from './DetailPanel.module.css'
 
+interface NodeRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
 interface DetailPanelProps {
   object: ObjectNodeData
-  position: { x: number; y: number }
+  nodeRect: NodeRect
   onClose: () => void
   onObjectUpdated?: () => void
   peerObject?: ObjectNodeData
@@ -224,14 +231,54 @@ function TagInput({ tags, onChange, objectClass, placeholder }: TagInputProps) {
 
 // --- Detail Panel ---
 
-export default function DetailPanel({ object, position, onClose, onObjectUpdated, peerObject }: DetailPanelProps) {
+const GAP = 12
+const READ_WIDTH = 280
+const EDIT_WIDTH = 320
+
+export default function DetailPanel({ object, nodeRect, onClose, onObjectUpdated, peerObject }: DetailPanelProps) {
   const { user } = useAuth()
+  const panelRef = useRef<HTMLDivElement>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [editValues, setEditValues] = useState<EditValues>(() => getEditValues(object))
   const [editTypes, setEditTypes] = useState<string[]>(object.types || [])
   const [saving, setSaving] = useState(false)
+  const [pos, setPos] = useState({ left: 0, top: 0 })
+  const readTopRef = useRef(0)
 
   const placeholders = classPlaceholders[object.class] || classPlaceholders.company
+  const panelWidth = isEditing ? EDIT_WIDTH : READ_WIDTH
+
+  // Single positioning effect — measures real DOM, runs before paint
+  useLayoutEffect(() => {
+    const el = panelRef.current
+    if (!el) return
+
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const nodeCenterY = (nodeRect.top + nodeRect.bottom) / 2
+    const w = isEditing ? EDIT_WIDTH : READ_WIDTH
+    const h = el.scrollHeight
+
+    // Horizontal: open toward whichever side has more room
+    const left = (vw - nodeRect.right) >= nodeRect.left
+      ? nodeRect.right + GAP
+      : nodeRect.left - w - GAP
+
+    let top: number
+    if (!isEditing) {
+      // Proportional anchor: ratio 0 at top (grow down), 1 at bottom (grow up)
+      const anchorRatio = Math.max(0, Math.min(1, nodeCenterY / vh))
+      top = nodeCenterY - (h * anchorRatio)
+      top = Math.max(GAP, Math.min(top, vh - h - GAP))
+      readTopRef.current = top
+    } else {
+      // Keep read-mode top, push up minimum needed to fit on screen
+      top = Math.min(readTopRef.current, vh - h - GAP)
+      top = Math.max(GAP, top)
+    }
+
+    setPos({ left, top })
+  }, [nodeRect, isEditing, object.id])
 
   // Reset edit state when the selected object changes
   useEffect(() => {
@@ -256,7 +303,6 @@ export default function DetailPanel({ object, position, onClose, onObjectUpdated
     if (!user) return
     setSaving(true)
 
-    // Build override payload — empty strings become null (fall back to canonical)
     const payload: Record<string, string | null> = {}
     const keys = ['name', 'title', 'status', 'phone', 'phone_2', 'email', 'website', 'address', 'photo_url', 'shared_notes', 'private_notes']
     for (const k of keys) {
@@ -269,7 +315,6 @@ export default function DetailPanel({ object, position, onClose, onObjectUpdated
       .eq('object_id', object.id)
       .eq('user_id', user.id)
 
-    // Update types: delete existing, insert new
     await supabase
       .from('objects_types')
       .delete()
@@ -292,7 +337,6 @@ export default function DetailPanel({ object, position, onClose, onObjectUpdated
 
   const panelClass = `${styles.panel} ${isEditing ? styles.editing : ''}`
 
-  // Group the labeled fields for edit mode
   const fieldGroups = [
     { name: 'Contact', fields: contactFields },
     { name: 'Media', fields: mediaFields },
@@ -300,7 +344,7 @@ export default function DetailPanel({ object, position, onClose, onObjectUpdated
   ]
 
   return (
-    <div className={panelClass} style={{ left: position.x + 12, top: position.y }}>
+    <div ref={panelRef} className={panelClass} style={{ left: pos.left, top: pos.top, width: panelWidth } as CSSProperties}>
       <div className={styles.header}>
         {isEditing ? (
           <input

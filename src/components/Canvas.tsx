@@ -26,10 +26,17 @@ const nodeTypes = { object: ObjectNode }
 const NODE_WIDTH = 180
 const NODE_HEIGHT = 60
 
+interface NodeRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
 interface SelectedItem {
   nodeId: string
   data: ObjectNodeData
-  panelPos: { x: number; y: number }
+  nodeRect: NodeRect
 }
 
 function getNearestHandles(
@@ -54,34 +61,9 @@ function getNearestHandles(
 }
 
 function getCentroid(items: SelectedItem[]): { x: number; y: number } {
-  const sumX = items.reduce((acc, item) => acc + item.panelPos.x, 0)
-  const sumY = items.reduce((acc, item) => acc + item.panelPos.y, 0)
+  const sumX = items.reduce((acc, item) => acc + (item.nodeRect.left + item.nodeRect.right) / 2, 0)
+  const sumY = items.reduce((acc, item) => acc + (item.nodeRect.top + item.nodeRect.bottom) / 2, 0)
   return { x: sumX / items.length, y: sumY / items.length }
-}
-
-const PANEL_WIDTH = 280
-const PANEL_HEIGHT_EST = 300 // conservative estimate for overlap detection
-const PANEL_OFFSET = 12
-const PANEL_GAP = 8
-
-function avoidPanelOverlap(
-  a: { x: number; y: number },
-  b: { x: number; y: number }
-): [{ x: number; y: number }, { x: number; y: number }] {
-  const ax = a.x + PANEL_OFFSET
-  const bx = b.x + PANEL_OFFSET
-  const overlapsX = ax < bx + PANEL_WIDTH && ax + PANEL_WIDTH > bx
-  const overlapsY = a.y < b.y + PANEL_HEIGHT_EST && a.y + PANEL_HEIGHT_EST > b.y
-
-  if (overlapsX && overlapsY) {
-    // Push the lower panel below the upper one
-    if (a.y <= b.y) {
-      return [a, { x: b.x, y: a.y + PANEL_HEIGHT_EST + PANEL_GAP }]
-    } else {
-      return [{ x: a.x, y: b.y + PANEL_HEIGHT_EST + PANEL_GAP }, b]
-    }
-  }
-  return [a, b]
 }
 
 function CanvasInner() {
@@ -244,17 +226,23 @@ function CanvasInner() {
     [onNodesChange, user, rebuildEdges]
   )
 
-  // Build SelectedItem from a node
+  // Build SelectedItem from a node — compute screen bounding rect
   const buildSelectedItem = useCallback(
     (node: Node): SelectedItem => {
-      const screenPos = flowToScreenPosition({
+      const topLeft = flowToScreenPosition(node.position)
+      const bottomRight = flowToScreenPosition({
         x: node.position.x + NODE_WIDTH,
-        y: node.position.y,
+        y: node.position.y + NODE_HEIGHT,
       })
       return {
         nodeId: node.id,
         data: node.data as unknown as ObjectNodeData,
-        panelPos: screenPos,
+        nodeRect: {
+          left: topLeft.x,
+          top: topLeft.y,
+          right: bottomRight.x,
+          bottom: bottomRight.y,
+        },
       }
     },
     [flowToScreenPosition]
@@ -374,34 +362,31 @@ function CanvasInner() {
       {selectedItems.length === 1 && (
         <DetailPanel
           object={selectedItems[0].data}
-          position={selectedItems[0].panelPos}
+          nodeRect={selectedItems[0].nodeRect}
           onClose={clearSelection}
           onObjectUpdated={refreshData}
         />
       )}
 
-      {/* Level 2: Dual selection — two panels + highlighted edges between them */}
-      {selectedItems.length === 2 && (() => {
-        const [pos0, pos1] = avoidPanelOverlap(selectedItems[0].panelPos, selectedItems[1].panelPos)
-        return (
-          <>
-            <DetailPanel
-              object={selectedItems[0].data}
-              position={pos0}
-              onClose={clearSelection}
-              onObjectUpdated={refreshData}
-              peerObject={selectedItems[1].data}
-            />
-            <DetailPanel
-              object={selectedItems[1].data}
-              position={pos1}
-              onClose={clearSelection}
-              onObjectUpdated={refreshData}
-              peerObject={selectedItems[0].data}
-            />
-          </>
-        )
-      })()}
+      {/* Level 2: Dual selection */}
+      {selectedItems.length === 2 && (
+        <>
+          <DetailPanel
+            object={selectedItems[0].data}
+            nodeRect={selectedItems[0].nodeRect}
+            onClose={clearSelection}
+            onObjectUpdated={refreshData}
+            peerObject={selectedItems[1].data}
+          />
+          <DetailPanel
+            object={selectedItems[1].data}
+            nodeRect={selectedItems[1].nodeRect}
+            onClose={clearSelection}
+            onObjectUpdated={refreshData}
+            peerObject={selectedItems[0].data}
+          />
+        </>
+      )}
 
       {/* Level 3: Multi selection (3+) */}
       {selectedItems.length >= 3 && (

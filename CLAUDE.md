@@ -83,7 +83,7 @@ coterie/
 │   │   ├── Canvas.module.css
 │   │   ├── ObjectNode.tsx      # Custom node (card with name, title, types, class color)
 │   │   ├── ObjectNode.module.css
-│   │   ├── DetailPanel.tsx     # Floating panel (object fields, notes — read-only)
+│   │   ├── DetailPanel.tsx     # Floating panel (read/edit mode, tag input, smart positioning)
 │   │   └── DetailPanel.module.css
 │   └── styles/
 │       └── global.css          # CSS variables, reset, dark theme
@@ -375,6 +375,14 @@ When ready to deploy:
 - [x] Person contact data tenet: CHECK constraint prevents canonical person contact info
 - [x] `user_objects` merged view (COALESCE canonical + overrides + types in one query)
 - [x] Urbanist font (Google Fonts), tagline: "Map your professional world."
+- [x] DetailPanel edit mode (pencil icon → all fields editable, saves to objects_overrides)
+- [x] Tag input with autocomplete for types (canonical-first ranking, user-created on the fly)
+- [x] Types table extended: `is_canon` boolean + `created_by` UUID
+- [x] Class-aware edit placeholders (Company Name / Name (First Last) / Project Name)
+- [x] Smart panel positioning (opens toward screen center, proportional anchor algorithm)
+- [x] Canvas `refreshData()` extracted for reuse after edits
+- [x] Lucide React icons (Pencil, Check, X) — icons-only with native tooltips
+- [x] `SelectedItem` uses `nodeRect` (screen bounding box) instead of single point
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -386,7 +394,8 @@ When ready to deploy:
 
 ### Next Up
 - [ ] Search → zoom → floating detail panel (the core UX loop)
-- [ ] UI polish continued (typography, spacing, detail panel refinements)
+- [ ] Create new objects (right-click canvas? button? — edit card is ready to double as create card)
+- [ ] UI polish continued (detail panel styling, type tag editing UX refinements)
 - [ ] RLS policies (before multi-user)
 
 ### Planned
@@ -432,52 +441,46 @@ Coterie's gap: visual relationship graph + structured data model + individual-sc
 ---
 
 ## Recent Session
-**Date:** 2026-02-08 (session 5)
+**Date:** 2026-02-08 (session 6)
 **Branch:** main
 
 ### Narrative
 
-Session focused on fixing the multi-select bug from session 4, then pivoted to foundational work: terminology rename, a data privacy tenet, a merged view, and font selection.
+Session built the full edit mode for the DetailPanel — from design discussion through implementation and a deep rabbit hole on panel positioning.
 
-**Multi-select bug fix (lasso).** The `onSelectionChange` prop on `<ReactFlow>` wasn't firing for lasso selections. Researched React Flow v12 docs and GitHub issues. Root cause: two competing selection handlers (`onNodeClick` for single, `onSelectionChange` prop for multi) created a split-brain problem, and `onPaneClick` may have been racing against lasso release. Fix: replaced the `onSelectionChange` prop with the `useOnSelectionChange` hook (the v12-recommended approach) as a single source of truth for all selection state. Removed `onNodeClick` and `onSelectionChange` from `<ReactFlow>` props. Lasso immediately started working.
+**Design discussion.** Matt wanted to keep the floating panel approach (not a sidebar) — spatial connection to the node is the UX principle. Agreed on: pencil icon for edit toggle, icons-only with tooltips throughout, edit mode expands card with all fields visible/editable, save writes to `objects_overrides`. Installed `lucide-react` for icons (Pencil, Check, X).
 
-**Multi-select bug fix (Cmd/Shift-click).** Lasso worked but Cmd-click still replaced selection instead of adding. `selectionOnDrag` was eating the Cmd+mousedown event before React Flow's internal multi-select logic could process it. Fix: added `onNodeClick` back but ONLY for Cmd/Shift key handling — manually toggles `selectedItems` via state. A `clickHandledRef` flag (with 50ms timeout reset) prevents the `useOnSelectionChange` hook from clobbering what `onNodeClick` just set. The hook handles lasso + pane deselection; `onNodeClick` handles click-based add/remove.
+**Types UX design.** Major product conversation about whether type assignment is too "database-y." Matt worried dropdowns feel arcane for casual users. Proposed a tag input with autocomplete — type freely, canonical types surface first, create new ones on the fly. Matt loved it. Extended `types` table with `is_canon BOOLEAN` and `created_by UUID` to distinguish platform-curated from user-generated. Deferred FK on `created_by` via `ALTER TABLE` (types table created before profiles).
 
-**Panel overlap avoidance.** When two nearby nodes are selected, their DetailPanels overlapped. Added `avoidPanelOverlap()` that checks if two panel bounding boxes intersect (using estimated 300px height, 280px width) and pushes the lower one down with an 8px gap.
+**Field refinements.** Top fields (name, title, status) have no group label and no field labels — just class-aware placeholders. Company: "Company Name" / "Description"; Person: "Name (First Last)" / "Title"; Project: "Project Name" / "Description" / "e.g. Development, Production". Status field only shown for projects in edit mode. Contact, Media, and Notes remain labeled groups.
 
-**"Industry" → "sector" rename.** Matt decided "sector" is more universal — covers politics, academia, etc. Renamed `industries` table → `sectors`, `objects_industries` → `objects_sectors`, `industry_id` → `sector_id` throughout schema, seed data, all docs (CLAUDE.md, PRODUCT_PLAN.md, STUDIO_CONTACT_INTELLIGENCE.md), and Login.tsx subtitle. Left "Industry Entertainment" in known_landscape.json alone (real company name).
+**DetailPanel rewrite.** Complete rewrite of `DetailPanel.tsx`:
+- Read mode: name + types + populated fields + notes (unchanged visually)
+- Edit mode: name input in header, title/status top fields, TagInput component for types, Contact/Media/Notes field groups
+- TagInput: chips + text input, Supabase `ilike` autocomplete against `types` table, keyboard navigation (arrows, enter, backspace), create-new-on-the-fly with slug generation
+- Save: writes all fields to `objects_overrides`, replaces `objects_types` rows, calls `onObjectUpdated` to refresh canvas
 
-**Person contact data tenet.** Matt established a guiding principle: Coterie never stores a person's contact info (phone, email, address) in canonical records. "We share WHO a person is, not HOW to reach them." Company contact info is fine canonically (Amazon's switchboard is public). Enforced via CHECK constraint on `objects` table: `class != 'person' OR (phone IS NULL AND phone_2 IS NULL AND email IS NULL AND address IS NULL)`. Website and photo_url stay canonical for all classes. Documented as a guiding tenet in CLAUDE.md.
+**Panel positioning saga.** Significant iteration on where the floating panel appears:
+- Initial problem: panels bled off the bottom of the screen, no viewport clamping
+- Attempt 1: `useLayoutEffect` clamping — cards always jumped to top
+- Attempt 2: `setCenter` to scroll canvas — Matt said "jumpy and weird, that was a mistake on my part"
+- Attempt 3: Open toward screen center — horizontal worked, vertical still off
+- Attempt 4: Proportional anchor algorithm — read cards appeared beautifully, but edit expansion always went to top (scrollHeight returned read-mode height during edit transition)
+- Attempt 5: `visibility:hidden` measure-before-show — caused double-click requirement (two conflicting useLayoutEffects) and "falling" animation (CSS transition on `top` from initial state)
+- **Final solution**: Single `useLayoutEffect`, no CSS transitions on position. Read mode uses proportional anchor: `anchorRatio = nodeCenterY / vh`, `top = nodeCenterY - (h * anchorRatio)`. Edit mode keeps `readTopRef.current` and pushes up minimum needed to fit. `useLayoutEffect` fires after DOM commit (so scrollHeight is accurate) but before paint (so user never sees wrong position).
 
-**`user_objects` merged view.** Matt preferred doing foundational work before flashy features. Added a Postgres VIEW that joins `objects` + `objects_overrides` + `objects_types`, using `COALESCE(override, canonical)` for every overridable field, with types aggregated via `array_agg`. Frontend query simplified from a multi-table join with field-by-field `override?.name || obj.name` to just `supabase.from('user_objects').select('*').eq('user_id', user.id)`.
-
-**Font selection.** Matt wanted a defining custom font. Created an HTML comparison page showing 6 fonts rendered in Coterie's dark theme (node tiles, detail panel, wordmark). Round 1: Satoshi won over SF Pro, General Sans, Plus Jakarta Sans, Geist, DM Sans. Round 2: Matt asked for "a slight, slight touch of glamour" — compared Satoshi against Clash Grotesk, Cabinet Grotesk, Josefin Sans, Sora, Urbanist. **Urbanist won** — "strikes the balance, clean but gives us a look." Satoshi noted as backup. Loaded via Google Fonts, added to `index.html`, set as primary in `--font-sans`.
-
-**Typography cleanup.** Urbanist's natural letter-spacing is tighter than SF Pro. Zeroed out all negative `letter-spacing` values that had been set for the looser system font (in Landscape.module.css, Login.module.css, DetailPanel.module.css). Bumped node tile types from 10px to 11px. Changed Login subtitle to "Map your professional world."
-
-**Commit hygiene.** Matt asked to be reminded to commit more frequently. Will nudge after each meaningful chunk going forward.
+**Canvas refactoring.** `SelectedItem` changed from `panelPos: {x, y}` to `nodeRect: {left, top, right, bottom}` — full screen bounding box via `flowToScreenPosition`. DetailPanel computes its own position from the nodeRect. Removed `avoidPanelOverlap` (simplified), removed `centerOnNode`/`setCenter`. Extracted `refreshData()` as `useCallback` for reuse after edits.
 
 ### Files Modified
-- `src/components/Canvas.tsx` — Replaced `onSelectionChange` prop with `useOnSelectionChange` hook, added `clickHandledRef` for Cmd/Shift-click, added `avoidPanelOverlap()`, simplified data loading to use `user_objects` view
-- `src/components/ObjectNode.module.css` — Types font-size 10px → 11px
-- `src/components/DetailPanel.module.css` — Zeroed letter-spacing (two occurrences)
-- `src/pages/Login.tsx` — Tagline → "Map your professional world."
-- `src/pages/Login.module.css` — Zeroed letter-spacing
-- `src/pages/Landscape.module.css` — Zeroed letter-spacing
-- `src/styles/global.css` — `--font-sans` updated to Urbanist-first stack
-- `index.html` — Added Google Fonts link for Urbanist
-- `supabase/migrations/20260203000000_pro_schema.sql` — `industries`→`sectors` rename, person contact CHECK constraint, `user_objects` VIEW
-- `supabase/seed.sql` — `industry_id`→`sector_id`
-- `CLAUDE.md` — Sector rename, person contact tenet, updated status
-- `docs/PRODUCT_PLAN.md` — Sector rename throughout
-- `docs/STUDIO_CONTACT_INTELLIGENCE.md` — Sector rename throughout
-- `scripts/known_landscape.json` — Description updated (kept "Industry Entertainment" company name)
-
-### React Flow v12 Multi-Select Gotcha
-`selectionOnDrag` conflicts with `multiSelectionKeyCode` — Cmd-click on nodes gets eaten by the selection drag system. Workaround: handle Cmd/Shift-click manually in `onNodeClick` (toggle `selectedItems` state), use a ref flag to prevent `useOnSelectionChange` from overwriting, and let the hook handle lasso/pane-deselect only.
+- `src/components/DetailPanel.tsx` — Complete rewrite: edit mode with TagInput, class-aware placeholders, smart positioning via single useLayoutEffect, proportional anchor algorithm
+- `src/components/DetailPanel.module.css` — Edit mode styles (inputs, textareas, field groups, tag input with chips/suggestions/autocomplete), removed all position transitions
+- `src/components/Canvas.tsx` — `SelectedItem` uses `nodeRect`, extracted `refreshData()`, passes `onObjectUpdated` to DetailPanel, removed `centerOnNode`/`avoidPanelOverlap`
+- `supabase/migrations/20260203000000_pro_schema.sql` — `is_canon` + `created_by` on types table, deferred FK
+- `package.json` / `package-lock.json` — Added `lucide-react`
 
 ### Open Items / Next Steps
 1. **Search → zoom** — the core UX loop, highest-impact next feature
-2. **UI polish** — typography, spacing, detail panel refinements
-3. **RLS policies** — before multi-user
-4. **Commit reminder** — nudge Matt after each meaningful chunk
+2. **Create new objects** — edit card infrastructure is ready to double as create card
+3. **UI polish** — detail panel styling, type tag editing UX refinements
+4. **RLS policies** — before multi-user
+5. **Commit reminder** — nudge Matt after each meaningful chunk

@@ -7,10 +7,11 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useOnSelectionChange,
   BackgroundVariant,
   SelectionMode,
 } from '@xyflow/react'
-import type { Node, Edge, NodeChange, OnSelectionChangeParams } from '@xyflow/react'
+import type { Node, Edge, NodeChange } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -56,6 +57,31 @@ function getCentroid(items: SelectedItem[]): { x: number; y: number } {
   const sumX = items.reduce((acc, item) => acc + item.panelPos.x, 0)
   const sumY = items.reduce((acc, item) => acc + item.panelPos.y, 0)
   return { x: sumX / items.length, y: sumY / items.length }
+}
+
+const PANEL_WIDTH = 280
+const PANEL_HEIGHT_EST = 300 // conservative estimate for overlap detection
+const PANEL_OFFSET = 12
+const PANEL_GAP = 8
+
+function avoidPanelOverlap(
+  a: { x: number; y: number },
+  b: { x: number; y: number }
+): [{ x: number; y: number }, { x: number; y: number }] {
+  const ax = a.x + PANEL_OFFSET
+  const bx = b.x + PANEL_OFFSET
+  const overlapsX = ax < bx + PANEL_WIDTH && ax + PANEL_WIDTH > bx
+  const overlapsY = a.y < b.y + PANEL_HEIGHT_EST && a.y + PANEL_HEIGHT_EST > b.y
+
+  if (overlapsX && overlapsY) {
+    // Push the lower panel below the upper one
+    if (a.y <= b.y) {
+      return [a, { x: b.x, y: a.y + PANEL_HEIGHT_EST + PANEL_GAP }]
+    } else {
+      return [{ x: a.x, y: b.y + PANEL_HEIGHT_EST + PANEL_GAP }, b]
+    }
+  }
+  return [a, b]
 }
 
 function CanvasInner() {
@@ -126,50 +152,37 @@ function CanvasInner() {
 
     async function loadData() {
       const { data: objects } = await supabase
-        .from('objects')
-        .select(`
-          id, class, name, title, status, phone, phone_2, email, website, address, photo_url, is_canon,
-          objects_types(type_id),
-          objects_overrides!inner(
-            name, title, status, phone, phone_2, email, website, address, photo_url,
-            map_x, map_y, shared_notes, private_notes, tags
-          )
-        `)
-        .eq('objects_overrides.user_id', user!.id)
-        .eq('is_active', true)
+        .from('user_objects')
+        .select('*')
+        .eq('user_id', user!.id)
 
       if (!objects) return
 
-      const flowNodes: Node[] = objects.map((obj, i) => {
-        const override = obj.objects_overrides[0]
-        const types = obj.objects_types?.map((t: { type_id: string }) => t.type_id) || []
-
-        return {
+      const flowNodes: Node[] = objects.map((obj, i) => ({
+        id: obj.id,
+        type: 'object',
+        position: {
+          x: obj.map_x ?? (i % 5) * 250,
+          y: obj.map_y ?? Math.floor(i / 5) * 200,
+        },
+        data: {
           id: obj.id,
-          type: 'object',
-          position: {
-            x: override?.map_x ?? (i % 5) * 250,
-            y: override?.map_y ?? Math.floor(i / 5) * 200,
-          },
-          data: {
-            id: obj.id,
-            name: override?.name || obj.name,
-            title: override?.title || obj.title,
-            class: obj.class,
-            status: override?.status || obj.status,
-            types,
-            phone: override?.phone || obj.phone,
-            phone_2: override?.phone_2 || obj.phone_2,
-            email: override?.email || obj.email,
-            website: override?.website || obj.website,
-            address: override?.address || obj.address,
-            photo_url: override?.photo_url || obj.photo_url,
-            shared_notes: override?.shared_notes,
-            private_notes: override?.private_notes,
-            tags: override?.tags,
-          } satisfies ObjectNodeData,
-        }
-      })
+          name: obj.name,
+          title: obj.title,
+          class: obj.class,
+          status: obj.status,
+          types: obj.types || [],
+          phone: obj.phone,
+          phone_2: obj.phone_2,
+          email: obj.email,
+          website: obj.website,
+          address: obj.address,
+          photo_url: obj.photo_url,
+          shared_notes: obj.shared_notes,
+          private_notes: obj.private_notes,
+          tags: obj.tags,
+        } satisfies ObjectNodeData,
+      }))
 
       for (const n of flowNodes) {
         nodePositionsRef.current.set(n.id, n.position)
@@ -238,25 +251,42 @@ function CanvasInner() {
     [flowToScreenPosition]
   )
 
-  // Single node click — handles single selection
-  const handleNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
-      setSelectedItems([buildSelectedItem(node)])
-    },
-    [buildSelectedItem]
-  )
+  // Flag: when onNodeClick handles selection, tell useOnSelectionChange to stand down
+  const clickHandledRef = useRef(false)
 
-  // Selection change handler — drives multi-selection UI (lasso, Cmd-click)
-  const handleSelectionChange = useCallback(
-    ({ nodes: selectedNodes }: OnSelectionChangeParams) => {
-      // Only use this for multi-selection (2+)
-      // Single selection is handled by handleNodeClick
-      if (selectedNodes.length >= 2) {
-        setSelectedItems(selectedNodes.map(buildSelectedItem))
+  // Click-based selection: normal click replaces, Cmd/Shift-click toggles
+  const handleNodeClick = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      clickHandledRef.current = true
+      setTimeout(() => { clickHandledRef.current = false }, 50)
+
+      if (event.metaKey || event.shiftKey) {
+        setSelectedItems(prev => {
+          const exists = prev.find(item => item.nodeId === node.id)
+          if (exists) return prev.filter(item => item.nodeId !== node.id)
+          return [...prev, buildSelectedItem(node)]
+        })
+      } else {
+        setSelectedItems([buildSelectedItem(node)])
       }
     },
     [buildSelectedItem]
   )
+
+  // Lasso selection + pane deselection (click-based selection handled above)
+  useOnSelectionChange({
+    onChange: useCallback(
+      ({ nodes: selectedNodes }: { nodes: Node[] }) => {
+        if (clickHandledRef.current) return
+        if (selectedNodes.length === 0) {
+          setSelectedItems([])
+          return
+        }
+        setSelectedItems(selectedNodes.map(buildSelectedItem))
+      },
+      [buildSelectedItem]
+    ),
+  })
 
   // Handle edge selection — show label + turn white when selected
   const handleEdgeClick = useCallback(
@@ -287,7 +317,7 @@ function CanvasInner() {
   )
 
   const handlePaneClick = useCallback(() => {
-    setSelectedItems([])
+    // Selection clearing is handled by useOnSelectionChange — just reset edge styles
     setEdges(current =>
       current.map(e => ({
         ...e,
@@ -311,7 +341,6 @@ function CanvasInner() {
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={handleNodeClick}
-        onSelectionChange={handleSelectionChange}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
         nodeTypes={nodeTypes}
@@ -342,22 +371,25 @@ function CanvasInner() {
       )}
 
       {/* Level 2: Dual selection — two panels + highlighted edges between them */}
-      {selectedItems.length === 2 && (
-        <>
-          <DetailPanel
-            object={selectedItems[0].data}
-            position={selectedItems[0].panelPos}
-            onClose={clearSelection}
-            peerObject={selectedItems[1].data}
-          />
-          <DetailPanel
-            object={selectedItems[1].data}
-            position={selectedItems[1].panelPos}
-            onClose={clearSelection}
-            peerObject={selectedItems[0].data}
-          />
-        </>
-      )}
+      {selectedItems.length === 2 && (() => {
+        const [pos0, pos1] = avoidPanelOverlap(selectedItems[0].panelPos, selectedItems[1].panelPos)
+        return (
+          <>
+            <DetailPanel
+              object={selectedItems[0].data}
+              position={pos0}
+              onClose={clearSelection}
+              peerObject={selectedItems[1].data}
+            />
+            <DetailPanel
+              object={selectedItems[1].data}
+              position={pos1}
+              onClose={clearSelection}
+              peerObject={selectedItems[0].data}
+            />
+          </>
+        )
+      })()}
 
       {/* Level 3: Multi selection (3+) */}
       {selectedItems.length >= 3 && (

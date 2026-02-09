@@ -1,12 +1,12 @@
 # Coterie
 
-Industry intelligence app — a relationship mapping tool for professional landscapes.
+Sector intelligence app — a relationship mapping tool for professional landscapes.
 
 ## Overview
 
 Coterie maps relationships between companies, people, and projects. Designed for professionals who need to understand who's where, what's in development, and how it all connects.
 
-**Industry-agnostic** data model, currently seeded for Hollywood/entertainment.
+**Sector-agnostic** data model, currently seeded for Hollywood/entertainment.
 
 The core UX: search for a person or company on your **Landscape** (the map), zoom to them, and instantly see their place in your world — relationships, notes, coterie intel — all floating contextually on the canvas. Think Google Maps for professional relationships.
 
@@ -118,7 +118,7 @@ Example: Netflix is class=`company` with types=[`streamer`, `studio`]
 
 ### The Landscape
 
-The **Landscape** is the user's entire industry universe — one giant canvas with all their objects, connections, and positions. It's not a table; it's the totality of canonical objects + the user's overrides. Every user has one Landscape. Positions live in `objects_overrides.map_x/map_y`.
+The **Landscape** is the user's entire sector universe — one giant canvas with all their objects, connections, and positions. It's not a table; it's the totality of canonical objects + the user's overrides. Every user has one Landscape. Positions live in `objects_overrides.map_x/map_y`.
 
 ### Maps (unified concept)
 
@@ -204,11 +204,11 @@ When two coterie members independently create the same real-world entity, the di
 
 **Entity registry & taxonomy:**
 ```
-industries             -- entertainment, tech, finance, etc.
+sectors                -- entertainment, tech, finance, etc.
 classes                -- company, person, project (fixed)
 types                  -- studio, executive, feature, etc. (extensible)
 objects                -- ALL entities (is_canon boolean, created_by tracks origin)
-objects_industries     -- many-to-many: object ↔ industries
+objects_sectors        -- many-to-many: object ↔ sectors
 objects_types          -- many-to-many: object ↔ types
 connection_types       -- employed_by, produces, represents, etc.
 connections            -- canonical connections (source, target, type, is_active)
@@ -222,7 +222,7 @@ maps_objects           -- objects in each map + optional relative x/y (packages 
 
 **User layer:**
 ```
-profiles               -- extends Supabase auth (user_id PK, display_name, industry)
+profiles               -- extends Supabase auth (user_id PK, display_name, sector)
 objects_overrides       -- per-user: overrides + Landscape positions + shared/private notes
 connections_overrides   -- per-user: overrides + user-created connections + shared/private notes
 ```
@@ -247,13 +247,24 @@ Commonly displayed/filtered fields are real columns. Rare/variable fields live i
 | Column | Person | Company | Project |
 |---|---|---|---|
 | `title` | VP Production | Major Studio & Streamer | Sci-fi thriller set in 2040 |
-| `status` | Active / Left industry | Active / Acquired / Defunct | Development / Production / Released |
-| `phone` | Cell | Main line | — |
-| `phone_2` | Office | — | — |
-| `email` | Personal/work | General inquiries | — |
+| `status` | Active / Left sector | Active / Acquired / Defunct | Development / Production / Released |
+| `phone` | **Override only** | Main line | — |
+| `phone_2` | **Override only** | — | — |
+| `email` | **Override only** | General inquiries | — |
 | `website` | Personal site | Corporate site | Official page |
-| `address` | Office address | HQ | — |
+| `address` | **Override only** | HQ | — |
 | `photo_url` | Headshot | Logo | Poster/key art |
+
+### Guiding Tenet: No Person Contact Data in Canonical Records
+
+**Coterie shares WHO someone is, not HOW to reach them.** Person contact info (phone, phone_2, email, address) is NEVER stored in the `objects` table. Enforced by a CHECK constraint at the schema level — unbreakable.
+
+- **Canonical (identity)**: name, title, status, website, photo_url, class, types, connections
+- **Override-only (reachability)**: phone, phone_2, email, address
+
+Company/project contact info CAN be canonical — Amazon's switchboard and HQ address are public corporate data. But a person's phone number or email is personal knowledge that lives in `objects_overrides`, shareable via coterie but never distributed by the platform.
+
+This is what makes Coterie not a data broker. It's the anti-ZoomInfo stance, enforced by schema.
 
 ### Key design decisions
 
@@ -267,7 +278,7 @@ Commonly displayed/filtered fields are real columns. Rare/variable fields live i
 - **Coterie intel is a query pattern** — no extra table; join coterie members' overrides, exclude `private_notes`
 - **Map installation = "accept and place"** — same mechanic for store packages and coterie-shared maps
 - **Relative coords derived, not stored** (for user maps) — computed from owner's Landscape at install time; packages store them explicitly
-- **Industries scope onboarding**, not data — all users share one database, industry is a lens/filter
+- **Sectors scope onboarding**, not data — all users share one database, sector is a lens/filter
 - **Maps are catalogs, not canvases** — a map is a collection of objects (with optional relative positioning), not a separate coordinate space
 - **All FKs reference `profiles(user_id)`** not `auth.users(id)` — keeps all relationships in the public schema
 - **Auto-create profile on signup** via trigger on `auth.users`
@@ -283,7 +294,7 @@ Commonly displayed/filtered fields are real columns. Rare/variable fields live i
 
 ## User Experience (Pro)
 
-1. User signs up, picks their industry → profile auto-created
+1. User signs up, picks their sector → profile auto-created
 2. Installs a map package → "stamps" it onto their Landscape, placing the cluster where they want
 3. Customizes via overrides (drag, rename, add notes)
 4. Creates new objects → `objects` row (`is_canon=false`, `created_by=user`) + `objects_overrides` row; fuzzy-match wizard ("Is this any of these existing objects?")
@@ -351,10 +362,13 @@ When ready to deploy:
 - [x] Supabase client integration (.env.local with local keys)
 - [x] Auth working (email/password login, AuthContext with session listener)
 - [x] React Flow canvas rendering seed data (objects as nodes, connections as edges)
-- [x] Custom ObjectNode component (class-based colors/icons, name, title, type badges)
-- [x] DetailPanel (floating read-only panel showing object fields + notes)
+- [x] Custom ObjectNode component (class-based shapes: rect/pill/octagon, dim color tints)
+- [x] DetailPanel (floating read-only panel positioned adjacent to clicked node)
 - [x] Drag-to-reposition persists to Supabase (objects_overrides.map_x/map_y)
-- [x] CSS Modules styling throughout, dark theme
+- [x] Nearest-handle edge routing (handles on all 4 sides, live updates during drag)
+- [x] Finder-like canvas controls (lasso select, pinch zoom, scroll zoom, space+drag pan)
+- [x] Edges: gray/unlabeled by default, white/labeled on click
+- [x] CSS Modules styling throughout, dark theme with class-based dim tints
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -365,7 +379,8 @@ When ready to deploy:
 - [x] Local SQLite database
 
 ### Next Up
-- [ ] UI polish (node design, canvas feel, detail panel, typography)
+- [ ] **Multi-select system (WIP)** — scaffolded but `onSelectionChange` not firing for lasso/Cmd-click, needs debugging
+- [ ] UI polish continued (typography, spacing, detail panel refinements)
 - [ ] Search → zoom → floating detail panel
 - [ ] RLS policies (before multi-user)
 - [ ] Merged view SQL (registry + user overrides)
@@ -398,7 +413,7 @@ Not a traditional CRM (no sales pipeline). Coterie is a **relationship intellige
 - **Kumu**: Visual network canvas but no data model or domain intelligence
 - **Personal CRMs (Dex, Clay)**: Track your contacts, not the landscape itself
 
-Coterie's gap: visual relationship graph + structured data model + individual-scale + industry-aware.
+Coterie's gap: visual relationship graph + structured data model + individual-scale + sector-aware.
 
 ## API Keys
 
@@ -413,52 +428,67 @@ Coterie's gap: visual relationship graph + structured data model + individual-sc
 ---
 
 ## Recent Session
-**Date:** 2026-02-07 (session 3)
+**Date:** 2026-02-07 (session 4)
 **Branch:** main
 
 ### Narrative
 
-Continued from session 2 (coterie sharing design, entity registry model). This session **scaffolded the entire web app** and got it running end-to-end.
+This was a continuation session. Started by fixing auth sign-in ("Database error querying schema") and then entered a long UI polish phase, ending with a multi-select system that's scaffolded but has a bug.
 
-**Web app scaffold.** Built the full Vite + React + TypeScript app from scratch:
-- Supabase client (`src/lib/supabase.ts`) with `.env.local` for local dev keys
-- Auth system: `AuthContext` with session listener, `Login.tsx` with email/password form, `ProtectedRoute` wrapper in `App.tsx`
-- React Flow canvas (`Canvas.tsx`): loads objects with types and overrides via Supabase query (inner join on `objects_overrides` filtered by `user_id`), renders nodes and edges, saves positions on drag-end
-- Custom `ObjectNode` component with class-based colors (company=blue, person=green, project=yellow), emoji icons, name/title/type badges
-- `DetailPanel` floating panel showing object fields and notes (read-only)
-- Dark theme with CSS variables in `global.css`, CSS Modules throughout
-- Styling: chose CSS Modules over Tailwind — Matt finds Tailwind overkill for this project
+**Auth fix.** Session 3 had added `auth.identities` rows to fix sign-in, but it was still broken. Diagnosed via `docker logs supabase_auth_coterie` — the actual error was `sql: Scan error on column index 8, name "email_change": converting NULL to string is unsupported`. GoTrue's Go code can't handle NULL in string columns. Fixed by explicitly setting `email_change`, `email_change_token_new`, `recovery_token` to `''` in the seed INSERT. Also discovered `phone` must be NULL (UNIQUE constraint — empty strings collide across users). Set `is_sso_user = false` explicitly too. After `supabase db reset`, sign-in worked.
 
-**Auth debugging.** Hit two issues with seeding test users into local Supabase:
-1. Newer Supabase requires `auth.identities` rows (not just `auth.users`) — added INSERT for identity rows
-2. GoTrue's Go code can't scan NULL into string columns — `email_change`, `email_change_token_new`, `recovery_token` needed explicit empty strings in the seed INSERT. `phone` must stay NULL (unique constraint). Diagnosed via `docker logs supabase_auth_coterie`.
+**Node shape system.** Matt wanted class-based shapes from the SwiftUI prototype:
+- Companies: rounded rectangles (unchanged)
+- People: pills (flat top/bottom, rounded sides — `border-radius: 30px`)
+- Projects: squashed octagons via `clip-path: polygon(...)` — Matt iterated on the diamond sharpness (narrowed top/bottom edges: `30%/70%`)
+- All tiles same size: 180×60px
+- Name + types only (removed title line and emoji icons)
+- Types rendered inline with `·` separators, truncated with ellipsis on overflow
 
-**Result:** Login works, canvas renders all seed data (Disney, Warner Bros, Netflix, CAA, Bad Robot, people, projects) with connection edges. Drag-to-reposition persists to Supabase. Click a node → detail panel shows. Matt's reaction: "Holy macaroni. There it is. Wow."
+**Color tints.** Replaced per-type colored text with dim class-based tile backgrounds:
+- `--color-company-dim: #1a2744` (dark blue)
+- `--color-person-dim: #152e25` (dark green)
+- `--color-project-dim: #3d2e0a` (dark amber — initially too gray, bumped up warmth)
+- Types text is now `#777` muted gray, name stays white
+- Hit a bug where `clip-path` creates a stacking context, causing the `::before` border pseudo-element to cover the project background. Fixed by removing the `::before` hack entirely.
 
-### Gotcha: Seeding Supabase Auth Users
-When inserting directly into `auth.users` for local dev, you MUST:
-1. Also insert into `auth.identities` with matching `user_id`, `provider='email'`, `provider_id=email`, and `identity_data` containing `sub` and `email`
-2. Set `email_change`, `email_change_token_new`, and `recovery_token` to `''` (empty string, not NULL) — GoTrue crashes on NULL string columns
-3. Leave `phone` as NULL (has a UNIQUE constraint — empty strings collide)
-4. Set `is_sso_user = false` explicitly
+**Edge routing.** Added handles on all 4 sides (top/bottom/left/right) with IDs. Built `getNearestHandles()` that picks source/target handles based on relative node positions. Edges recalculate live during drag (not just on drag-end). Used a `nodePositionsRef` Map to track positions and `rebuildEdges()` callback. Initial approach using `setNodes` callback to get current positions caused a glitch (node turned orange, edges vanished) — fixed by tracking positions in a ref instead.
 
-### Files Created
-- `package.json`, `vite.config.ts`, `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json` — Vite + React + TS config
-- `index.html` — Vite entry
-- `.env.local` — Local Supabase URL + anon key (gitignored)
-- `src/main.tsx`, `src/App.tsx`, `src/vite-env.d.ts`
-- `src/lib/supabase.ts`
-- `src/contexts/AuthContext.tsx`
-- `src/pages/Login.tsx`, `src/pages/Login.module.css`, `src/pages/Landscape.tsx`, `src/pages/Landscape.module.css`
-- `src/components/Canvas.tsx`, `src/components/Canvas.module.css`, `src/components/ObjectNode.tsx`, `src/components/ObjectNode.module.css`, `src/components/DetailPanel.tsx`, `src/components/DetailPanel.module.css`
-- `src/styles/global.css`
+**Edge styling.** Made all connections gray and unlabeled by default. Click a connection → turns white with label showing. Click canvas background → deselects. Stored `connectionType` in edge data for label retrieval on click.
+
+**Canvas controls (Finder-like).** Matt wanted Mac Finder behavior:
+- `panOnScroll` — trackpad two-finger drag pans
+- `panOnDrag={[1]}` — middle-click pans
+- `panActivationKeyCode="Space"` — spacebar + drag pans
+- `zoomOnScroll` + `zoomOnPinch` — scroll wheel and pinch both zoom
+- `selectionOnDrag` — left-drag on empty space creates lasso selection box
+- `selectionMode={SelectionMode.Partial}` — partial intersection selects
+- `multiSelectionKeyCode="Meta"` — Cmd-click for multi-select
+
+**Detail panel positioning.** Changed from fixed top-right corner to adjacent-to-node. Uses `flowToScreenPosition` to convert canvas coords to screen coords. Panel positioned at `node.position.x + NODE_WIDTH` (right edge of node) with `position: fixed`. Required wrapping `CanvasInner` in `ReactFlowProvider` so `useReactFlow()` hook works.
+
+**Multi-select system design.** Matt proposed a clean tiered UX:
+- **1 selected**: DetailPanel next to it (current)
+- **2 selected**: TWO DetailPanels + "Link to {other}" button on each + connections between them highlighted white
+- **3+ selected**: Centered MultiSelectPanel with count breakdown + "New Map" / "Add to Map" buttons
+- Future multi-select actions noted: "Group on Canvas", "Tag All", "Compare"
+
+**Multi-select implementation (WIP — has a bug).** Refactored from single `selectedObject`/`panelPos` to `selectedItems: SelectedItem[]`. Added `onSelectionChange` handler for lasso/Cmd-click. Created `MultiSelectPanel` component. Updated `DetailPanel` with optional `peerObject` prop and relationship button. Added edge highlighting `useEffect` for 2-select case.
+
+**THE BUG:** Multi-selection doesn't work. Clicking one node works fine (DetailPanel shows), but lasso and Cmd-click don't select multiple nodes. Tried using only `onSelectionChange` first, then added `onNodeClick` back for single-click with `onSelectionChange` handling 2+ — still only single selection works. React Flow v12's `onSelectionChange` may not fire for lasso/Cmd-click as expected, or there's an interaction conflict with `selectionOnDrag` + `panOnDrag={[1]}`. Needs fresh debugging next session.
 
 ### Files Modified
-- `.gitignore` — Added node_modules, dist, .env.local
-- `supabase/seed.sql` — Test users with auth.identities, GoTrue-compatible column values
+- `src/components/Canvas.tsx` — Major refactor: nearest-handle routing, nodePositionsRef, live edge recalculation, selection state as `SelectedItem[]`, `onSelectionChange` + `onNodeClick`, edge highlighting for 2-select, render branch for 1/2/3+, `ReactFlowProvider` wrapper, Finder-like props
+- `src/components/ObjectNode.tsx` — Removed emoji icons and title line, removed inline color styles, added handles on all 4 sides with IDs, class-based shape CSS classes
+- `src/components/ObjectNode.module.css` — Class shapes (`.company` rect, `.person` pill, `.project` clip-path octagon), fixed 180×60 size, centered layout, inline types with ellipsis, removed `::before` border hack
+- `src/components/DetailPanel.tsx` — Added `peerObject` prop, relationship button placeholder
+- `src/components/DetailPanel.module.css` — `position: fixed`, relationship button styles
+- `src/styles/global.css` — Added `--color-company-dim`, `--color-person-dim`, `--color-project-dim`
+- `src/components/MultiSelectPanel.tsx` — **New**: 3+ selection popup with count, class breakdown, action buttons
+- `src/components/MultiSelectPanel.module.css` — **New**: centered popup styling
 
 ### Open Items / Next Steps
-1. **UI polish** — node design, canvas feel, detail panel, typography, spacing (starting now)
-2. **Search → zoom** — search bar that finds objects and pans/zooms to them
-3. **RLS policies** — before multi-user
-4. **Merged view SQL** — registry + user overrides combined view
+1. **DEBUG: Multi-select not working** — `onSelectionChange` doesn't fire for lasso/Cmd-click in React Flow v12. Need to investigate: maybe `selectionOnDrag` conflicts with `panOnDrag`, or `onSelectionChange` requires different configuration. Try React Flow docs/examples for v12 multi-select. The lasso *visual* works (you see the selection rectangle), the issue is the callback not firing or firing with wrong data.
+2. **UI polish continued** — typography, spacing, more rounds of visual refinement
+3. **Search → zoom** — search bar
+4. **RLS policies** — before multi-user

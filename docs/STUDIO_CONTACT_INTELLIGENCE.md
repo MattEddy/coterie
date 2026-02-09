@@ -2,7 +2,7 @@
 
 ## Overview
 
-Claude-powered contact import that goes beyond fuzzy string matching to understand industry context, infer roles, and suggest relationships.
+Claude-powered contact import that goes beyond fuzzy string matching to understand sector context, infer roles, and suggest relationships.
 
 ## Feature Tiers
 
@@ -57,11 +57,11 @@ struct ContactBatch {
 }
 ```
 
-### 3. Claude analyzes with industry context
+### 3. Claude analyzes with sector context
 
 **Prompt structure:**
 ```
-You are analyzing contacts for a Hollywood industry CRM.
+You are analyzing contacts for a Hollywood sector CRM.
 
 Known companies in database:
 - Warner Bros Discovery (studio)
@@ -179,7 +179,7 @@ let domainMap = [
 
 ### Title Parsing
 ```swift
-// Claude understands industry-specific titles
+// Claude understands sector-specific titles
 "VP Development" → executive, senior
 "Creative Executive" → executive, mid
 "Partner" (at agency) → agent, senior

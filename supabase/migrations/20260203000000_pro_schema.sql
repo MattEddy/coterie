@@ -1,5 +1,5 @@
 -- Migration: Pro-tier schema
--- Entity registry + user override architecture, industry-agnostic, coterie sharing
+-- Entity registry + user override architecture, sector-agnostic, coterie sharing
 --
 -- Key concepts:
 --   - objects = entity registry (is_canon distinguishes vetted from user-created)
@@ -8,12 +8,13 @@
 --   - maps = unified: store packages, user maps, shared maps
 --   - coteries = sharing groups with diff-based dissonance detection
 --   - coterie_reviews = tracks user responses to dissonances
---   - industries = scoping for onboarding + map packages
+--   - sectors = scoping for onboarding + map packages
 
 -- =============================================================================
 -- CLEAN SLATE
 -- =============================================================================
 
+DROP VIEW IF EXISTS user_objects CASCADE;
 DROP VIEW IF EXISTS objects_with_types CASCADE;
 DROP TABLE IF EXISTS coterie_reviews CASCADE;
 DROP TABLE IF EXISTS coteries_maps CASCADE;
@@ -21,7 +22,7 @@ DROP TABLE IF EXISTS coterie_members CASCADE;
 DROP TABLE IF EXISTS coteries CASCADE;
 DROP TABLE IF EXISTS maps_objects CASCADE;
 DROP TABLE IF EXISTS maps CASCADE;
-DROP TABLE IF EXISTS objects_industries CASCADE;
+DROP TABLE IF EXISTS objects_sectors CASCADE;
 DROP TABLE IF EXISTS connections_overrides CASCADE;
 DROP TABLE IF EXISTS objects_overrides CASCADE;
 DROP TABLE IF EXISTS profiles CASCADE;
@@ -32,11 +33,11 @@ DROP TABLE IF EXISTS objects CASCADE;
 DROP TABLE IF EXISTS connection_types CASCADE;
 DROP TABLE IF EXISTS types CASCADE;
 DROP TABLE IF EXISTS classes CASCADE;
-DROP TABLE IF EXISTS industries CASCADE;
+DROP TABLE IF EXISTS sectors CASCADE;
 
 -- Legacy cleanup
 DROP TABLE IF EXISTS object_type_assignments CASCADE;
-DROP TABLE IF EXISTS object_industries CASCADE;
+DROP TABLE IF EXISTS object_sectors CASCADE;
 DROP TABLE IF EXISTS map_objects CASCADE;
 DROP TABLE IF EXISTS relationship_types CASCADE;
 DROP TABLE IF EXISTS relationships_overrides CASCADE;
@@ -53,10 +54,10 @@ DROP TYPE IF EXISTS project_status CASCADE;
 DROP TYPE IF EXISTS relationship_type CASCADE;
 
 -- =============================================================================
--- INDUSTRIES
+-- SECTORS
 -- =============================================================================
 
-CREATE TABLE industries (
+CREATE TABLE sectors (
     id TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
     icon TEXT,
@@ -64,7 +65,7 @@ CREATE TABLE industries (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO industries (id, display_name, icon, color) VALUES
+INSERT INTO sectors (id, display_name, icon, color) VALUES
     ('entertainment', 'Entertainment', 'film', '#F59E0B'),
     ('tech', 'Tech', 'cpu', '#3B82F6'),
     ('finance', 'Finance', 'chart.line.uptrend.xyaxis', '#10B981'),
@@ -149,18 +150,27 @@ CREATE TABLE objects (
     name TEXT NOT NULL,
     title TEXT,                          -- subtitle/description: job title, company tagline, logline
     status TEXT,                         -- lifecycle: active, development, released, defunct, etc.
-    phone TEXT,                          -- primary phone
-    phone_2 TEXT,                        -- secondary phone
-    email TEXT,                          -- primary email
+    phone TEXT,                          -- primary phone (companies/projects only)
+    phone_2 TEXT,                        -- secondary phone (companies/projects only)
+    email TEXT,                          -- primary email (companies/projects only)
     website TEXT,                        -- primary URL
-    address TEXT,                        -- free-form location
+    address TEXT,                        -- free-form location (companies/projects only)
     photo_url TEXT,                      -- headshot / logo / poster
     data JSONB DEFAULT '{}',            -- long tail: social links, genre, etc.
     is_canon BOOLEAN DEFAULT FALSE,     -- vetted/maintained by platform operators
     created_by UUID,                    -- NULL = platform-seeded; FK to profiles added after profiles table exists
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- GUIDING TENET: Person contact info is NEVER canonical.
+    -- Coterie shares who someone is (name, title, role), not how to reach them.
+    -- Personal reachability lives in objects_overrides only.
+    CONSTRAINT person_no_canonical_contact CHECK (
+        class != 'person' OR (
+            phone IS NULL AND phone_2 IS NULL AND email IS NULL AND address IS NULL
+        )
+    )
 );
 
 CREATE INDEX idx_objects_class ON objects(class);
@@ -171,16 +181,16 @@ CREATE INDEX idx_objects_canon ON objects(is_canon);
 CREATE INDEX idx_objects_created_by ON objects(created_by);
 
 -- =============================================================================
--- OBJECTS_INDUSTRIES (many-to-many: objects can span industries)
+-- OBJECTS_SECTORS (many-to-many: objects can span sectors)
 -- =============================================================================
 
-CREATE TABLE objects_industries (
+CREATE TABLE objects_sectors (
     object_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-    industry_id TEXT NOT NULL REFERENCES industries(id),
-    PRIMARY KEY (object_id, industry_id)
+    sector_id TEXT NOT NULL REFERENCES sectors(id),
+    PRIMARY KEY (object_id, sector_id)
 );
 
-CREATE INDEX idx_objects_industries_industry ON objects_industries(industry_id);
+CREATE INDEX idx_objects_sectors_sector ON objects_sectors(sector_id);
 
 -- =============================================================================
 -- OBJECTS_TYPES (many-to-many: objects can have multiple types)
@@ -272,7 +282,7 @@ CREATE INDEX idx_connections_active ON connections(is_active);
 CREATE TABLE profiles (
     user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     display_name TEXT,
-    industry_id TEXT REFERENCES industries(id),
+    sector_id TEXT REFERENCES sectors(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -309,7 +319,7 @@ CREATE TABLE maps (
     name TEXT NOT NULL,
     description TEXT,
     user_id UUID REFERENCES profiles(user_id) ON DELETE CASCADE,
-    industry_id TEXT REFERENCES industries(id),
+    sector_id TEXT REFERENCES sectors(id),
     source_map_id UUID REFERENCES maps(id),
     is_published BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
@@ -498,7 +508,7 @@ CREATE INDEX idx_log_entries_linked ON log_entries USING GIN(linked_objects);
 -- HELPER VIEWS
 -- =============================================================================
 
--- Objects with their types as an array
+-- Objects with their types as an array (canonical only, no user layer)
 CREATE VIEW objects_with_types AS
 SELECT
     o.id, o.class, o.name, o.title, o.status,
@@ -512,6 +522,40 @@ FROM objects o
 LEFT JOIN objects_types ot ON ot.object_id = o.id
 WHERE o.is_active = TRUE
 GROUP BY o.id;
+
+-- User's merged reality: canonical objects + their overrides + types
+-- COALESCE = use override if set, fall back to canonical
+-- This is what the app queries — one row per object per user
+CREATE VIEW user_objects AS
+SELECT
+    ov.user_id,
+    o.id,
+    o.class,
+    COALESCE(ov.name, o.name) AS name,
+    COALESCE(ov.title, o.title) AS title,
+    COALESCE(ov.status, o.status) AS status,
+    COALESCE(ov.phone, o.phone) AS phone,
+    COALESCE(ov.phone_2, o.phone_2) AS phone_2,
+    COALESCE(ov.email, o.email) AS email,
+    COALESCE(ov.website, o.website) AS website,
+    COALESCE(ov.address, o.address) AS address,
+    COALESCE(ov.photo_url, o.photo_url) AS photo_url,
+    o.is_canon,
+    o.created_by,
+    ov.map_x,
+    ov.map_y,
+    ov.shared_notes,
+    ov.private_notes,
+    ov.tags,
+    COALESCE(
+        array_agg(ot.type_id) FILTER (WHERE ot.type_id IS NOT NULL),
+        '{}'::TEXT[]
+    ) AS types
+FROM objects_overrides ov
+JOIN objects o ON o.id = ov.object_id
+LEFT JOIN objects_types ot ON ot.object_id = o.id
+WHERE ov.is_active = TRUE AND o.is_active = TRUE
+GROUP BY ov.user_id, o.id, ov.id;
 
 -- =============================================================================
 -- UPDATE TRIGGERS

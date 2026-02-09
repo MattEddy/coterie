@@ -1,10 +1,10 @@
 # Coterie Product Plan
 
-> Industry intelligence for your professional universe. Map the relationships between companies, people, and projects.
+> Sector intelligence for your professional universe. Map the relationships between companies, people, and projects.
 
 ## Vision
 
-Coterie is a personal CRM for tracking professional landscapes — starting with Hollywood, but applicable to any industry where relationships and movements matter.
+Coterie is a personal CRM for tracking professional landscapes — starting with Hollywood, but applicable to any sector where relationships and movements matter.
 
 The app helps users understand:
 - Who's where (people → companies)
@@ -222,10 +222,10 @@ Enables full offline functionality with sync queue.
 
 ### Phase 5: Platform Expansion
 
-**Goal:** Multi-platform, multi-industry.
+**Goal:** Multi-platform, multi-sector.
 
 - [ ] iOS app
-- [ ] Industry-specific seed data packs
+- [ ] Sector-specific seed data packs
 - [ ] API for third-party integrations
 - [ ] Team/enterprise tier
 
@@ -284,7 +284,7 @@ Enables full offline functionality with sync queue.
 - Review and approve user corrections
 - Merge duplicate objects
 - Verify high-profile entities
-- Seed new industry data
+- Seed new sector data
 
 ### AI Assistance
 - Claude helps vet proposed corrections
@@ -306,7 +306,7 @@ Enables full offline functionality with sync queue.
 The app works fully without internet. Data syncs when connected.
 
 **Why:**
-- Industry intel feels sensitive — users want it local
+- Sector intel feels sensitive — users want it local
 - Works on planes, in meetings, anywhere
 - Free tier is already local — natural extension
 - Sync conflicts are rare (single-user edits mostly)
@@ -355,7 +355,7 @@ Phase 4: Native Windows    ← Only if real demand (unlikely)
 
 3. **Private objects**: Can users mark objects as "never promote to canonical"?
 
-4. **Industry expansion**: When to add non-Hollywood seed data? User demand driven?
+4. **Sector expansion**: When to add non-Hollywood seed data? User demand driven?
 
 5. **Team tier**: Shared maps for companies? Different pricing model?
 

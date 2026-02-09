@@ -18,8 +18,8 @@ VALUES
     (gen_random_uuid(), 'cccc2222-2222-2222-2222-222222222222', 'billy@test.com', 'email', '{"sub": "cccc2222-2222-2222-2222-222222222222", "email": "billy@test.com"}', NOW(), NOW(), NOW());
 
 -- Set display names on profiles (trigger created them with just user_id)
-UPDATE profiles SET display_name = 'Matt', industry_id = 'entertainment' WHERE user_id = 'cccc1111-1111-1111-1111-111111111111';
-UPDATE profiles SET display_name = 'Billy', industry_id = 'entertainment' WHERE user_id = 'cccc2222-2222-2222-2222-222222222222';
+UPDATE profiles SET display_name = 'Matt', sector_id = 'entertainment' WHERE user_id = 'cccc1111-1111-1111-1111-111111111111';
+UPDATE profiles SET display_name = 'Billy', sector_id = 'entertainment' WHERE user_id = 'cccc2222-2222-2222-2222-222222222222';
 
 -- Sample Companies (is_canon = true for platform-seeded data)
 INSERT INTO objects (id, class, name, title, website, is_canon) VALUES

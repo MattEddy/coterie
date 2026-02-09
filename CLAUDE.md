@@ -369,6 +369,12 @@ When ready to deploy:
 - [x] Finder-like canvas controls (lasso select, pinch zoom, scroll zoom, space+drag pan)
 - [x] Edges: gray/unlabeled by default, white/labeled on click
 - [x] CSS Modules styling throughout, dark theme with class-based dim tints
+- [x] Multi-select: lasso + Cmd/Shift-click, tiered UX (1→detail, 2→dual panels, 3+→multi panel)
+- [x] Panel overlap avoidance for dual selection
+- [x] "Industry" → "sector" rename (schema, seed, docs, UI)
+- [x] Person contact data tenet: CHECK constraint prevents canonical person contact info
+- [x] `user_objects` merged view (COALESCE canonical + overrides + types in one query)
+- [x] Urbanist font (Google Fonts), tagline: "Map your professional world."
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -379,11 +385,9 @@ When ready to deploy:
 - [x] Local SQLite database
 
 ### Next Up
-- [ ] **Multi-select system (WIP)** — scaffolded but `onSelectionChange` not firing for lasso/Cmd-click, needs debugging
+- [ ] Search → zoom → floating detail panel (the core UX loop)
 - [ ] UI polish continued (typography, spacing, detail panel refinements)
-- [ ] Search → zoom → floating detail panel
 - [ ] RLS policies (before multi-user)
-- [ ] Merged view SQL (registry + user overrides)
 
 ### Planned
 - [ ] Map packages (store) with relative coordinates + stamp placement
@@ -428,67 +432,52 @@ Coterie's gap: visual relationship graph + structured data model + individual-sc
 ---
 
 ## Recent Session
-**Date:** 2026-02-07 (session 4)
+**Date:** 2026-02-08 (session 5)
 **Branch:** main
 
 ### Narrative
 
-This was a continuation session. Started by fixing auth sign-in ("Database error querying schema") and then entered a long UI polish phase, ending with a multi-select system that's scaffolded but has a bug.
+Session focused on fixing the multi-select bug from session 4, then pivoted to foundational work: terminology rename, a data privacy tenet, a merged view, and font selection.
 
-**Auth fix.** Session 3 had added `auth.identities` rows to fix sign-in, but it was still broken. Diagnosed via `docker logs supabase_auth_coterie` — the actual error was `sql: Scan error on column index 8, name "email_change": converting NULL to string is unsupported`. GoTrue's Go code can't handle NULL in string columns. Fixed by explicitly setting `email_change`, `email_change_token_new`, `recovery_token` to `''` in the seed INSERT. Also discovered `phone` must be NULL (UNIQUE constraint — empty strings collide across users). Set `is_sso_user = false` explicitly too. After `supabase db reset`, sign-in worked.
+**Multi-select bug fix (lasso).** The `onSelectionChange` prop on `<ReactFlow>` wasn't firing for lasso selections. Researched React Flow v12 docs and GitHub issues. Root cause: two competing selection handlers (`onNodeClick` for single, `onSelectionChange` prop for multi) created a split-brain problem, and `onPaneClick` may have been racing against lasso release. Fix: replaced the `onSelectionChange` prop with the `useOnSelectionChange` hook (the v12-recommended approach) as a single source of truth for all selection state. Removed `onNodeClick` and `onSelectionChange` from `<ReactFlow>` props. Lasso immediately started working.
 
-**Node shape system.** Matt wanted class-based shapes from the SwiftUI prototype:
-- Companies: rounded rectangles (unchanged)
-- People: pills (flat top/bottom, rounded sides — `border-radius: 30px`)
-- Projects: squashed octagons via `clip-path: polygon(...)` — Matt iterated on the diamond sharpness (narrowed top/bottom edges: `30%/70%`)
-- All tiles same size: 180×60px
-- Name + types only (removed title line and emoji icons)
-- Types rendered inline with `·` separators, truncated with ellipsis on overflow
+**Multi-select bug fix (Cmd/Shift-click).** Lasso worked but Cmd-click still replaced selection instead of adding. `selectionOnDrag` was eating the Cmd+mousedown event before React Flow's internal multi-select logic could process it. Fix: added `onNodeClick` back but ONLY for Cmd/Shift key handling — manually toggles `selectedItems` via state. A `clickHandledRef` flag (with 50ms timeout reset) prevents the `useOnSelectionChange` hook from clobbering what `onNodeClick` just set. The hook handles lasso + pane deselection; `onNodeClick` handles click-based add/remove.
 
-**Color tints.** Replaced per-type colored text with dim class-based tile backgrounds:
-- `--color-company-dim: #1a2744` (dark blue)
-- `--color-person-dim: #152e25` (dark green)
-- `--color-project-dim: #3d2e0a` (dark amber — initially too gray, bumped up warmth)
-- Types text is now `#777` muted gray, name stays white
-- Hit a bug where `clip-path` creates a stacking context, causing the `::before` border pseudo-element to cover the project background. Fixed by removing the `::before` hack entirely.
+**Panel overlap avoidance.** When two nearby nodes are selected, their DetailPanels overlapped. Added `avoidPanelOverlap()` that checks if two panel bounding boxes intersect (using estimated 300px height, 280px width) and pushes the lower one down with an 8px gap.
 
-**Edge routing.** Added handles on all 4 sides (top/bottom/left/right) with IDs. Built `getNearestHandles()` that picks source/target handles based on relative node positions. Edges recalculate live during drag (not just on drag-end). Used a `nodePositionsRef` Map to track positions and `rebuildEdges()` callback. Initial approach using `setNodes` callback to get current positions caused a glitch (node turned orange, edges vanished) — fixed by tracking positions in a ref instead.
+**"Industry" → "sector" rename.** Matt decided "sector" is more universal — covers politics, academia, etc. Renamed `industries` table → `sectors`, `objects_industries` → `objects_sectors`, `industry_id` → `sector_id` throughout schema, seed data, all docs (CLAUDE.md, PRODUCT_PLAN.md, STUDIO_CONTACT_INTELLIGENCE.md), and Login.tsx subtitle. Left "Industry Entertainment" in known_landscape.json alone (real company name).
 
-**Edge styling.** Made all connections gray and unlabeled by default. Click a connection → turns white with label showing. Click canvas background → deselects. Stored `connectionType` in edge data for label retrieval on click.
+**Person contact data tenet.** Matt established a guiding principle: Coterie never stores a person's contact info (phone, email, address) in canonical records. "We share WHO a person is, not HOW to reach them." Company contact info is fine canonically (Amazon's switchboard is public). Enforced via CHECK constraint on `objects` table: `class != 'person' OR (phone IS NULL AND phone_2 IS NULL AND email IS NULL AND address IS NULL)`. Website and photo_url stay canonical for all classes. Documented as a guiding tenet in CLAUDE.md.
 
-**Canvas controls (Finder-like).** Matt wanted Mac Finder behavior:
-- `panOnScroll` — trackpad two-finger drag pans
-- `panOnDrag={[1]}` — middle-click pans
-- `panActivationKeyCode="Space"` — spacebar + drag pans
-- `zoomOnScroll` + `zoomOnPinch` — scroll wheel and pinch both zoom
-- `selectionOnDrag` — left-drag on empty space creates lasso selection box
-- `selectionMode={SelectionMode.Partial}` — partial intersection selects
-- `multiSelectionKeyCode="Meta"` — Cmd-click for multi-select
+**`user_objects` merged view.** Matt preferred doing foundational work before flashy features. Added a Postgres VIEW that joins `objects` + `objects_overrides` + `objects_types`, using `COALESCE(override, canonical)` for every overridable field, with types aggregated via `array_agg`. Frontend query simplified from a multi-table join with field-by-field `override?.name || obj.name` to just `supabase.from('user_objects').select('*').eq('user_id', user.id)`.
 
-**Detail panel positioning.** Changed from fixed top-right corner to adjacent-to-node. Uses `flowToScreenPosition` to convert canvas coords to screen coords. Panel positioned at `node.position.x + NODE_WIDTH` (right edge of node) with `position: fixed`. Required wrapping `CanvasInner` in `ReactFlowProvider` so `useReactFlow()` hook works.
+**Font selection.** Matt wanted a defining custom font. Created an HTML comparison page showing 6 fonts rendered in Coterie's dark theme (node tiles, detail panel, wordmark). Round 1: Satoshi won over SF Pro, General Sans, Plus Jakarta Sans, Geist, DM Sans. Round 2: Matt asked for "a slight, slight touch of glamour" — compared Satoshi against Clash Grotesk, Cabinet Grotesk, Josefin Sans, Sora, Urbanist. **Urbanist won** — "strikes the balance, clean but gives us a look." Satoshi noted as backup. Loaded via Google Fonts, added to `index.html`, set as primary in `--font-sans`.
 
-**Multi-select system design.** Matt proposed a clean tiered UX:
-- **1 selected**: DetailPanel next to it (current)
-- **2 selected**: TWO DetailPanels + "Link to {other}" button on each + connections between them highlighted white
-- **3+ selected**: Centered MultiSelectPanel with count breakdown + "New Map" / "Add to Map" buttons
-- Future multi-select actions noted: "Group on Canvas", "Tag All", "Compare"
+**Typography cleanup.** Urbanist's natural letter-spacing is tighter than SF Pro. Zeroed out all negative `letter-spacing` values that had been set for the looser system font (in Landscape.module.css, Login.module.css, DetailPanel.module.css). Bumped node tile types from 10px to 11px. Changed Login subtitle to "Map your professional world."
 
-**Multi-select implementation (WIP — has a bug).** Refactored from single `selectedObject`/`panelPos` to `selectedItems: SelectedItem[]`. Added `onSelectionChange` handler for lasso/Cmd-click. Created `MultiSelectPanel` component. Updated `DetailPanel` with optional `peerObject` prop and relationship button. Added edge highlighting `useEffect` for 2-select case.
-
-**THE BUG:** Multi-selection doesn't work. Clicking one node works fine (DetailPanel shows), but lasso and Cmd-click don't select multiple nodes. Tried using only `onSelectionChange` first, then added `onNodeClick` back for single-click with `onSelectionChange` handling 2+ — still only single selection works. React Flow v12's `onSelectionChange` may not fire for lasso/Cmd-click as expected, or there's an interaction conflict with `selectionOnDrag` + `panOnDrag={[1]}`. Needs fresh debugging next session.
+**Commit hygiene.** Matt asked to be reminded to commit more frequently. Will nudge after each meaningful chunk going forward.
 
 ### Files Modified
-- `src/components/Canvas.tsx` — Major refactor: nearest-handle routing, nodePositionsRef, live edge recalculation, selection state as `SelectedItem[]`, `onSelectionChange` + `onNodeClick`, edge highlighting for 2-select, render branch for 1/2/3+, `ReactFlowProvider` wrapper, Finder-like props
-- `src/components/ObjectNode.tsx` — Removed emoji icons and title line, removed inline color styles, added handles on all 4 sides with IDs, class-based shape CSS classes
-- `src/components/ObjectNode.module.css` — Class shapes (`.company` rect, `.person` pill, `.project` clip-path octagon), fixed 180×60 size, centered layout, inline types with ellipsis, removed `::before` border hack
-- `src/components/DetailPanel.tsx` — Added `peerObject` prop, relationship button placeholder
-- `src/components/DetailPanel.module.css` — `position: fixed`, relationship button styles
-- `src/styles/global.css` — Added `--color-company-dim`, `--color-person-dim`, `--color-project-dim`
-- `src/components/MultiSelectPanel.tsx` — **New**: 3+ selection popup with count, class breakdown, action buttons
-- `src/components/MultiSelectPanel.module.css` — **New**: centered popup styling
+- `src/components/Canvas.tsx` — Replaced `onSelectionChange` prop with `useOnSelectionChange` hook, added `clickHandledRef` for Cmd/Shift-click, added `avoidPanelOverlap()`, simplified data loading to use `user_objects` view
+- `src/components/ObjectNode.module.css` — Types font-size 10px → 11px
+- `src/components/DetailPanel.module.css` — Zeroed letter-spacing (two occurrences)
+- `src/pages/Login.tsx` — Tagline → "Map your professional world."
+- `src/pages/Login.module.css` — Zeroed letter-spacing
+- `src/pages/Landscape.module.css` — Zeroed letter-spacing
+- `src/styles/global.css` — `--font-sans` updated to Urbanist-first stack
+- `index.html` — Added Google Fonts link for Urbanist
+- `supabase/migrations/20260203000000_pro_schema.sql` — `industries`→`sectors` rename, person contact CHECK constraint, `user_objects` VIEW
+- `supabase/seed.sql` — `industry_id`→`sector_id`
+- `CLAUDE.md` — Sector rename, person contact tenet, updated status
+- `docs/PRODUCT_PLAN.md` — Sector rename throughout
+- `docs/STUDIO_CONTACT_INTELLIGENCE.md` — Sector rename throughout
+- `scripts/known_landscape.json` — Description updated (kept "Industry Entertainment" company name)
+
+### React Flow v12 Multi-Select Gotcha
+`selectionOnDrag` conflicts with `multiSelectionKeyCode` — Cmd-click on nodes gets eaten by the selection drag system. Workaround: handle Cmd/Shift-click manually in `onNodeClick` (toggle `selectedItems` state), use a ref flag to prevent `useOnSelectionChange` from overwriting, and let the hook handle lasso/pane-deselect only.
 
 ### Open Items / Next Steps
-1. **DEBUG: Multi-select not working** — `onSelectionChange` doesn't fire for lasso/Cmd-click in React Flow v12. Need to investigate: maybe `selectionOnDrag` conflicts with `panOnDrag`, or `onSelectionChange` requires different configuration. Try React Flow docs/examples for v12 multi-select. The lasso *visual* works (you see the selection rectangle), the issue is the callback not firing or firing with wrong data.
-2. **UI polish continued** — typography, spacing, more rounds of visual refinement
-3. **Search → zoom** — search bar
-4. **RLS policies** — before multi-user
+1. **Search → zoom** — the core UX loop, highest-impact next feature
+2. **UI polish** — typography, spacing, detail panel refinements
+3. **RLS policies** — before multi-user
+4. **Commit reminder** — nudge Matt after each meaningful chunk

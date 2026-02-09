@@ -407,6 +407,7 @@ When ready to deploy:
 - [ ] Canon check / diff-merge UI
 - [ ] Free tier (carved from Pro)
 - [ ] AI contact intelligence (see `docs/STUDIO_CONTACT_INTELLIGENCE.md`)
+- [ ] Contact sync: link person objects to Google/Microsoft contacts, one-way pull via sync tokens (both APIs are free, fits override architecture naturally — contact data is per-user). Sync button + linked badge in detail card header. Apple has no web API — would need native shell.
 
 ## Known Landscape
 
@@ -441,42 +442,31 @@ Coterie's gap: visual relationship graph + structured data model + individual-sc
 ---
 
 ## Recent Session
-**Date:** 2026-02-08 (session 6)
+**Date:** 2026-02-08 (session 6b — continuation)
 **Branch:** main
 
 ### Narrative
 
-Session built the full edit mode for the DetailPanel — from design discussion through implementation and a deep rabbit hole on panel positioning.
+Short continuation session after session 6 ran out of context mid-handoff. Completed the handoff, then pivoted to research and meta discussion.
 
-**Design discussion.** Matt wanted to keep the floating panel approach (not a sidebar) — spatial connection to the node is the UX principle. Agreed on: pencil icon for edit toggle, icons-only with tooltips throughout, edit mode expands card with all fields visible/editable, save writes to `objects_overrides`. Installed `lucide-react` for icons (Pencil, Check, X).
+**Handoff completion.** The panel positioning code (proportional anchor algorithm, nodeRect-based selection, CSS transition removal) had been implemented in session 6 but never committed separately from the edit mode work. Committed it as its own commit (`476dff3`), then committed the CLAUDE.md session narrative update, pushed both.
 
-**Types UX design.** Major product conversation about whether type assignment is too "database-y." Matt worried dropdowns feel arcane for casual users. Proposed a tag input with autocomplete — type freely, canonical types surface first, create new ones on the fly. Matt loved it. Extended `types` table with `is_canon BOOLEAN` and `created_by UUID` to distinguish platform-curated from user-generated. Deferred FK on `created_by` via `ALTER TABLE` (types table created before profiles).
+**Contacts sync research.** Matt asked about options for syncing Coterie to device contacts. Explored the landscape:
+- **Google People API**: OAuth, full read/write, sync tokens for efficient delta pulls, webhooks for push notifications. Free, no per-request charges.
+- **Microsoft Graph API**: Similar capabilities via delta queries. Free for standard contact operations.
+- **Apple/iCloud**: No public web API. Would require native shell (Capacitor) for Contacts framework access.
+- **Contact Picker API**: Chrome-on-Android only. Dead end.
+- **vCard import**: Universal fallback, zero OAuth.
 
-**Field refinements.** Top fields (name, title, status) have no group label and no field labels — just class-aware placeholders. Company: "Company Name" / "Description"; Person: "Name (First Last)" / "Title"; Project: "Project Name" / "Description" / "e.g. Development, Production". Status field only shown for projects in edit mode. Contact, Media, and Notes remain labeled groups.
+**Product decision**: The killer feature would be *linking* a person object to a Google/Microsoft contact for one-way sync (contacts → overrides). Fits the override architecture perfectly — contact data is inherently per-user. Matt wants a sync button + linked badge in the detail card header for person objects. Both import (contacts → Coterie) and export (Coterie → contacts) are on the roadmap, with live sync being the aspirational goal. Added to Planned items.
 
-**DetailPanel rewrite.** Complete rewrite of `DetailPanel.tsx`:
-- Read mode: name + types + populated fields + notes (unchanged visually)
-- Edit mode: name input in header, title/status top fields, TagInput component for types, Contact/Media/Notes field groups
-- TagInput: chips + text input, Supabase `ilike` autocomplete against `types` table, keyboard navigation (arrows, enter, backspace), create-new-on-the-fly with slug generation
-- Save: writes all fields to `objects_overrides`, replaces `objects_types` rows, calls `onObjectUpdated` to refresh canvas
-
-**Panel positioning saga.** Significant iteration on where the floating panel appears:
-- Initial problem: panels bled off the bottom of the screen, no viewport clamping
-- Attempt 1: `useLayoutEffect` clamping — cards always jumped to top
-- Attempt 2: `setCenter` to scroll canvas — Matt said "jumpy and weird, that was a mistake on my part"
-- Attempt 3: Open toward screen center — horizontal worked, vertical still off
-- Attempt 4: Proportional anchor algorithm — read cards appeared beautifully, but edit expansion always went to top (scrollHeight returned read-mode height during edit transition)
-- Attempt 5: `visibility:hidden` measure-before-show — caused double-click requirement (two conflicting useLayoutEffects) and "falling" animation (CSS transition on `top` from initial state)
-- **Final solution**: Single `useLayoutEffect`, no CSS transitions on position. Read mode uses proportional anchor: `anchorRatio = nodeCenterY / vh`, `top = nodeCenterY - (h * anchorRatio)`. Edit mode keeps `readTopRef.current` and pushes up minimum needed to fit. `useLayoutEffect` fires after DOM commit (so scrollHeight is accurate) but before paint (so user never sees wrong position).
-
-**Canvas refactoring.** `SelectedItem` changed from `panelPos: {x, y}` to `nodeRect: {left, top, right, bottom}` — full screen bounding box via `flowToScreenPosition`. DetailPanel computes its own position from the nodeRect. Removed `avoidPanelOverlap` (simplified), removed `centerOnNode`/`setCenter`. Extracted `refreshData()` as `useCallback` for reuse after edits.
+**Memory file discovery.** Matt learned about Claude Code's `~/.claude/projects/` directory — memory files, full session transcripts (.jsonl), session indexes. Decided to back up the entire `~/.claude/` directory to Google Drive. Tip shared: `Cmd+Shift+.` to show hidden folders in Mac file dialogs.
 
 ### Files Modified
-- `src/components/DetailPanel.tsx` — Complete rewrite: edit mode with TagInput, class-aware placeholders, smart positioning via single useLayoutEffect, proportional anchor algorithm
-- `src/components/DetailPanel.module.css` — Edit mode styles (inputs, textareas, field groups, tag input with chips/suggestions/autocomplete), removed all position transitions
-- `src/components/Canvas.tsx` — `SelectedItem` uses `nodeRect`, extracted `refreshData()`, passes `onObjectUpdated` to DetailPanel, removed `centerOnNode`/`avoidPanelOverlap`
-- `supabase/migrations/20260203000000_pro_schema.sql` — `is_canon` + `created_by` on types table, deferred FK
-- `package.json` / `package-lock.json` — Added `lucide-react`
+- `src/components/Canvas.tsx` — Committed previously uncommitted panel positioning refactor (nodeRect, removed centerOnNode/avoidPanelOverlap)
+- `src/components/DetailPanel.tsx` — Committed previously uncommitted smart positioning (proportional anchor, useLayoutEffect)
+- `src/components/DetailPanel.module.css` — Committed previously uncommitted CSS transition removal
+- `CLAUDE.md` — Session 6 narrative (earlier in this session), then this session 6b update. Added contacts sync to Planned items.
 
 ### Open Items / Next Steps
 1. **Search → zoom** — the core UX loop, highest-impact next feature

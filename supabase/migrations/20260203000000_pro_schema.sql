@@ -99,42 +99,44 @@ CREATE TABLE types (
     class TEXT NOT NULL REFERENCES classes(id),
     icon TEXT,
     color TEXT,
+    is_canon BOOLEAN DEFAULT FALSE,
+    created_by UUID,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Company types
-INSERT INTO types (id, display_name, class, icon, color) VALUES
-    ('studio', 'Studio', 'company', 'building.2.fill', '#3B82F6'),
-    ('parent_company', 'Parent Company', 'company', 'building.columns', '#1E40AF'),
-    ('network', 'Network', 'company', 'tv', '#7C3AED'),
-    ('streamer', 'Streamer', 'company', 'play.tv', '#DC2626'),
-    ('production_company', 'Production Company', 'company', 'film.stack', '#059669'),
-    ('agency', 'Agency', 'company', 'person.3', '#EA580C'),
-    ('management', 'Management', 'company', 'person.2', '#DB2777'),
-    ('financier', 'Financier', 'company', 'dollarsign.circle', '#CA8A04'),
-    ('distributor', 'Distributor', 'company', 'shippingbox', '#0891B2'),
-    ('guild_union', 'Guild/Union', 'company', 'person.badge.shield.checkmark', '#6B7280');
+-- Company types (canonical)
+INSERT INTO types (id, display_name, class, icon, color, is_canon) VALUES
+    ('studio', 'Studio', 'company', 'building.2.fill', '#3B82F6', TRUE),
+    ('parent_company', 'Parent Company', 'company', 'building.columns', '#1E40AF', TRUE),
+    ('network', 'Network', 'company', 'tv', '#7C3AED', TRUE),
+    ('streamer', 'Streamer', 'company', 'play.tv', '#DC2626', TRUE),
+    ('production_company', 'Production Company', 'company', 'film.stack', '#059669', TRUE),
+    ('agency', 'Agency', 'company', 'person.3', '#EA580C', TRUE),
+    ('management', 'Management', 'company', 'person.2', '#DB2777', TRUE),
+    ('financier', 'Financier', 'company', 'dollarsign.circle', '#CA8A04', TRUE),
+    ('distributor', 'Distributor', 'company', 'shippingbox', '#0891B2', TRUE),
+    ('guild_union', 'Guild/Union', 'company', 'person.badge.shield.checkmark', '#6B7280', TRUE);
 
--- Person types
-INSERT INTO types (id, display_name, class, icon, color) VALUES
-    ('executive', 'Executive', 'person', 'person.badge.key', '#1E40AF'),
-    ('producer', 'Producer', 'person', 'person.crop.rectangle', '#7C3AED'),
-    ('creative', 'Creative', 'person', 'pencil.and.outline', '#059669'),
-    ('talent', 'Talent', 'person', 'star', '#CA8A04'),
-    ('agent', 'Agent', 'person', 'briefcase', '#EA580C'),
-    ('manager', 'Manager', 'person', 'person.badge.clock', '#DB2777'),
-    ('lawyer', 'Lawyer', 'person', 'text.book.closed', '#6B7280'),
-    ('investor', 'Investor', 'person', 'chart.line.uptrend.xyaxis', '#0891B2');
+-- Person types (canonical)
+INSERT INTO types (id, display_name, class, icon, color, is_canon) VALUES
+    ('executive', 'Executive', 'person', 'person.badge.key', '#1E40AF', TRUE),
+    ('producer', 'Producer', 'person', 'person.crop.rectangle', '#7C3AED', TRUE),
+    ('creative', 'Creative', 'person', 'pencil.and.outline', '#059669', TRUE),
+    ('talent', 'Talent', 'person', 'star', '#CA8A04', TRUE),
+    ('agent', 'Agent', 'person', 'briefcase', '#EA580C', TRUE),
+    ('manager', 'Manager', 'person', 'person.badge.clock', '#DB2777', TRUE),
+    ('lawyer', 'Lawyer', 'person', 'text.book.closed', '#6B7280', TRUE),
+    ('investor', 'Investor', 'person', 'chart.line.uptrend.xyaxis', '#0891B2', TRUE);
 
--- Project types
-INSERT INTO types (id, display_name, class, icon, color) VALUES
-    ('feature', 'Feature', 'project', 'film', '#F59E0B'),
-    ('tv_series', 'TV Series', 'project', 'tv', '#7C3AED'),
-    ('limited_series', 'Limited Series', 'project', 'tv.inset.filled', '#DC2626'),
-    ('pilot', 'Pilot', 'project', 'play.rectangle', '#059669'),
-    ('documentary', 'Documentary', 'project', 'doc.text.image', '#3B82F6'),
-    ('short', 'Short', 'project', 'film.stack', '#6B7280'),
-    ('unscripted', 'Unscripted', 'project', 'person.wave.2', '#EA580C');
+-- Project types (canonical)
+INSERT INTO types (id, display_name, class, icon, color, is_canon) VALUES
+    ('feature', 'Feature', 'project', 'film', '#F59E0B', TRUE),
+    ('tv_series', 'TV Series', 'project', 'tv', '#7C3AED', TRUE),
+    ('limited_series', 'Limited Series', 'project', 'tv.inset.filled', '#DC2626', TRUE),
+    ('pilot', 'Pilot', 'project', 'play.rectangle', '#059669', TRUE),
+    ('documentary', 'Documentary', 'project', 'doc.text.image', '#3B82F6', TRUE),
+    ('short', 'Short', 'project', 'film.stack', '#6B7280', TRUE),
+    ('unscripted', 'Unscripted', 'project', 'person.wave.2', '#EA580C', TRUE);
 
 -- =============================================================================
 -- OBJECTS (entity registry — all entities, vetted and user-created)
@@ -299,6 +301,10 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION create_profile_on_signup();
+
+-- Deferred FK: types.created_by → profiles (types created before profiles)
+ALTER TABLE types ADD CONSTRAINT types_created_by_fkey
+    FOREIGN KEY (created_by) REFERENCES profiles(user_id);
 
 -- =============================================================================
 -- MAPS (unified: store packages, user maps, shared maps)

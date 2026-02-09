@@ -147,65 +147,74 @@ function CanvasInner() {
   }, [selectedItems, setEdges])
 
   // Load objects and connections from Supabase
-  useEffect(() => {
+  const refreshData = useCallback(async () => {
     if (!user) return
 
-    async function loadData() {
-      const { data: objects } = await supabase
-        .from('user_objects')
-        .select('*')
-        .eq('user_id', user!.id)
+    const { data: objects } = await supabase
+      .from('user_objects')
+      .select('*')
+      .eq('user_id', user.id)
 
-      if (!objects) return
+    if (!objects) return
 
-      const flowNodes: Node[] = objects.map((obj, i) => ({
+    const flowNodes: Node[] = objects.map((obj, i) => ({
+      id: obj.id,
+      type: 'object',
+      position: {
+        x: obj.map_x ?? (i % 5) * 250,
+        y: obj.map_y ?? Math.floor(i / 5) * 200,
+      },
+      data: {
         id: obj.id,
-        type: 'object',
-        position: {
-          x: obj.map_x ?? (i % 5) * 250,
-          y: obj.map_y ?? Math.floor(i / 5) * 200,
-        },
-        data: {
-          id: obj.id,
-          name: obj.name,
-          title: obj.title,
-          class: obj.class,
-          status: obj.status,
-          types: obj.types || [],
-          phone: obj.phone,
-          phone_2: obj.phone_2,
-          email: obj.email,
-          website: obj.website,
-          address: obj.address,
-          photo_url: obj.photo_url,
-          shared_notes: obj.shared_notes,
-          private_notes: obj.private_notes,
-          tags: obj.tags,
-        } satisfies ObjectNodeData,
-      }))
+        name: obj.name,
+        title: obj.title,
+        class: obj.class,
+        status: obj.status,
+        types: obj.types || [],
+        phone: obj.phone,
+        phone_2: obj.phone_2,
+        email: obj.email,
+        website: obj.website,
+        address: obj.address,
+        photo_url: obj.photo_url,
+        shared_notes: obj.shared_notes,
+        private_notes: obj.private_notes,
+        tags: obj.tags,
+      } satisfies ObjectNodeData,
+    }))
 
-      for (const n of flowNodes) {
-        nodePositionsRef.current.set(n.id, n.position)
-      }
-
-      setNodes(flowNodes)
-
-      const objectIds = objects.map(o => o.id)
-      const { data: connections } = await supabase
-        .from('connections')
-        .select('id, source_id, target_id, type')
-        .eq('is_active', true)
-        .in('source_id', objectIds)
-        .in('target_id', objectIds)
-
-      if (connections) {
-        connectionsRef.current = connections
-        rebuildEdges()
-      }
+    for (const n of flowNodes) {
+      nodePositionsRef.current.set(n.id, n.position)
     }
 
-    loadData()
-  }, [user, setNodes, setEdges])
+    setNodes(flowNodes)
+
+    // Update selected items with fresh data
+    setSelectedItems(prev =>
+      prev.map(item => {
+        const freshNode = flowNodes.find(n => n.id === item.nodeId)
+        if (freshNode) return { ...item, data: freshNode.data as unknown as ObjectNodeData }
+        return item
+      })
+    )
+
+    const objectIds = objects.map(o => o.id)
+    const { data: connections } = await supabase
+      .from('connections')
+      .select('id, source_id, target_id, type')
+      .eq('is_active', true)
+      .in('source_id', objectIds)
+      .in('target_id', objectIds)
+
+    if (connections) {
+      connectionsRef.current = connections
+      rebuildEdges()
+    }
+  }, [user, setNodes, rebuildEdges])
+
+  useEffect(() => {
+    refreshData()
+  }, [refreshData])
 
   // Save position on drag end + recalculate edge handles
   const handleNodesChange = useCallback(
@@ -367,6 +376,7 @@ function CanvasInner() {
           object={selectedItems[0].data}
           position={selectedItems[0].panelPos}
           onClose={clearSelection}
+          onObjectUpdated={refreshData}
         />
       )}
 
@@ -379,12 +389,14 @@ function CanvasInner() {
               object={selectedItems[0].data}
               position={pos0}
               onClose={clearSelection}
+              onObjectUpdated={refreshData}
               peerObject={selectedItems[1].data}
             />
             <DetailPanel
               object={selectedItems[1].data}
               position={pos1}
               onClose={clearSelection}
+              onObjectUpdated={refreshData}
               peerObject={selectedItems[0].data}
             />
           </>

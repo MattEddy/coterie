@@ -9,6 +9,12 @@
   padding: 20px;
   z-index: 20;
   box-shadow: var(--shadow);
+  transition: width 0.2s ease;
+}
+
+.panel.editing {
+  width: 320px;
+  max-height: 80vh;
 }
 
 .header {
@@ -25,19 +31,55 @@
   line-height: 1.2;
 }
 
-.close {
-  font-size: 20px;
-  line-height: 1;
-  background: none;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 0 4px;
+.nameInput {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.nameInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.headerActions {
+  display: flex;
+  gap: 4px;
   flex-shrink: 0;
 }
 
-.close:hover {
+.iconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.iconButton:hover {
   color: var(--color-text);
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .types {
@@ -117,4 +159,194 @@
 
 .relationshipButton:hover {
   background: rgba(59, 130, 246, 0.15);
+}
+
+/* Edit mode */
+
+.editBody {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.topFields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.groupLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.editField {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.editInput {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  width: 100%;
+}
+
+.editInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.editInput::placeholder {
+  color: #555;
+}
+
+.editTextarea {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.editTextarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.editTextarea::placeholder {
+  color: #555;
+}
+
+/* Tag input */
+
+.tagInputContainer {
+  position: relative;
+}
+
+.tagInputField {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  min-height: 32px;
+  align-items: center;
+  cursor: text;
+}
+
+.tagInputField:focus-within {
+  border-color: var(--color-accent);
+}
+
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: capitalize;
+  color: var(--color-accent);
+  background: rgba(59, 130, 246, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.tagRemove {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.6;
+}
+
+.tagRemove:hover {
+  opacity: 1;
+}
+
+.tagTextInput {
+  flex: 1;
+  min-width: 60px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-text);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 2px 0;
+}
+
+.tagTextInput::placeholder {
+  color: #555;
+}
+
+.suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  z-index: 30;
+  overflow: hidden;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.suggestion:hover,
+.suggestionHighlight {
+  background: var(--color-surface-2);
+}
+
+.canonBadge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  opacity: 0.6;
 }

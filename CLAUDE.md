@@ -308,6 +308,34 @@ This is what makes Coterie not a data broker. It's the anti-ZoomInfo stance, enf
 12. Eventually: operator dedup merges duplicate community objects into single canonical rows
 13. Eventually: users can check their Landscape against canonical for updates (diff/merge UI)
 
+## Known Gotchas
+
+### Supabase Auth Seeding (Local Dev)
+When inserting test users directly into `auth.users`:
+- **Must also insert `auth.identities`** — newer Supabase requires it for sign-in
+- **GoTrue NULL crash**: `email_change`, `email_change_token_new`, `recovery_token` must be `''` not NULL. Go's `sql.Scan` can't handle NULL → string.
+- **`phone` must be NULL** — has UNIQUE constraint, empty strings collide across users
+- **Set `is_sso_user = false`** explicitly
+- Debug auth issues via: `docker logs supabase_auth_coterie`
+
+### React Flow v12 Multi-Select
+`selectionOnDrag` eats Cmd-click events before `multiSelectionKeyCode` can process them. Fix:
+- Use `useOnSelectionChange` hook (not prop) as single source of truth for lasso + deselection
+- Handle Cmd/Shift-click manually in `onNodeClick` (toggle `selectedItems` state)
+- Use `clickHandledRef` flag (50ms timeout) to prevent the hook from overwriting click-based selections
+
+### Floating Panel Positioning
+For panels that open adjacent to canvas nodes and expand (read→edit):
+- **Use `useLayoutEffect`** (fires after DOM commit, before paint) — `scrollHeight` is accurate and user never sees wrong position
+- **Proportional anchor**: `anchorRatio = nodeCenterY / vh`, `top = nodeCenterY - (h * anchorRatio)` — panels naturally open toward center
+- **Edit expansion**: keep read-mode `top` (via ref), push up minimum needed to fit on screen
+- **No CSS transitions on position** — causes "falling" animation from initial {0,0} state
+- **No `visibility:hidden` pattern** — two competing useLayoutEffects cause double-click bugs
+- **Panel computes its own position** from `nodeRect` (screen bounding box from `flowToScreenPosition`)
+
+### CSS clip-path Stacking Context
+`clip-path` creates a stacking context. A `::before` pseudo-element with `z-index: -1` inside a clip-path parent will render ABOVE the parent's background (covering it), not behind it. Don't use `::before` for border effects on clip-path elements.
+
 ## Running Locally
 
 ```bash

@@ -15,10 +15,11 @@
 }
 
 .card:hover {
-  border-color: var(--color-text-muted);
+  cursor: grab;
 }
 
 .selected {
+  border-color: var(--color-text);
   box-shadow: var(--shadow);
 }
 

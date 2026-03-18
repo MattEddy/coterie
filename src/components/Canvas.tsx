@@ -23,20 +23,13 @@ import styles from './Canvas.module.css'
 
 const nodeTypes = { object: ObjectNode }
 
-const NODE_WIDTH = 180
-const NODE_HEIGHT = 60
-
-interface NodeRect {
-  left: number
-  top: number
-  right: number
-  bottom: number
-}
+// Must match ObjectNode.module.css .card width/height
+export const NODE_WIDTH = 180
+export const NODE_HEIGHT = 60
 
 interface SelectedItem {
   nodeId: string
   data: ObjectNodeData
-  nodeRect: NodeRect
 }
 
 function getNearestHandles(
@@ -58,12 +51,6 @@ function getNearestHandles(
   }
 
   return { sourceHandle, targetHandle }
-}
-
-function getCentroid(items: SelectedItem[]): { x: number; y: number } {
-  const sumX = items.reduce((acc, item) => acc + (item.nodeRect.left + item.nodeRect.right) / 2, 0)
-  const sumY = items.reduce((acc, item) => acc + (item.nodeRect.top + item.nodeRect.bottom) / 2, 0)
-  return { x: sumX / items.length, y: sumY / items.length }
 }
 
 function CanvasInner() {
@@ -94,18 +81,14 @@ function CanvasInner() {
     setEdges(flowEdges)
   }, [setEdges])
 
-  // Highlight edges between two selected nodes
+  // Highlight all edges between selected nodes
   useEffect(() => {
-    if (selectedItems.length === 2) {
-      const idA = selectedItems[0].nodeId
-      const idB = selectedItems[1].nodeId
+    if (selectedItems.length >= 2) {
+      const selectedIds = new Set(selectedItems.map(i => i.nodeId))
 
       const betweenIds = new Set(
         connectionsRef.current
-          .filter(c =>
-            (c.source_id === idA && c.target_id === idB) ||
-            (c.source_id === idB && c.target_id === idA)
-          )
+          .filter(c => selectedIds.has(c.source_id) && selectedIds.has(c.target_id))
           .map(c => c.id)
       )
 
@@ -136,6 +119,7 @@ function CanvasInner() {
       .from('user_objects')
       .select('*')
       .eq('user_id', user.id)
+      .in('class', ['company', 'person'])
 
     if (!objects) return
 
@@ -175,7 +159,7 @@ function CanvasInner() {
     setSelectedItems(prev =>
       prev.map(item => {
         const freshNode = flowNodes.find(n => n.id === item.nodeId)
-        if (freshNode) return { ...item, data: freshNode.data as unknown as ObjectNodeData }
+        if (freshNode) return { nodeId: item.nodeId, data: freshNode.data as unknown as ObjectNodeData }
         return item
       })
     )
@@ -226,28 +210,6 @@ function CanvasInner() {
     [onNodesChange, user, rebuildEdges]
   )
 
-  // Build SelectedItem from a node — compute screen bounding rect
-  const buildSelectedItem = useCallback(
-    (node: Node): SelectedItem => {
-      const topLeft = flowToScreenPosition(node.position)
-      const bottomRight = flowToScreenPosition({
-        x: node.position.x + NODE_WIDTH,
-        y: node.position.y + NODE_HEIGHT,
-      })
-      return {
-        nodeId: node.id,
-        data: node.data as unknown as ObjectNodeData,
-        nodeRect: {
-          left: topLeft.x,
-          top: topLeft.y,
-          right: bottomRight.x,
-          bottom: bottomRight.y,
-        },
-      }
-    },
-    [flowToScreenPosition]
-  )
-
   // Flag: when onNodeClick handles selection, tell useOnSelectionChange to stand down
   const clickHandledRef = useRef(false)
 
@@ -257,17 +219,19 @@ function CanvasInner() {
       clickHandledRef.current = true
       setTimeout(() => { clickHandledRef.current = false }, 50)
 
+      const item: SelectedItem = { nodeId: node.id, data: node.data as unknown as ObjectNodeData }
+
       if (event.metaKey || event.shiftKey) {
         setSelectedItems(prev => {
-          const exists = prev.find(item => item.nodeId === node.id)
-          if (exists) return prev.filter(item => item.nodeId !== node.id)
-          return [...prev, buildSelectedItem(node)]
+          const exists = prev.find(i => i.nodeId === node.id)
+          if (exists) return prev.filter(i => i.nodeId !== node.id)
+          return [...prev, item]
         })
       } else {
-        setSelectedItems([buildSelectedItem(node)])
+        setSelectedItems([item])
       }
     },
-    [buildSelectedItem]
+    []
   )
 
   // Lasso selection + pane deselection (click-based selection handled above)
@@ -279,11 +243,32 @@ function CanvasInner() {
           setSelectedItems([])
           return
         }
-        setSelectedItems(selectedNodes.map(buildSelectedItem))
+        setSelectedItems(selectedNodes.map(n => ({
+          nodeId: n.id,
+          data: n.data as unknown as ObjectNodeData,
+        })))
       },
-      [buildSelectedItem]
+      []
     ),
   })
+
+  // Sync our selection state → React Flow's node.selected property
+  // so ObjectNode's `selected` prop reflects our custom multi-selection
+  useEffect(() => {
+    const selectedIds = new Set(selectedItems.map(i => i.nodeId))
+    setNodes(current => {
+      let changed = false
+      const next = current.map(n => {
+        const shouldBeSelected = selectedIds.has(n.id)
+        if (n.selected !== shouldBeSelected) {
+          changed = true
+          return { ...n, selected: shouldBeSelected }
+        }
+        return n
+      })
+      return changed ? next : current
+    })
+  }, [selectedItems, setNodes])
 
   // Handle edge selection — show label + turn white when selected
   const handleEdgeClick = useCallback(
@@ -330,6 +315,36 @@ function CanvasInner() {
     setSelectedItems([])
   }, [])
 
+  // Dual selection: assign opposite sides so panels don't overlap
+  const dualSides = selectedItems.length === 2 ? (() => {
+    const posA = nodePositionsRef.current.get(selectedItems[0].nodeId)
+    const posB = nodePositionsRef.current.get(selectedItems[1].nodeId)
+    const aIsLeft = (posA?.x ?? 0) <= (posB?.x ?? 0)
+    return [aIsLeft ? 'left' : 'right', aIsLeft ? 'right' : 'left'] as const
+  })() : null
+
+  // Multi-select: position panel beside the bounding box of all selected nodes
+  const MULTI_PANEL_WIDTH = 220
+  const multiSelectPosition = selectedItems.length >= 3
+    ? (() => {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (const item of selectedItems) {
+          const pos = nodePositionsRef.current.get(item.nodeId) || { x: 0, y: 0 }
+          const tl = flowToScreenPosition(pos)
+          const br = flowToScreenPosition({ x: pos.x + NODE_WIDTH, y: pos.y + NODE_HEIGHT })
+          minX = Math.min(minX, tl.x)
+          minY = Math.min(minY, tl.y)
+          maxX = Math.max(maxX, br.x)
+          maxY = Math.max(maxY, br.y)
+        }
+        const vw = window.innerWidth
+        const left = (vw - maxX) >= minX
+          ? maxX + 12
+          : minX - MULTI_PANEL_WIDTH - 12
+        return { x: Math.max(12, Math.min(left, vw - MULTI_PANEL_WIDTH - 12)), y: (minY + maxY) / 2 }
+      })()
+    : { x: 0, y: 0 }
+
   return (
     <div className={styles.container}>
       <ReactFlow
@@ -361,29 +376,31 @@ function CanvasInner() {
       {/* Level 1: Single selection */}
       {selectedItems.length === 1 && (
         <DetailPanel
+          nodeId={selectedItems[0].nodeId}
           object={selectedItems[0].data}
-          nodeRect={selectedItems[0].nodeRect}
           onClose={clearSelection}
           onObjectUpdated={refreshData}
         />
       )}
 
-      {/* Level 2: Dual selection */}
-      {selectedItems.length === 2 && (
+      {/* Level 2: Dual selection — panels on opposite sides */}
+      {selectedItems.length === 2 && dualSides && (
         <>
           <DetailPanel
+            nodeId={selectedItems[0].nodeId}
             object={selectedItems[0].data}
-            nodeRect={selectedItems[0].nodeRect}
             onClose={clearSelection}
             onObjectUpdated={refreshData}
             peerObject={selectedItems[1].data}
+            preferredSide={dualSides[0]}
           />
           <DetailPanel
+            nodeId={selectedItems[1].nodeId}
             object={selectedItems[1].data}
-            nodeRect={selectedItems[1].nodeRect}
             onClose={clearSelection}
             onObjectUpdated={refreshData}
             peerObject={selectedItems[0].data}
+            preferredSide={dualSides[1]}
           />
         </>
       )}
@@ -392,7 +409,7 @@ function CanvasInner() {
       {selectedItems.length >= 3 && (
         <MultiSelectPanel
           items={selectedItems}
-          position={getCentroid(selectedItems)}
+          position={multiSelectPosition}
           onClose={clearSelection}
         />
       )}

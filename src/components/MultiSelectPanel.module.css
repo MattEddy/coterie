@@ -1,6 +1,6 @@
 .panel {
   position: fixed;
-  transform: translate(-50%, -50%);
+  transform: translateY(-50%);
   width: 220px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);

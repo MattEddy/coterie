@@ -1,23 +1,23 @@
-import { useState, useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
+import { useReactFlow, useStore, useViewport } from '@xyflow/react'
 import { Pencil, Check, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { ObjectNodeData } from './ObjectNode'
+import type { NodeRect } from '../types'
 import styles from './DetailPanel.module.css'
 
-interface NodeRect {
-  left: number
-  top: number
-  right: number
-  bottom: number
-}
+// Must match ObjectNode.module.css .card width/height and Canvas.tsx constants
+const NODE_WIDTH = 180
+const NODE_HEIGHT = 60
 
 interface DetailPanelProps {
+  nodeId: string
   object: ObjectNodeData
-  nodeRect: NodeRect
   onClose: () => void
   onObjectUpdated?: () => void
   peerObject?: ObjectNodeData
+  preferredSide?: 'left' | 'right'
 }
 
 const readFields: { key: string; label: string }[] = [
@@ -86,9 +86,10 @@ interface TagInputProps {
   onChange: (tags: string[]) => void
   objectClass: string
   placeholder: string
+  userId: string
 }
 
-function TagInput({ tags, onChange, objectClass, placeholder }: TagInputProps) {
+function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInputProps) {
   const [inputValue, setInputValue] = useState('')
   const [suggestions, setSuggestions] = useState<{ id: string; display_name: string; is_canon: boolean }[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -150,6 +151,7 @@ function TagInput({ tags, onChange, objectClass, placeholder }: TagInputProps) {
         display_name: name.trim(),
         class: objectClass,
         is_canon: false,
+        created_by: userId,
       })
     }
 
@@ -235,8 +237,28 @@ const GAP = 12
 const READ_WIDTH = 280
 const EDIT_WIDTH = 320
 
-export default function DetailPanel({ object, nodeRect, onClose, onObjectUpdated, peerObject }: DetailPanelProps) {
+export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, peerObject, preferredSide }: DetailPanelProps) {
   const { user } = useAuth()
+  const { flowToScreenPosition } = useReactFlow()
+  const viewport = useViewport()
+
+  // Subscribe to this node's position — re-renders on drag
+  const nodePosition = useStore(
+    useCallback(s => s.nodeLookup.get(nodeId)?.position ?? null, [nodeId]),
+    (a, b) => a?.x === b?.x && a?.y === b?.y
+  )
+
+  // Reactive nodeRect: recomputes on pan, zoom, and drag
+  const nodeRect: NodeRect | null = useMemo(() => {
+    if (!nodePosition) return null
+    const topLeft = flowToScreenPosition(nodePosition)
+    const bottomRight = flowToScreenPosition({
+      x: nodePosition.x + NODE_WIDTH,
+      y: nodePosition.y + NODE_HEIGHT,
+    })
+    return { left: topLeft.x, top: topLeft.y, right: bottomRight.x, bottom: bottomRight.y }
+  }, [nodePosition, viewport, flowToScreenPosition])
+
   const panelRef = useRef<HTMLDivElement>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [editValues, setEditValues] = useState<EditValues>(() => getEditValues(object))
@@ -248,10 +270,10 @@ export default function DetailPanel({ object, nodeRect, onClose, onObjectUpdated
   const placeholders = classPlaceholders[object.class] || classPlaceholders.company
   const panelWidth = isEditing ? EDIT_WIDTH : READ_WIDTH
 
-  // Single positioning effect — measures real DOM, runs before paint
+  // Position the panel adjacent to the node — runs before paint
   useLayoutEffect(() => {
     const el = panelRef.current
-    if (!el) return
+    if (!el || !nodeRect) return
 
     const vw = window.innerWidth
     const vh = window.innerHeight
@@ -259,10 +281,19 @@ export default function DetailPanel({ object, nodeRect, onClose, onObjectUpdated
     const w = isEditing ? EDIT_WIDTH : READ_WIDTH
     const h = el.scrollHeight
 
-    // Horizontal: open toward whichever side has more room
-    const left = (vw - nodeRect.right) >= nodeRect.left
-      ? nodeRect.right + GAP
-      : nodeRect.left - w - GAP
+    // Horizontal: use preferred side if set, otherwise open toward more room
+    let left: number
+    if (preferredSide === 'left') {
+      left = nodeRect.left - w - GAP
+    } else if (preferredSide === 'right') {
+      left = nodeRect.right + GAP
+    } else {
+      left = (vw - nodeRect.right) >= nodeRect.left
+        ? nodeRect.right + GAP
+        : nodeRect.left - w - GAP
+    }
+    // Clamp to viewport
+    left = Math.max(GAP, Math.min(left, vw - w - GAP))
 
     let top: number
     if (!isEditing) {
@@ -316,14 +347,15 @@ export default function DetailPanel({ object, nodeRect, onClose, onObjectUpdated
       .eq('user_id', user.id)
 
     await supabase
-      .from('objects_types')
+      .from('objects_types_overrides')
       .delete()
       .eq('object_id', object.id)
+      .eq('user_id', user.id)
 
     if (editTypes.length > 0) {
       await supabase
-        .from('objects_types')
-        .insert(editTypes.map(typeId => ({ object_id: object.id, type_id: typeId })))
+        .from('objects_types_overrides')
+        .insert(editTypes.map(typeId => ({ user_id: user.id, object_id: object.id, type_id: typeId })))
     }
 
     setSaving(false)
@@ -335,6 +367,11 @@ export default function DetailPanel({ object, nodeRect, onClose, onObjectUpdated
     setEditValues(prev => ({ ...prev, [key]: value }))
   }
 
+  // Hide panel when node has scrolled off-screen
+  const nodeOffScreen = !nodeRect ||
+    nodeRect.bottom < 0 || nodeRect.top > window.innerHeight ||
+    nodeRect.right < 0 || nodeRect.left > window.innerWidth
+
   const panelClass = `${styles.panel} ${isEditing ? styles.editing : ''}`
 
   const fieldGroups = [
@@ -344,7 +381,7 @@ export default function DetailPanel({ object, nodeRect, onClose, onObjectUpdated
   ]
 
   return (
-    <div ref={panelRef} className={panelClass} style={{ left: pos.left, top: pos.top, width: panelWidth } as CSSProperties}>
+    <div ref={panelRef} className={panelClass} style={{ left: pos.left, top: pos.top, width: panelWidth, visibility: nodeOffScreen ? 'hidden' : 'visible' } as CSSProperties}>
       <div className={styles.header}>
         {isEditing ? (
           <input
@@ -435,14 +472,12 @@ export default function DetailPanel({ object, nodeRect, onClose, onObjectUpdated
               onChange={e => handleChange('title', e.target.value)}
               placeholder={placeholders.title}
             />
-            {object.class === 'project' && (
-              <input
-                className={styles.editInput}
-                value={editValues.status}
-                onChange={e => handleChange('status', e.target.value)}
-                placeholder={placeholders.status}
-              />
-            )}
+            <input
+              className={styles.editInput}
+              value={editValues.status}
+              onChange={e => handleChange('status', e.target.value)}
+              placeholder={placeholders.status}
+            />
           </div>
 
           {/* Type tags */}
@@ -452,6 +487,7 @@ export default function DetailPanel({ object, nodeRect, onClose, onObjectUpdated
               onChange={setEditTypes}
               objectClass={object.class}
               placeholder={typeTagPlaceholders[object.class] || 'Add types...'}
+              userId={user!.id}
             />
           </div>
 

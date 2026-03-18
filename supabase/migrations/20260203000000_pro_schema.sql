@@ -23,10 +23,10 @@ DROP TABLE IF EXISTS coteries CASCADE;
 DROP TABLE IF EXISTS maps_objects CASCADE;
 DROP TABLE IF EXISTS maps CASCADE;
 DROP TABLE IF EXISTS objects_sectors CASCADE;
+DROP TABLE IF EXISTS objects_types_overrides CASCADE;
 DROP TABLE IF EXISTS connections_overrides CASCADE;
 DROP TABLE IF EXISTS objects_overrides CASCADE;
 DROP TABLE IF EXISTS profiles CASCADE;
-DROP TABLE IF EXISTS log_entries CASCADE;
 DROP TABLE IF EXISTS objects_types CASCADE;
 DROP TABLE IF EXISTS connections CASCADE;
 DROP TABLE IF EXISTS objects CASCADE;
@@ -36,6 +36,7 @@ DROP TABLE IF EXISTS classes CASCADE;
 DROP TABLE IF EXISTS sectors CASCADE;
 
 -- Legacy cleanup
+DROP TABLE IF EXISTS log_entries CASCADE;
 DROP TABLE IF EXISTS object_type_assignments CASCADE;
 DROP TABLE IF EXISTS object_sectors CASCADE;
 DROP TABLE IF EXISTS map_objects CASCADE;
@@ -81,13 +82,15 @@ CREATE TABLE classes (
     display_name TEXT NOT NULL,
     icon TEXT,
     color TEXT,
+    landscape_visible BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO classes (id, display_name, icon, color) VALUES
-    ('company', 'Company', 'building.2', '#3B82F6'),
-    ('person', 'Person', 'person.fill', '#10B981'),
-    ('project', 'Project', 'film', '#F59E0B');
+INSERT INTO classes (id, display_name, icon, color, landscape_visible) VALUES
+    ('company', 'Company', 'building.2', '#3B82F6', TRUE),
+    ('person', 'Person', 'person.fill', '#10B981', TRUE),
+    ('project', 'Project', 'film', '#F59E0B', FALSE),
+    ('event', 'Event', 'calendar', '#DC2626', FALSE);
 
 -- =============================================================================
 -- TYPES (extensible variants within a class)
@@ -138,6 +141,17 @@ INSERT INTO types (id, display_name, class, icon, color, is_canon) VALUES
     ('short', 'Short', 'project', 'film.stack', '#6B7280', TRUE),
     ('unscripted', 'Unscripted', 'project', 'person.wave.2', '#EA580C', TRUE);
 
+-- Event types (canonical)
+INSERT INTO types (id, display_name, class, icon, color, is_canon) VALUES
+    ('meeting', 'Meeting', 'event', 'person.2', '#DC2626', TRUE),
+    ('call', 'Call', 'event', 'phone', '#3B82F6', TRUE),
+    ('email_exchange', 'Email Exchange', 'event', 'envelope', '#10B981', TRUE),
+    ('pitch', 'Pitch', 'event', 'presentation', '#F59E0B', TRUE),
+    ('screening', 'Screening', 'event', 'film', '#7C3AED', TRUE),
+    ('premiere', 'Premiere', 'event', 'star', '#EA580C', TRUE),
+    ('introduction', 'Introduction', 'event', 'person.badge.plus', '#059669', TRUE),
+    ('general', 'General', 'event', 'note.text', '#6B7280', TRUE);
+
 -- =============================================================================
 -- OBJECTS (entity registry — all entities, vetted and user-created)
 -- =============================================================================
@@ -158,6 +172,7 @@ CREATE TABLE objects (
     website TEXT,                        -- primary URL
     address TEXT,                        -- free-form location (companies/projects only)
     photo_url TEXT,                      -- headshot / logo / poster
+    event_date DATE,                    -- when the event occurred (events only)
     data JSONB DEFAULT '{}',            -- long tail: social links, genre, etc.
     is_canon BOOLEAN DEFAULT FALSE,     -- vetted/maintained by platform operators
     created_by UUID,                    -- NULL = platform-seeded; FK to profiles added after profiles table exists
@@ -252,7 +267,10 @@ INSERT INTO connection_types (id, display_name, valid_source_classes, valid_targ
     ('set_up_at', 'Set Up At', '{project}', '{company}', 'building.2'),
     ('attached_to', 'Attached To', '{person}', '{project}', 'paperclip'),
     ('produces', 'Produces', '{company}', '{project}', 'film'),
-    ('related_to', 'Related To', NULL, NULL, 'link');
+    ('related_to', 'Related To', NULL, NULL, 'link'),
+    ('participated_in', 'Participated In', '{person}', '{event}', 'person.badge.clock'),
+    ('regarding', 'Regarding', '{event}', '{project}', 'doc.text'),
+    ('held_at', 'Held At', '{event}', '{company}', 'building.2');
 
 -- =============================================================================
 -- CONNECTIONS (canonical connections — the shared truth)
@@ -392,6 +410,30 @@ CREATE INDEX idx_objects_overrides_object ON objects_overrides(object_id);
 CREATE INDEX idx_objects_overrides_active ON objects_overrides(is_active);
 
 -- =============================================================================
+-- OBJECTS TYPES OVERRIDES (per-user type assignments)
+-- =============================================================================
+-- When a user edits types for an object, their overrides go here.
+-- If any rows exist for a user+object, they take precedence over canonical objects_types.
+-- If no rows exist, the user sees canonical types (via COALESCE in user_objects view).
+
+CREATE TABLE objects_types_overrides (
+    user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+    object_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+    type_id TEXT NOT NULL REFERENCES types(id),
+    is_primary BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (user_id, object_id, type_id)
+);
+
+CREATE INDEX idx_objects_types_overrides_object ON objects_types_overrides(object_id);
+CREATE INDEX idx_objects_types_overrides_user ON objects_types_overrides(user_id);
+
+-- Reuse the same class-match trigger to enforce type/class consistency
+CREATE TRIGGER check_type_override_class_match_trigger
+    BEFORE INSERT OR UPDATE ON objects_types_overrides
+    FOR EACH ROW EXECUTE FUNCTION check_type_class_match();
+
+-- =============================================================================
 -- CONNECTIONS OVERRIDES (per-user layer on top of canonical)
 -- =============================================================================
 -- Two modes:
@@ -493,24 +535,6 @@ ALTER TABLE objects ADD CONSTRAINT fk_objects_created_by
     FOREIGN KEY (created_by) REFERENCES profiles(user_id);
 
 -- =============================================================================
--- LOG ENTRIES (per-user activity log)
--- =============================================================================
-
-CREATE TABLE log_entries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
-    content TEXT NOT NULL,
-    entry_date DATE DEFAULT CURRENT_DATE,
-    linked_objects UUID[] DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_log_entries_user ON log_entries(user_id);
-CREATE INDEX idx_log_entries_date ON log_entries(entry_date);
-CREATE INDEX idx_log_entries_linked ON log_entries USING GIN(linked_objects);
-
--- =============================================================================
 -- HELPER VIEWS
 -- =============================================================================
 
@@ -518,7 +542,7 @@ CREATE INDEX idx_log_entries_linked ON log_entries USING GIN(linked_objects);
 CREATE VIEW objects_with_types AS
 SELECT
     o.id, o.class, o.name, o.title, o.status,
-    o.phone, o.phone_2, o.email, o.website, o.address, o.photo_url,
+    o.phone, o.phone_2, o.email, o.website, o.address, o.photo_url, o.event_date,
     o.data, o.is_canon, o.created_by, o.is_active, o.created_at, o.updated_at,
     COALESCE(
         array_agg(ot.type_id) FILTER (WHERE ot.type_id IS NOT NULL),
@@ -531,6 +555,7 @@ GROUP BY o.id;
 
 -- User's merged reality: canonical objects + their overrides + types
 -- COALESCE = use override if set, fall back to canonical
+-- Types: user's objects_types_overrides take precedence; falls back to canonical objects_types
 -- This is what the app queries — one row per object per user
 CREATE VIEW user_objects AS
 SELECT
@@ -546,6 +571,7 @@ SELECT
     COALESCE(ov.website, o.website) AS website,
     COALESCE(ov.address, o.address) AS address,
     COALESCE(ov.photo_url, o.photo_url) AS photo_url,
+    o.event_date,
     o.is_canon,
     o.created_by,
     ov.map_x,
@@ -554,14 +580,15 @@ SELECT
     ov.private_notes,
     ov.tags,
     COALESCE(
-        array_agg(ot.type_id) FILTER (WHERE ot.type_id IS NOT NULL),
+        (SELECT array_agg(oto.type_id) FROM objects_types_overrides oto
+         WHERE oto.user_id = ov.user_id AND oto.object_id = o.id),
+        (SELECT array_agg(ot.type_id) FROM objects_types ot
+         WHERE ot.object_id = o.id),
         '{}'::TEXT[]
     ) AS types
 FROM objects_overrides ov
 JOIN objects o ON o.id = ov.object_id
-LEFT JOIN objects_types ot ON ot.object_id = o.id
-WHERE ov.is_active = TRUE AND o.is_active = TRUE
-GROUP BY ov.user_id, o.id, ov.id;
+WHERE ov.is_active = TRUE AND o.is_active = TRUE;
 
 -- =============================================================================
 -- UPDATE TRIGGERS
@@ -589,10 +616,6 @@ CREATE TRIGGER objects_overrides_updated_at
 
 CREATE TRIGGER connections_overrides_updated_at
     BEFORE UPDATE ON connections_overrides
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-
-CREATE TRIGGER log_entries_updated_at
-    BEFORE UPDATE ON log_entries
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 CREATE TRIGGER maps_updated_at

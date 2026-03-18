@@ -71,6 +71,15 @@ INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
     ('bbbb1111-1111-1111-1111-111111111111', 'feature', true),
     ('bbbb2222-2222-2222-2222-222222222222', 'tv_series', true);
 
+-- Sample Events (user-created, not canonical)
+INSERT INTO objects (id, class, name, title, event_date, is_canon, created_by) VALUES
+    ('eeee1111-1111-1111-1111-111111111111', 'event', 'Sundance Meeting', 'Ran into Alan Bergman at a screening', '2025-01-25', false, 'cccc1111-1111-1111-1111-111111111111'),
+    ('eeee2222-2222-2222-2222-222222222222', 'event', 'Avatar 3 Development Update', 'Discussed production timeline with Disney team', '2025-03-10', false, 'cccc1111-1111-1111-1111-111111111111');
+
+INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
+    ('eeee1111-1111-1111-1111-111111111111', 'meeting', true),
+    ('eeee2222-2222-2222-2222-222222222222', 'meeting', true);
+
 -- Connections
 INSERT INTO connections (source_id, target_id, type, data) VALUES
     -- People employed by companies
@@ -85,12 +94,16 @@ INSERT INTO connections (source_id, target_id, type, data) VALUES
     -- Netflix produces Stranger Things
     ('33333333-3333-3333-3333-333333333333', 'bbbb2222-2222-2222-2222-222222222222', 'produces', '{}'),
     -- CAA represents J.J. Abrams
-    ('44444444-4444-4444-4444-444444444444', 'aaaa3333-3333-3333-3333-333333333333', 'represents', '{}');
+    ('44444444-4444-4444-4444-444444444444', 'aaaa3333-3333-3333-3333-333333333333', 'represents', '{}'),
+    -- Event connections
+    ('aaaa1111-1111-1111-1111-111111111111', 'eeee1111-1111-1111-1111-111111111111', 'participated_in', '{}'),
+    ('eeee2222-2222-2222-2222-222222222222', 'bbbb1111-1111-1111-1111-111111111111', 'regarding', '{}'),
+    ('eeee2222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'held_at', '{}');
 
 -- =============================================================================
 -- MATT'S LANDSCAPE (objects_overrides with positions)
 -- =============================================================================
--- Layout: studios top-left, people center, agencies right, projects bottom
+-- Layout: studios top-left, people center, agencies right
 
 INSERT INTO objects_overrides (user_id, object_id, map_x, map_y, shared_notes) VALUES
     -- Companies
@@ -104,6 +117,9 @@ INSERT INTO objects_overrides (user_id, object_id, map_x, map_y, shared_notes) V
     ('cccc1111-1111-1111-1111-111111111111', 'aaaa2222-2222-2222-2222-222222222222', -100, 200, NULL),
     ('cccc1111-1111-1111-1111-111111111111', 'aaaa3333-3333-3333-3333-333333333333', 450, 400, 'Very engaged on sci-fi projects'),
     ('cccc1111-1111-1111-1111-111111111111', 'aaaa4444-4444-4444-4444-444444444444', 850, 300, NULL),
-    -- Projects
-    ('cccc1111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', -50, 400, NULL),
-    ('cccc1111-1111-1111-1111-111111111111', 'bbbb2222-2222-2222-2222-222222222222', 650, 250, NULL);
+    -- Projects (no map position — off-landscape, shown in detail panels)
+    ('cccc1111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', NULL, NULL, NULL),
+    ('cccc1111-1111-1111-1111-111111111111', 'bbbb2222-2222-2222-2222-222222222222', NULL, NULL, NULL),
+    -- Events (no map position — off-landscape, shown in detail panels)
+    ('cccc1111-1111-1111-1111-111111111111', 'eeee1111-1111-1111-1111-111111111111', NULL, NULL, NULL),
+    ('cccc1111-1111-1111-1111-111111111111', 'eeee2222-2222-2222-2222-222222222222', NULL, NULL, NULL);

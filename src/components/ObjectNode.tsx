@@ -22,12 +22,6 @@ export interface ObjectNodeData {
   [key: string]: unknown
 }
 
-const classColors: Record<string, string> = {
-  company: 'var(--color-company)',
-  person: 'var(--color-person)',
-  project: 'var(--color-project)',
-}
-
 const classStyles: Record<string, string> = {
   company: styles.company,
   person: styles.person,

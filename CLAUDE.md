@@ -83,8 +83,11 @@ coterie/
 │   │   ├── Canvas.module.css
 │   │   ├── ObjectNode.tsx      # Custom node (card with name, title, types, class color)
 │   │   ├── ObjectNode.module.css
-│   │   ├── DetailPanel.tsx     # Floating panel (read/edit mode, tag input, smart positioning)
-│   │   └── DetailPanel.module.css
+│   │   ├── DetailPanel.tsx     # Floating panel (read/edit mode, tag input, reactive positioning)
+│   │   ├── DetailPanel.module.css
+│   │   ├── MultiSelectPanel.tsx  # Panel for 3+ selected nodes (bounding box positioning)
+│   │   └── MultiSelectPanel.module.css
+│   ├── types.ts                # Shared types (NodeRect)
 │   └── styles/
 │       └── global.css          # CSS variables, reset, dark theme
 ├── Coterie/                    # SwiftUI Mac app (v0.1 prototype, legacy)
@@ -106,15 +109,30 @@ coterie/
 Every entity has ONE **class** and MULTIPLE **types**:
 
 ```
-Classes (fixed):     company, person, project
+Classes (fixed):     company, person, project, event
+
+Landscape-visible:   company, person (on the canvas)
+Off-landscape:       project, event (shown in detail panels, connected to landscape objects)
 
 Types (extensible):
   company → studio, streamer, agency, production_company, ...
   person  → executive, producer, creative, agent, ...
   project → feature, tv_series, documentary, ...
+  event   → meeting, call, email_exchange, pitch, screening, premiere, introduction, general
 ```
 
+`classes` table has a `landscape_visible BOOLEAN` column controlling which classes render on the canvas.
+
 Example: Netflix is class=`company` with types=[`streamer`, `studio`]
+
+### Events (replacing log_entries)
+
+Events are first-class objects (class=`event`) rather than a separate `log_entries` table. This unifies the data model — everything is objects + connections.
+
+- **`event_date DATE`** column on `objects` table for sortable event timeline
+- Connected to other objects via standard connection types: `participated_in` (person→event), `regarding` (event→project/company), `held_at` (event→company)
+- Events are always user-created (`is_canon=false`, `created_by` set)
+- Off-landscape (no map coordinates) — shown in detail panels of connected objects
 
 ### The Landscape
 
@@ -207,9 +225,9 @@ When two coterie members independently create the same real-world entity, the di
 sectors                -- entertainment, tech, finance, etc.
 classes                -- company, person, project (fixed)
 types                  -- studio, executive, feature, etc. (extensible)
-objects                -- ALL entities (is_canon boolean, created_by tracks origin)
+objects                -- ALL entities (is_canon boolean, created_by tracks origin, event_date for events)
 objects_sectors        -- many-to-many: object ↔ sectors
-objects_types          -- many-to-many: object ↔ types
+objects_types          -- many-to-many: object ↔ types (canonical)
 connection_types       -- employed_by, produces, represents, etc.
 connections            -- canonical connections (source, target, type, is_active)
 ```
@@ -224,6 +242,7 @@ maps_objects           -- objects in each map + optional relative x/y (packages 
 ```
 profiles               -- extends Supabase auth (user_id PK, display_name, sector)
 objects_overrides       -- per-user: overrides + Landscape positions + shared/private notes
+objects_types_overrides -- per-user: type overrides (parallels objects_types, replaces canonical types when present)
 connections_overrides   -- per-user: overrides + user-created connections + shared/private notes
 ```
 
@@ -235,25 +254,23 @@ coteries_maps          -- maps shared with coteries
 coterie_reviews        -- per-user review state for coterie dissonances
 ```
 
-**Other:**
-```
-log_entries            -- per-user activity log
-```
+**Note:** `log_entries` table was removed — events are now first-class objects (class=`event`).
 
 ### Object fields (hybrid: columns + JSONB)
 
 Commonly displayed/filtered fields are real columns. Rare/variable fields live in `data` JSONB.
 
-| Column | Person | Company | Project |
-|---|---|---|---|
-| `title` | VP Production | Major Studio & Streamer | Sci-fi thriller set in 2040 |
-| `status` | Active / Left sector | Active / Acquired / Defunct | Development / Production / Released |
-| `phone` | **Override only** | Main line | — |
-| `phone_2` | **Override only** | — | — |
-| `email` | **Override only** | General inquiries | — |
-| `website` | Personal site | Corporate site | Official page |
-| `address` | **Override only** | HQ | — |
-| `photo_url` | Headshot | Logo | Poster/key art |
+| Column | Person | Company | Project | Event |
+|---|---|---|---|---|
+| `title` | VP Production | Major Studio & Streamer | Sci-fi thriller | Brief description |
+| `status` | Active / Left sector | Active / Acquired / Defunct | Development / Production / Released | — |
+| `event_date` | — | — | — | 2025-01-25 |
+| `phone` | **Override only** | Main line | — | — |
+| `phone_2` | **Override only** | — | — | — |
+| `email` | **Override only** | General inquiries | — | — |
+| `website` | Personal site | Corporate site | Official page | — |
+| `address` | **Override only** | HQ | — | — |
+| `photo_url` | Headshot | Logo | Poster/key art | — |
 
 ### Guiding Tenet: No Person Contact Data in Canonical Records
 
@@ -291,6 +308,9 @@ This is what makes Coterie not a data broker. It's the anti-ZoomInfo stance, enf
 - `attached_to`: person → project
 - `represents`: company → person
 - `reports_to`: person → person
+- `participated_in`: person → event
+- `regarding`: event → project/company
+- `held_at`: event → company
 
 ## User Experience (Pro)
 
@@ -324,14 +344,18 @@ When inserting test users directly into `auth.users`:
 - Handle Cmd/Shift-click manually in `onNodeClick` (toggle `selectedItems` state)
 - Use `clickHandledRef` flag (50ms timeout) to prevent the hook from overwriting click-based selections
 
-### Floating Panel Positioning
-For panels that open adjacent to canvas nodes and expand (read→edit):
-- **Use `useLayoutEffect`** (fires after DOM commit, before paint) — `scrollHeight` is accurate and user never sees wrong position
-- **Proportional anchor**: `anchorRatio = nodeCenterY / vh`, `top = nodeCenterY - (h * anchorRatio)` — panels naturally open toward center
-- **Edit expansion**: keep read-mode `top` (via ref), push up minimum needed to fit on screen
+### Reactive Panel Positioning
+DetailPanel tracks its node through pan/zoom/drag using React Flow hooks:
+- **`useViewport()`** triggers re-render on any viewport change (pan, zoom)
+- **`useStore()`** with targeted selector + custom equality fn tracks node position changes (drag)
+- Panel computes `nodeRect` (screen bounding box) from node position via `flowToScreenPosition`
+- **Off-screen detection**: hide panel when node scrolls out of viewport (all four bounds)
+- **`preferredSide` prop** for dual selection — left node's panel opens left, right opens right
+- **Proportional anchor**: `anchorRatio = nodeCenterY / vh`, `top = nodeCenterY - (h * anchorRatio)`
 - **No CSS transitions on position** — causes "falling" animation from initial {0,0} state
-- **No `visibility:hidden` pattern** — two competing useLayoutEffects cause double-click bugs
-- **Panel computes its own position** from `nodeRect` (screen bounding box from `flowToScreenPosition`)
+
+### Multi-Select Panel Positioning
+For 3+ selected nodes, compute bounding box of all selected nodes in screen space, then position the panel beside the box (whichever side has more room).
 
 ### CSS clip-path Stacking Context
 `clip-path` creates a stacking context. A `::before` pseudo-element with `z-index: -1` inside a clip-path parent will render ABOVE the parent's background (covering it), not behind it. Don't use `::before` for border effects on clip-path elements.
@@ -410,7 +434,20 @@ When ready to deploy:
 - [x] Smart panel positioning (opens toward screen center, proportional anchor algorithm)
 - [x] Canvas `refreshData()` extracted for reuse after edits
 - [x] Lucide React icons (Pencil, Check, X) — icons-only with native tooltips
-- [x] `SelectedItem` uses `nodeRect` (screen bounding box) instead of single point
+- [x] Four-class model: company/person (landscape) + project/event (off-landscape, in detail panels)
+- [x] `landscape_visible` boolean on classes table
+- [x] Events as first-class objects (class=`event`) replacing `log_entries` table
+- [x] `event_date DATE` column on objects + event types (meeting, call, pitch, etc.)
+- [x] Event connection types: `participated_in`, `regarding`, `held_at`
+- [x] `objects_types_overrides` table for per-user type editing (parallels objects_overrides pattern)
+- [x] `user_objects` view uses correlated subqueries for types (user overrides → canonical → empty)
+- [x] Reactive panel positioning — panels track nodes through pan/zoom/drag via `useViewport()` + `useStore()`
+- [x] Off-screen panel hiding (all four viewport bounds)
+- [x] Dual-selection panel overlap avoidance via `preferredSide` prop
+- [x] Multi-select bounding-box panel positioning (3+ nodes)
+- [x] Selection highlight sync (custom `selectedItems` → React Flow `node.selected`)
+- [x] Edge highlighting generalized to all connections between any 2+ selected nodes
+- [x] Opus 4.6 codebase audit — cleaned dead code, fixed type save targets
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan

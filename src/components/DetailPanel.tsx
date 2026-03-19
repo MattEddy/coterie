@@ -90,9 +90,10 @@ interface TagInputProps {
   placeholder: string
   userId: string
   autoFocus?: boolean
+  onCancel?: () => void
 }
 
-function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus: shouldAutoFocus = true }: TagInputProps) {
+function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus: shouldAutoFocus = true, onCancel }: TagInputProps) {
   const [inputValue, setInputValue] = useState('')
   const [suggestions, setSuggestions] = useState<{ id: string; display_name: string; is_canon: boolean }[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -184,6 +185,9 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus:
       }
     } else if (e.key === 'Backspace' && !inputValue && tags.length > 0) {
       removeTag(tags[tags.length - 1])
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      onCancel?.()
     }
   }
 
@@ -243,10 +247,11 @@ interface ObjectSearchProps {
   placeholder: string
   onSelect: (obj: { id: string; name: string; class: string }) => void
   onCreateNew?: (name: string) => void  // if provided, allows creating new from typed text
+  onCancel?: () => void       // called on Escape key
   autoFocus?: boolean
 }
 
-function ObjectSearch({ userId, targetClass, excludeIds = [], placeholder, onSelect, onCreateNew, autoFocus }: ObjectSearchProps) {
+function ObjectSearch({ userId, targetClass, excludeIds = [], placeholder, onSelect, onCreateNew, onCancel, autoFocus }: ObjectSearchProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<{ id: string; name: string; class: string; title: string | null }[]>([])
   const [showResults, setShowResults] = useState(false)
@@ -304,6 +309,9 @@ function ObjectSearch({ userId, targetClass, excludeIds = [], placeholder, onSel
         setQuery('')
         setResults([])
       }
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      onCancel?.()
     }
   }
 
@@ -997,6 +1005,17 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
+  // Escape to close panel when nothing is being edited
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (headerEditing || showTagInput || contactEditing || notesEditing || creatingProject || creatingEvent || editingItemId || showLinkSearch) return
+      onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [headerEditing, showTagInput, contactEditing, notesEditing, creatingProject, creatingEvent, editingItemId, showLinkSearch, onClose])
+
   // Off-screen detection
   const nodeOffScreen = !nodeRect ||
     nodeRect.bottom < 0 || nodeRect.top > window.innerHeight ||
@@ -1023,11 +1042,18 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             objectClass="event"
             placeholder="Event Type(s)"
             userId={user!.id}
+            onCancel={() => {
+              setCreatingEvent(false)
+              setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+              setNewItemTypes([])
+              setNewItemLinks([])
+              setDateInputActive(false)
+            }}
           />
         )}
 
         {/* Feature A: Project name matching — search existing or type new */}
-        {targetClass === 'project' ? (
+        {targetClass === 'project' && !newItemValues.name ? (
           <ObjectSearch
             userId={user!.id}
             targetClass="project"
@@ -1036,16 +1062,50 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             autoFocus
             onSelect={proj => linkExistingItem(proj.id, 'project')}
             onCreateNew={name => setNewItemValues(prev => ({ ...prev, name }))}
+            onCancel={() => {
+              setCreatingProject(false)
+              setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+              setNewItemTypes([])
+              setNewItemLinks([])
+            }}
           />
         ) : (
           <textarea
             className={styles.createInput}
             value={newItemValues.name}
             onChange={e => setNewItemValues(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="Event name"
+            onKeyDown={e => {
+              if (e.key === 'Escape') {
+                if (targetClass === 'project') setCreatingProject(false)
+                else setCreatingEvent(false)
+                setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+                setNewItemTypes([])
+                setNewItemLinks([])
+                setDateInputActive(false)
+              }
+            }}
+            placeholder={targetClass === 'project' ? 'Project name' : 'Event name'}
             autoComplete="off"
+            autoFocus={!newItemValues.name}
             rows={1}
           />
+        )}
+
+        {/* Cancel button always visible before name is set */}
+        {!newItemValues.name && (
+          <button
+            className={styles.addButton}
+            onClick={() => {
+              if (targetClass === 'project') setCreatingProject(false)
+              else setCreatingEvent(false)
+              setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+              setNewItemTypes([])
+              setNewItemLinks([])
+              setDateInputActive(false)
+            }}
+          >
+            Cancel
+          </button>
         )}
 
         {/* Only show remaining fields once a new name is set (not linking existing) */}

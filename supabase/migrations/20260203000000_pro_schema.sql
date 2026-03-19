@@ -390,7 +390,7 @@ CREATE TABLE objects_overrides (
     -- Private fields (never shared)
     private_notes TEXT,                 -- never leaves your data
 
-    is_active BOOLEAN DEFAULT TRUE,
+    -- No is_active — deleting an override = hard delete (user just sees canonical again)
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
@@ -400,7 +400,6 @@ CREATE TABLE objects_overrides (
 
 CREATE INDEX idx_objects_overrides_user ON objects_overrides(user_id);
 CREATE INDEX idx_objects_overrides_object ON objects_overrides(object_id);
-CREATE INDEX idx_objects_overrides_active ON objects_overrides(is_active);
 
 -- =============================================================================
 -- OBJECTS TYPES OVERRIDES (per-user type assignments)
@@ -454,7 +453,10 @@ CREATE TABLE connections_overrides (
     -- Private fields (never shared)
     private_notes TEXT,                 -- never leaves your data
 
-    is_active BOOLEAN DEFAULT TRUE,
+    -- For canonical connection overrides: user can deactivate a canonical connection
+    -- For user-created connections: just hard delete the row
+    deactivated BOOLEAN DEFAULT FALSE,
+
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
@@ -469,7 +471,7 @@ CREATE INDEX idx_connections_overrides_user ON connections_overrides(user_id);
 CREATE INDEX idx_connections_overrides_bond ON connections_overrides(connection_id);
 CREATE INDEX idx_connections_overrides_source ON connections_overrides(source_id);
 CREATE INDEX idx_connections_overrides_target ON connections_overrides(target_id);
-CREATE INDEX idx_connections_overrides_active ON connections_overrides(is_active);
+CREATE INDEX idx_connections_overrides_deactivated ON connections_overrides(deactivated) WHERE deactivated = true;
 
 -- =============================================================================
 -- COTERIES (sharing groups)
@@ -584,7 +586,7 @@ SELECT
     ) AS types
 FROM objects_overrides ov
 JOIN objects o ON o.id = ov.object_id
-WHERE ov.is_active = TRUE AND o.is_active = TRUE;
+WHERE o.is_active = TRUE;
 
 -- =============================================================================
 -- UPDATE TRIGGERS

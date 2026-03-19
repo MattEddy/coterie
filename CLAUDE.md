@@ -287,7 +287,9 @@ This is what makes Coterie not a data broker. It's the anti-ZoomInfo stance, enf
 ### Key design decisions
 
 - **Deletion strategy**: Canonical tables (`objects`, `connections`) use soft delete (`is_active`). User tables (`objects_overrides`, `connections_overrides`) use hard delete — no zombie rows. User-created objects are hard-deleted when orphaned (no remaining connections). `connections_overrides` has a `deactivated` boolean for overriding canonical connections only.
+- **Option B storage for user-created objects** — skeleton `objects` row (id, class, is_canon, created_by), all content in `objects_overrides`. On canonical promotion: flip `is_canon`, null `created_by`, lift best data from overrides. Clean repoint, nobody loses data.
 - **Every object gets a registry row** — `objects` is an entity registry, not curated truth. `is_canon` boolean distinguishes vetted from user-created. No orphan objects, ever.
+- **Landscape deletion = cascade with confirmation** — show the user what they'll lose (connections, orphaned events/projects), one click to proceed. Canonical objects just lose their override (user stops seeing them). User-created objects with no remaining connections are hard-deleted.
 - **`objects_overrides.object_id` is always set** — no more `NULL` = user-created pattern. Overrides always point to an `objects` row.
 - **Landscape coordinates always live in overrides**, never canonical — everyone has their own layout
 - **`connections_overrides` source/target have no FK** — can reference any `objects.id`; flexible for user-created connections
@@ -401,7 +403,7 @@ When ready to deploy:
 ### Implemented
 - [x] Graph data model (class/type taxonomy)
 - [x] Pro-tier Supabase schema (entity registry + overrides + unified maps + coteries)
-- [x] Expanded object fields (title, status, phone, email, website, address, photo_url)
+- [x] Expanded object fields (title, status, photo_url — contact info in data.contacts JSONB)
 - [x] Shared/private notes split on override tables
 - [x] Auto-create profile trigger
 - [x] Coteries_maps join table for map sharing
@@ -449,6 +451,20 @@ When ready to deploy:
 - [x] Selection highlight sync (custom `selectedItems` → React Flow `node.selected`)
 - [x] Edge highlighting generalized to all connections between any 2+ selected nodes
 - [x] Opus 4.6 codebase audit — cleaned dead code, fixed type save targets
+- [x] Option B storage: user-created objects store all data in overrides, objects row is skeleton
+- [x] JSONB contacts model: `data.contacts` array replaces fixed phone/email/website/address columns
+- [x] Person private reachability CHECK constraint via `jsonb_path_exists`
+- [x] Detail panel redesign: header (photo/name/title/types) + tabbed sections (Contact/Notes/Projects/Events)
+- [x] Per-section editing with independent save (no global edit mode)
+- [x] Projects/Events tabs: create, edit, delete, search existing, multi-object linking
+- [x] ObjectSearch component: reusable autocomplete for finding/linking objects
+- [x] Project name matching: search existing projects to link vs create new
+- [x] Hard delete for user tables (overrides) — no zombie rows, canonical tables keep soft delete
+- [x] Orphan cleanup: deleting last connection to user-created object hard-deletes it
+- [x] `connections_overrides.deactivated` boolean replaces `is_active` for canonical connection overrides
+- [x] `coteries_reviews` simplified to dismissal-only (accepted = the data change IS the record)
+- [x] Escape key layering: closes edit forms → closes panel
+- [x] Canvas refresh preserves selection state (fixes blank-screen bug on save)
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -460,8 +476,9 @@ When ready to deploy:
 
 ### Next Up
 - [ ] Search → zoom → floating detail panel (the core UX loop)
-- [ ] Create new objects (right-click canvas? button? — edit card is ready to double as create card)
-- [ ] UI polish continued (detail panel styling, type tag editing UX refinements)
+- [ ] Add new objects to the Landscape (people, companies)
+- [ ] Landscape object deletion with cascade confirmation (design decided: option #3 — show blast radius, one click to proceed)
+- [ ] Visual connection creation via drag handles (both landscape and detail panel)
 - [ ] RLS policies (before multi-user)
 
 ### Planned

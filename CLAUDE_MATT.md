@@ -5,48 +5,55 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-03-18
+**Date:** 2026-07-08
 **Branch:** main
 
 ### Narrative
 
-Matt returned after a month away from Coterie (was deep in other projects). Started with a status review, then dove into a full Opus 4.6 audit of the codebase (originally written by Opus 4.5).
+Massive session — detail panel redesign, schema overhaul, and full projects/events implementation. Matt came back rusty on the schema and we spent good time re-grounding before building.
 
-**Codebase audit.** Identified 8 items — 2 were self-corrected (sequential Supabase calls in `refreshData` are intentional because the connections query depends on object IDs; `.then()` is what triggers the Supabase request, not a no-op). Fixed the remaining 6: removed dead `classColors` map from ObjectNode, fixed `handleSave` to write types to `objects_types_overrides` instead of canonical `objects_types`, added `created_by` to `createAndAddTag`, made status editable for all classes.
+**Schema review & Option B storage.** Walked through the four-class model and how user-created objects (events, projects) store data. Landed on "Option B": user-created objects get a skeleton `objects` row (just id, class, is_canon, created_by) with ALL content in `objects_overrides`. This makes the merge-to-canonical flow clean — just repoint overrides. Updated `objects.name` to nullable, added `event_date` to `objects_overrides`, updated `user_objects` view to COALESCE `event_date`. Seed data updated so events use skeleton rows + override UPDATEs.
 
-**Four-class model redesign.** Major architectural decision: expanded from 3 classes (company, person, project) to 4 (company, person, project, event). Companies and people live on the Landscape; projects and events are off-landscape (connected to landscape objects, shown in detail panels). Added `landscape_visible` boolean to classes table. Canvas now filters to `.in('class', ['company', 'person'])`.
+**JSONB contacts model.** Matt questioned the rigid contact columns (phone, phone_2, email, website, address). Researched best practices — landed on the vCard/Apple Contacts pattern: `data.contacts` array of `{type, label, value}` entries. Dropped all fixed contact columns from both `objects` and `objects_overrides`. Person private reachability CHECK constraint preserved via `jsonb_path_exists` on the JSONB. Company public contact info (website, switchboard) can be canonical; person phone/email/address is override-only. The `data` JSONB column serves double duty — contacts for people/companies, future metadata for projects/events.
 
-**Events replace log_entries.** Dropped the `log_entries` table entirely. Events are now first-class objects with class=`event`, connected via standard connection types (`participated_in`, `regarding`, `held_at`). Added `event_date DATE` column to objects for sortable event timeline. Added 8 event types (meeting, call, email_exchange, pitch, screening, premiere, introduction, general). Seed data updated with sample events.
+**Detail panel redesign.** Complete overhaul from a flat read/edit panel to a structured tabbed layout:
+- **Header**: photo (optional) + name + title (editable via pencil) + types (editable via +)
+- **Tab bar**: Contact Info, Notes, Projects, Events (icon buttons)
+- **Per-section editing**: each tab has its own edit toggle, no global edit mode
+- Contact tab renders dynamic typed/labeled entries from `data.contacts`
+- Notes tab has "Shared with Coteries" and "Private (Not Shared)" sections with per-block scroll boundaries
+- UX details: auto-focus tag input, `field-sizing: content` on textareas, `white-space: pre-wrap` for line breaks, address uses textarea, `autoComplete="off"` everywhere, dark date picker via `color-scheme: dark`
 
-**`objects_types_overrides` table.** Users can't edit canonical types, so added a per-user type override table. The `user_objects` view uses correlated subqueries: check user overrides first → fall back to canonical types → empty array. Reuses the existing type-class match trigger.
+**Projects/Events tabs — full implementation.** The big feature. Connected projects/events load lazily when the tab activates. Connection type mapping handles directionality (person→project via `attached_to`, company→project via `produces`, event→company via `held_at` where event is source). Items render as expandable cards with chevron, name, date/status pill. Create form: events lead with Event Type(s), projects lead with Project name. Project creation uses ObjectSearch with name matching — search existing projects to link, or "Create [name]" to make new. Multi-object linking via "Also link to..." search in both create form and expanded view. Edit mode inline with same fields as creation.
 
-**Reactive panel positioning.** Rewrote DetailPanel to track its node through pan/zoom/drag using `useViewport()` and `useStore()` hooks instead of the old static `nodeRect` prop approach. Panel computes screen position reactively. Added off-screen detection (hides when node leaves viewport on any edge — fixed a bug where vertical scrolling left the panel stuck due to `Math.max(GAP, ...)` clamping).
+**ObjectSearch component.** Reusable autocomplete that searches `user_objects` by name. Configurable: `targetClass` filter, `excludeIds`, `onSelect` callback, `onCreateNew` for creating from typed text, `onCancel` for Escape. Used for project name matching and the link-to search in both create and expanded views.
 
-**Dual-selection overlap fix.** Both panels were independently choosing the same side. Fixed with `preferredSide` prop — node positions compared, left node's panel opens left, right opens right.
+**Hard delete for user tables.** Matt questioned whether soft delete (`is_active`) is always worth it. Concluded: canonical tables keep soft delete (admin editorial control), user tables (overrides) use hard delete (no zombies, simpler queries). Removed `is_active` from `objects_overrides` and `connections_overrides`. Added `deactivated BOOLEAN` on `connections_overrides` specifically for overriding canonical connections. Updated `user_objects` view to drop the `ov.is_active` filter.
 
-**Multi-select bounding box.** 3+ selection panel was using centroid positioning (landed on top of nodes). Replaced with bounding box computation — panel goes beside the selection cluster, whichever side has more room.
+**Orphan cleanup on delete.** When removing a connection: hard-delete user-created connections, deactivate canonical ones. Then check remaining connections — if none left, hard-delete the `objects_overrides` row (removes from view/autocomplete). If the user created the object and it's not canonical, hard-delete the `objects` row too. True cleanup, no zombies.
 
-**Selection highlight sync.** Only the latest-clicked node showed the selected border because React Flow's internal `selected` prop wasn't synced with our custom `selectedItems` state. Fixed with a `useEffect` that syncs our state → React Flow, with `changed ? next : current` optimization.
+**`coteries_reviews` simplified.** Accepted dissonances don't need a row — the data change IS the record. Table now stores dismissals only (may be removed entirely if dismissals prove rare). Renamed from `coterie_reviews` to `coteries_reviews` for consistency (also renamed `coterie_members` → `coteries_members`).
 
-**Hover border killed.** Matt noticed the white border was only appearing on hover, not on selection. Root cause: `.selected` CSS class had `box-shadow` but no `border-color`. Fixed, then Matt asked to kill the hover border entirely — border now only appears when selected.
+**Landscape deletion design decided.** Option #3: cascade with confirmation. Show the user what they'll lose (X connections, Y events, Z projects), one click to proceed. Not built yet — next session.
 
-**Edge highlighting generalized.** Was gated on exactly 2 selected nodes. Generalized to `>= 2` — all connections between any selected nodes now highlight with white stroke and visible labels.
+**Canvas refresh bug fixed.** `refreshData` was replacing all nodes without preserving `selected` state, causing React Flow to fire spurious selection changes and blank the screen. Fixed with `selectedItemsRef` to preserve selection through the refresh cycle.
+
+**Escape key layering.** Escape from create forms closes the form. Escape from the panel (no edit active) closes the panel. `onCancel` prop added to both TagInput and ObjectSearch.
+
+**TagInput auto-highlight.** First suggestion is now pre-highlighted (index 0), so typing "me" + Enter selects "meeting" instead of creating a "me" type. Matt's muscle memory was expecting autocomplete behavior.
 
 ### Files Modified
-- `supabase/migrations/20260203000000_pro_schema.sql` — Four-class model, event class, `landscape_visible`, `event_date`, `objects_types_overrides`, updated `user_objects` view, dropped `log_entries`
-- `supabase/seed.sql` — Sample events, event connections, project positions set to NULL (off-landscape)
-- `src/components/Canvas.tsx` — Landscape filter, reactive positioning support, selection sync, dual-side assignment, bounding box multi-panel, generalized edge highlighting
-- `src/components/DetailPanel.tsx` — Reactive positioning via `useViewport()` + `useStore()`, `preferredSide` prop, off-screen detection, type saves to overrides
-- `src/components/ObjectNode.tsx` — Removed dead `classColors` map
-- `src/components/ObjectNode.module.css` — Selection border fix, hover border removed
-- `src/components/MultiSelectPanel.module.css` — Fixed transform for bounding box positioning
-- `src/types.ts` — New shared types file (NodeRect)
-- `src/styles/global.css` — Added event color variables
-- `CLAUDE.md` — Four-class model, events, `objects_types_overrides`, reactive positioning, updated status
+- `supabase/migrations/20260203000000_pro_schema.sql` — Dropped contact columns, JSONB contacts CHECK constraint, Option B (nullable name), `event_date` on overrides, `is_active` removed from override tables, `deactivated` on connections_overrides, `coteries_members`/`coteries_reviews` renames, simplified coteries_reviews
+- `supabase/seed.sql` — Event skeleton rows, company contacts in `data.contacts` JSONB
+- `src/components/DetailPanel.tsx` — Complete rewrite: tabbed layout, per-section editing, JSONB contacts UI, Projects/Events tabs with create/edit/delete/search/link, ObjectSearch component, TagInput enhancements (onCancel, autoFocus prop, auto-highlight), Escape key layering
+- `src/components/DetailPanel.module.css` — New styles for header/tabs/contact rows/item list/create form/linked objects/search input
+- `src/components/ObjectNode.tsx` — ContactEntry interface, ObjectNodeData updated (dropped contact columns, added data field)
+- `src/components/Canvas.tsx` — Selection preservation in refreshData (selectedItemsRef), data mapping updated for new ObjectNodeData shape
+- `CLAUDE.md` — Option B storage, JSONB contacts, deletion strategy, landscape deletion design, updated status
 
 ### Open Items / Next Steps
 1. **Search → zoom** — the core UX loop, highest-impact next feature
-2. **Create new objects** — edit card infrastructure is ready to double as create card
-3. **UI polish** — detail panel styling, type tag editing UX refinements
-4. **RLS policies** — before multi-user
-5. **Event timeline UI** — events exist in schema but no UI for viewing/creating them in detail panels yet
+2. **Add new objects to the Landscape** (people, companies)
+3. **Landscape object deletion** with cascade confirmation (design decided, not built)
+4. **Visual connection creation** via drag handles (both landscape and detail panel)
+5. **RLS policies** — before multi-user

@@ -179,25 +179,25 @@ Structural changes — new objects, new/changed connections, deactivated connect
 
 **Why diff-based:** Self-correcting. If Matt says Joe left Netflix, then realizes he was wrong and re-activates the connection, the dissonance evaporates automatically. No stale events to reconcile.
 
-**Three states per dissonance:**
-- **Unreviewed**: diff finds a dissonance, no `coterie_reviews` row exists
-- **Dismissed**: diff finds a dissonance, `coterie_reviews` row says `dismissed` (subtle indicator persists — dissonance is always visible, never hidden)
-- **Accepted**: `coterie_reviews` row says `accepted` — the change has been pulled into the recipient's overrides
+**Two states per dissonance:**
+- **Unreviewed**: diff finds a dissonance, no `coteries_reviews` row exists
+- **Dismissed**: diff finds a dissonance, `coteries_reviews` row exists (subtle indicator persists — dissonance is always visible, never hidden)
+
+Accepted dissonances don't need a review row — the data change IS the record. Once the user's data matches, the diff query finds nothing and the dissonance evaporates.
 
 **What "accept" does for each change type:**
 - **New object**: Create an `objects_overrides` row pointing to the same `objects.id`, place on Landscape
 - **Deactivated connection**: Create a `connections_overrides` row marking it inactive in your view
 - **New connection**: Create a `connections_overrides` row with the same source/target/type
 
-**The `coterie_reviews` table** (one new table) tracks review state:
+**The `coteries_reviews` table** tracks dismissals only (may be removed if dismissals prove rare in practice — unresolved dissonances could simply persist):
 ```
-coterie_reviews        -- per-user response to each dissonance
-  user_id              -- the reviewer (Billy)
-  source_user_id       -- whose change this is (Matt)
+coteries_reviews        -- dismissal record for coterie dissonances
+  user_id              -- who dismissed (Billy)
+  source_user_id       -- whose change (Matt)
   ref_type             -- 'object_override' or 'connection_override'
   ref_id               -- the specific override row
-  status               -- 'dismissed' or 'accepted'
-  reviewed_at
+  dismissed_at
 ```
 
 #### Dissonance View
@@ -251,35 +251,36 @@ connections_overrides   -- per-user: overrides + user-created connections + shar
 coteries               -- sharing groups
 coteries_members        -- who's in which coterie (owner/member roles)
 coteries_maps          -- maps shared with coteries
-coterie_reviews        -- per-user review state for coterie dissonances
+coteries_reviews        -- per-user review state for coterie dissonances
 ```
 
 **Note:** `log_entries` table was removed — events are now first-class objects (class=`event`).
 
-### Object fields (hybrid: columns + JSONB)
+### Object fields (columns + JSONB)
 
-Commonly displayed/filtered fields are real columns. Rare/variable fields live in `data` JSONB.
+Identity fields are real columns. Contact info lives in `data.contacts` as a typed/labeled array.
 
 | Column | Person | Company | Project | Event |
 |---|---|---|---|---|
 | `title` | VP Production | Major Studio & Streamer | Sci-fi thriller | Brief description |
 | `status` | Active / Left sector | Active / Acquired / Defunct | Development / Production / Released | — |
 | `event_date` | — | — | — | 2025-01-25 |
-| `phone` | **Override only** | Main line | — | — |
-| `phone_2` | **Override only** | — | — | — |
-| `email` | **Override only** | General inquiries | — | — |
-| `website` | Personal site | Corporate site | Official page | — |
-| `address` | **Override only** | HQ | — | — |
 | `photo_url` | Headshot | Logo | Poster/key art | — |
+| `data.contacts` | **Override only** (except public URLs) | Phones, emails, website, HQ | — | — |
 
-### Guiding Tenet: No Person Contact Data in Canonical Records
+Contact entries follow the vCard/Apple Contacts pattern: `[{type, label, value}, ...]`
+- **Types**: `phone`, `email`, `url`, `address`, `social`
+- **Labels**: freeform — "Work", "Cell", "Agent Direct", "LinkedIn", whatever the user wants
+- Unlimited entries per type. No rigid column structure.
 
-**Coterie shares WHO someone is, not HOW to reach them.** Person contact info (phone, phone_2, email, address) is NEVER stored in the `objects` table. Enforced by a CHECK constraint at the schema level — unbreakable.
+### Guiding Tenet: No Person Private Reachability in Canonical Records
 
-- **Canonical (identity)**: name, title, status, website, photo_url, class, types, connections
-- **Override-only (reachability)**: phone, phone_2, email, address
+**Coterie shares WHO someone is, not HOW to reach them.** Person contact info (phone, email, address) is NEVER stored in canonical `objects.data`. Public URLs (website, YouTube) are allowed. Enforced by a CHECK constraint using `jsonb_path_exists` — unbreakable.
 
-Company/project contact info CAN be canonical — Amazon's switchboard and HQ address are public corporate data. But a person's phone number or email is personal knowledge that lives in `objects_overrides`, shareable via coterie but never distributed by the platform.
+- **Canonical (identity)**: name, title, status, photo_url, class, types, connections, public URLs
+- **Override-only (reachability)**: phone, email, address, social handles
+
+Company contact info CAN be canonical — Amazon's switchboard and HQ address are public corporate data. But a person's phone number or email is personal knowledge that lives in `objects_overrides`, shareable via coterie but never distributed by the platform.
 
 This is what makes Coterie not a data broker. It's the anti-ZoomInfo stance, enforced by schema.
 
@@ -466,7 +467,7 @@ When ready to deploy:
 ### Planned
 - [ ] Map packages (store) with relative coordinates + stamp placement
 - [ ] User maps (filtered views of the Landscape)
-- [ ] Coterie sharing implementation (intel queries, diff-based updates, coterie_reviews table)
+- [ ] Coterie sharing implementation (intel queries, diff-based updates, coteries_reviews table)
 - [ ] Dissonance View UI
 - [ ] Operator dedup tooling (merge duplicate community objects)
 - [ ] Canon check / diff-merge UI

@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
 import { useReactFlow, useStore, useViewport } from '@xyflow/react'
-import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, Plus, ChevronDown, ChevronRight, Search, Link } from 'lucide-react'
+import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, Plus, ChevronDown, ChevronRight, Search, Link, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { ObjectNodeData, ContactEntry } from './ObjectNode'
@@ -37,8 +37,8 @@ const classPlaceholders: Record<string, { name: string; title: string }> = {
 }
 
 const typeTagPlaceholders: Record<string, string> = {
-  company: 'e.g. studio, streamer, agency...',
-  person:  'e.g. executive, producer, creative...',
+  company: 'Organization Type(s)',
+  person:  'Tags (eg jobs, roles, etc.)',
   project: 'e.g. feature, tv series, documentary...',
   event:   'e.g. meeting, call, pitch...',
 }
@@ -433,6 +433,13 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const [newItemTypes, setNewItemTypes] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
+  // Delete confirmation
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    connections: number
+    orphanedProjects: number
+    orphanedEvents: number
+  } | null>(null)
+
   const placeholders = classPlaceholders[object.class] || classPlaceholders.company
 
   // Load connected projects/events when tab activates
@@ -780,6 +787,250 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       .eq('object_id', object.id)
       .eq('user_id', user.id)
     setNotesEditing(false)
+    onObjectUpdated?.()
+  }
+
+  // ===== DELETE =====
+
+  async function initiateDelete() {
+    if (!user) return
+
+    // Get all object IDs on the user's landscape
+    const { data: userObjRows } = await supabase
+      .from('objects_overrides')
+      .select('object_id')
+      .eq('user_id', user.id)
+
+    const userObjectIds = new Set((userObjRows || []).map(r => r.object_id))
+
+    // Get canonical connections involving this object
+    const { data: canonConns } = await supabase
+      .from('connections')
+      .select('id, source_id, target_id, type')
+      .eq('is_active', true)
+      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
+
+    // Get user-created connections involving this object
+    const { data: userConns } = await supabase
+      .from('connections_overrides')
+      .select('id, source_id, target_id, type')
+      .eq('user_id', user.id)
+      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
+
+    // Get deactivated canonical connection IDs so we can exclude them
+    const { data: deactivated } = await supabase
+      .from('connections_overrides')
+      .select('connection_id')
+      .eq('user_id', user.id)
+      .eq('deactivated', true)
+      .not('connection_id', 'is', null)
+
+    const deactivatedIds = new Set((deactivated || []).map(d => d.connection_id))
+
+    // Only count connections where the other endpoint is on the user's landscape
+    // and the connection isn't already deactivated
+    const visibleCanon = (canonConns || []).filter(c => {
+      if (deactivatedIds.has(c.id)) return false
+      const otherId = c.source_id === object.id ? c.target_id : c.source_id
+      return userObjectIds.has(otherId)
+    })
+
+    const visibleUser = (userConns || []).filter(c => {
+      if (c.connection_id) return false // deactivation overrides aren't real connections
+      const otherId = c.source_id === object.id ? c.target_id : c.source_id
+      return userObjectIds.has(otherId)
+    })
+
+    const totalConnections = visibleCanon.length + visibleUser.length
+
+    // Find connected off-landscape objects (projects/events) that would be orphaned
+    const allConnTypes = [...projectConnectionTypes, ...eventConnectionTypes]
+    const allConns = [...(canonConns || []).filter(c => !deactivatedIds.has(c.id)), ...(userConns || []).filter(c => !c.connection_id)]
+    const offLandscape = allConns.filter(c => allConnTypes.includes(c.type))
+
+    const relatedIds = new Set<string>()
+    for (const c of offLandscape) {
+      const otherId = c.source_id === object.id ? c.target_id : c.source_id
+      relatedIds.add(otherId)
+    }
+
+    // Check which are orphans (only connected to this object)
+    let orphanedProjects = 0
+    let orphanedEvents = 0
+    for (const relId of relatedIds) {
+      const { count: otherConns } = await supabase
+        .from('connections')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .or(`source_id.eq.${relId},target_id.eq.${relId}`)
+        .neq('source_id', object.id)
+        .neq('target_id', object.id)
+
+      const { count: otherUserConns } = await supabase
+        .from('connections_overrides')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .is('connection_id', null)
+        .or(`source_id.eq.${relId},target_id.eq.${relId}`)
+        .neq('source_id', object.id)
+        .neq('target_id', object.id)
+
+      if ((otherConns || 0) + (otherUserConns || 0) === 0) {
+        const { data: relObj } = await supabase
+          .from('objects')
+          .select('class')
+          .eq('id', relId)
+          .single()
+
+        if (relObj?.class === 'project') orphanedProjects++
+        else if (relObj?.class === 'event') orphanedEvents++
+      }
+    }
+
+    setDeleteConfirm({ connections: totalConnections, orphanedProjects, orphanedEvents })
+  }
+
+  async function executeDelete() {
+    if (!user) return
+
+    // 1. Delete user-created connections involving this object
+    await supabase
+      .from('connections_overrides')
+      .delete()
+      .eq('user_id', user.id)
+      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
+
+    // 2. Deactivate canonical connections (create override with deactivated=true)
+    const { data: canonConns } = await supabase
+      .from('connections')
+      .select('id')
+      .eq('is_active', true)
+      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
+
+    if (canonConns?.length) {
+      const deactivations = canonConns.map(c => ({
+        user_id: user.id,
+        connection_id: c.id,
+        source_id: object.id, // placeholder — not used for deactivation overrides
+        target_id: object.id,
+        type: 'deactivated',
+        deactivated: true,
+      }))
+      // Upsert to avoid duplicates if override already exists
+      for (const d of deactivations) {
+        const { data: existing } = await supabase
+          .from('connections_overrides')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('connection_id', d.connection_id)
+          .maybeSingle()
+
+        if (existing) {
+          await supabase
+            .from('connections_overrides')
+            .update({ deactivated: true })
+            .eq('id', existing.id)
+        } else {
+          // Need real source/target/type from the canonical connection
+          const { data: conn } = await supabase
+            .from('connections')
+            .select('source_id, target_id, type')
+            .eq('id', d.connection_id)
+            .single()
+
+          if (conn) {
+            await supabase
+              .from('connections_overrides')
+              .insert({
+                user_id: user.id,
+                connection_id: d.connection_id,
+                source_id: conn.source_id,
+                target_id: conn.target_id,
+                type: conn.type,
+                deactivated: true,
+              })
+          }
+        }
+      }
+    }
+
+    // 3. Clean up orphaned off-landscape objects
+    const allConnTypes = [...projectConnectionTypes, ...eventConnectionTypes]
+    const { data: offConns } = await supabase
+      .from('connections')
+      .select('source_id, target_id')
+      .eq('is_active', true)
+      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
+      .in('type', allConnTypes)
+
+    const { data: offUserConns } = await supabase
+      .from('connections_overrides')
+      .select('source_id, target_id')
+      .eq('user_id', user.id)
+      .is('connection_id', null)
+      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
+      .in('type', allConnTypes)
+
+    const orphanCandidates = new Set<string>()
+    for (const c of [...(offConns || []), ...(offUserConns || [])]) {
+      orphanCandidates.add(c.source_id === object.id ? c.target_id : c.source_id)
+    }
+
+    for (const orphanId of orphanCandidates) {
+      // Delete connections to this orphan that go through our object
+      // (already deleted above via user connections + deactivated canonical)
+      // Check if truly orphaned now
+      const { count: remaining } = await supabase
+        .from('connections')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .or(`source_id.eq.${orphanId},target_id.eq.${orphanId}`)
+        .neq('source_id', object.id)
+        .neq('target_id', object.id)
+
+      const { count: remainingUser } = await supabase
+        .from('connections_overrides')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .is('connection_id', null)
+        .or(`source_id.eq.${orphanId},target_id.eq.${orphanId}`)
+        .neq('source_id', object.id)
+        .neq('target_id', object.id)
+
+      if ((remaining || 0) + (remainingUser || 0) === 0) {
+        // Orphan — hard-delete override and (if user-created) the object
+        await supabase
+          .from('objects_overrides')
+          .delete()
+          .eq('object_id', orphanId)
+          .eq('user_id', user.id)
+
+        const { data: orphanObj } = await supabase
+          .from('objects')
+          .select('is_canon, created_by')
+          .eq('id', orphanId)
+          .single()
+
+        if (orphanObj && !orphanObj.is_canon && orphanObj.created_by === user.id) {
+          await supabase.from('objects').delete().eq('id', orphanId)
+        }
+      }
+    }
+
+    // 4. Delete the override (removes from user's landscape)
+    await supabase
+      .from('objects_overrides')
+      .delete()
+      .eq('object_id', object.id)
+      .eq('user_id', user.id)
+
+    // 5. If user-created, hard-delete the objects row too
+    if (!object.is_canon && object.created_by === user.id) {
+      await supabase.from('objects').delete().eq('id', object.id)
+    }
+
+    setDeleteConfirm(null)
+    onClose()
     onObjectUpdated?.()
   }
 
@@ -1472,6 +1723,9 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
               <button className={styles.iconButton} onClick={() => setHeaderEditing(true)} title="Edit name & title">
                 <Pencil size={12} />
               </button>
+              <button className={styles.iconButton} onClick={initiateDelete} title="Remove from landscape">
+                <Trash2 size={12} />
+              </button>
               <button className={styles.iconButton} onClick={onClose} title="Close">
                 <X size={14} />
               </button>
@@ -1698,6 +1952,29 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
           <button className={styles.relationshipButton}>
             &#x2194; Link to {peerObject.name}
           </button>
+        </div>
+      )}
+
+      {/* Delete confirmation overlay */}
+      {deleteConfirm && (
+        <div className={styles.deleteOverlay}>
+          <div className={styles.deleteContent}>
+            <p className={styles.deleteTitle}>Delete <strong>{object.name}</strong>?</p>
+            {(deleteConfirm.connections > 0 || deleteConfirm.orphanedProjects > 0 || deleteConfirm.orphanedEvents > 0) && (
+              <p className={styles.deleteDetails}>
+                This will also delete{' '}
+                {[
+                  deleteConfirm.connections > 0 && `${deleteConfirm.connections} connection${deleteConfirm.connections !== 1 ? 's' : ''}`,
+                  deleteConfirm.orphanedProjects > 0 && `${deleteConfirm.orphanedProjects} project${deleteConfirm.orphanedProjects !== 1 ? 's' : ''}`,
+                  deleteConfirm.orphanedEvents > 0 && `${deleteConfirm.orphanedEvents} event${deleteConfirm.orphanedEvents !== 1 ? 's' : ''}`,
+                ].filter(Boolean).join(' and ')}
+              </p>
+            )}
+            <div className={styles.deleteActions}>
+              <button className={styles.deleteCancelBtn} onClick={() => setDeleteConfirm(null)}>Cancel</button>
+              <button className={styles.deleteConfirmBtn} onClick={executeDelete}>Delete</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

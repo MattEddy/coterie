@@ -21,6 +21,8 @@ export interface ObjectNodeData {
   shared_notes: string | null
   private_notes: string | null
   tags: string[] | null
+  is_canon: boolean
+  created_by: string | null
   [key: string]: unknown
 }
 

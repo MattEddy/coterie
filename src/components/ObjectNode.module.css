@@ -68,7 +68,7 @@
 .type {
   font-weight: 500;
   text-transform: capitalize;
-  color: #777;
+  color: var(--color-text-muted);
 }
 
 .handle {

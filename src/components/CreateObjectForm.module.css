@@ -1,0 +1,67 @@
+.container {
+  position: fixed;
+  z-index: 20;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 8px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 220px;
+}
+
+.classToggle {
+  display: flex;
+  gap: 4px;
+}
+
+.classBtn {
+  flex: 1;
+  padding: 4px 0;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.classBtn:hover {
+  border-color: var(--color-text-muted);
+}
+
+.personActive {
+  background: var(--color-person-dim);
+  border-color: var(--color-person);
+  color: var(--color-person);
+}
+
+.companyActive {
+  background: var(--color-company-dim);
+  border-color: var(--color-company);
+  color: var(--color-company);
+}
+
+.nameInput {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+}
+
+.nameInput:focus {
+  border-color: var(--color-accent);
+}
+
+.nameInput::placeholder {
+  color: var(--color-text-muted);
+}

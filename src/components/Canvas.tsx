@@ -19,6 +19,7 @@ import ObjectNode from './ObjectNode'
 import type { ObjectNodeData } from './ObjectNode'
 import DetailPanel from './DetailPanel'
 import MultiSelectPanel from './MultiSelectPanel'
+import CreateObjectForm from './CreateObjectForm'
 import styles from './Canvas.module.css'
 
 const nodeTypes = { object: ObjectNode }
@@ -55,7 +56,7 @@ function getNearestHandles(
 
 function CanvasInner() {
   const { user } = useAuth()
-  const { flowToScreenPosition } = useReactFlow()
+  const { flowToScreenPosition, screenToFlowPosition } = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
@@ -63,6 +64,7 @@ function CanvasInner() {
   selectedItemsRef.current = selectedItems
   const connectionsRef = useRef<{ id: string; source_id: string; target_id: string; type: string }[]>([])
   const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+  const [createForm, setCreateForm] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
 
   const rebuildEdges = useCallback(() => {
     const flowEdges: Edge[] = connectionsRef.current.map(conn => {
@@ -148,6 +150,8 @@ function CanvasInner() {
         shared_notes: obj.shared_notes,
         private_notes: obj.private_notes,
         tags: obj.tags,
+        is_canon: obj.is_canon,
+        created_by: obj.created_by,
       } satisfies ObjectNodeData,
     }))
 
@@ -214,6 +218,8 @@ function CanvasInner() {
 
   // Flag: when onNodeClick handles selection, tell useOnSelectionChange to stand down
   const clickHandledRef = useRef(false)
+  // Track lasso selection so we can distinguish "lasso selected 1 node" from "mousedown on node"
+  const isLassoRef = useRef(false)
 
   // Click-based selection: normal click replaces, Cmd/Shift-click toggles
   const handleNodeClick = useCallback(
@@ -236,7 +242,9 @@ function CanvasInner() {
     []
   )
 
-  // Lasso selection + pane deselection (click-based selection handled above)
+  // Lasso selection + pane deselection
+  // Single-node selection is handled by onNodeClick (mouseup), NOT here (mousedown).
+  // This prevents the panel from opening when you start dragging a node.
   useOnSelectionChange({
     onChange: useCallback(
       ({ nodes: selectedNodes }: { nodes: Node[] }) => {
@@ -245,6 +253,8 @@ function CanvasInner() {
           setSelectedItems([])
           return
         }
+        // Single-node from internal mousedown (not lasso) — skip, let onNodeClick handle it
+        if (selectedNodes.length === 1 && !isLassoRef.current) return
         setSelectedItems(selectedNodes.map(n => ({
           nodeId: n.id,
           data: n.data as unknown as ObjectNodeData,
@@ -300,7 +310,28 @@ function CanvasInner() {
     [setEdges]
   )
 
-  const handlePaneClick = useCallback(() => {
+  // Detect double-click on pane via timing (React Flow v12 has no onPaneDoubleClick)
+  const lastPaneClickRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 })
+
+  const handlePaneClick = useCallback((event: React.MouseEvent) => {
+    const now = Date.now()
+    const last = lastPaneClickRef.current
+    const dx = Math.abs(event.clientX - last.x)
+    const dy = Math.abs(event.clientY - last.y)
+
+    if (now - last.time < 400 && dx < 10 && dy < 10) {
+      // Double-click detected
+      lastPaneClickRef.current = { time: 0, x: 0, y: 0 }
+      const screenPos = { x: event.clientX, y: event.clientY }
+      const flowPos = screenToFlowPosition(screenPos)
+      setSelectedItems([])
+      setCreateForm({ screen: screenPos, flow: flowPos })
+      return
+    }
+
+    lastPaneClickRef.current = { time: now, x: event.clientX, y: event.clientY }
+
+    setCreateForm(null)
     // Selection clearing is handled by useOnSelectionChange — just reset edge styles
     setEdges(current =>
       current.map(e => ({
@@ -311,7 +342,63 @@ function CanvasInner() {
         labelBgStyle: undefined,
       }))
     )
-  }, [setEdges])
+  }, [setEdges, screenToFlowPosition])
+
+  const handleCreateObject = useCallback(async (className: string, name: string) => {
+    if (!user) return
+
+    // 1. Skeleton objects row
+    const { data: obj, error: objError } = await supabase
+      .from('objects')
+      .insert({ class: className, is_canon: false, created_by: user.id })
+      .select('id')
+      .single()
+
+    if (objError || !obj) {
+      console.error('Failed to create object:', objError)
+      return
+    }
+
+    // 2. Override row with name + position
+    const flowPos = createForm!.flow
+    const { error: ovError } = await supabase
+      .from('objects_overrides')
+      .insert({
+        object_id: obj.id,
+        user_id: user.id,
+        name,
+        map_x: flowPos.x,
+        map_y: flowPos.y,
+      })
+
+    if (ovError) {
+      console.error('Failed to create override:', ovError)
+      return
+    }
+
+    setCreateForm(null)
+    await refreshData()
+
+    // Auto-select the new node so the detail panel opens
+    setSelectedItems([{
+      nodeId: obj.id,
+      data: {
+        id: obj.id,
+        name,
+        title: null,
+        class: className,
+        status: null,
+        types: [],
+        photo_url: null,
+        data: null,
+        shared_notes: null,
+        private_notes: null,
+        tags: null,
+        is_canon: false,
+        created_by: user.id,
+      },
+    }])
+  }, [user, createForm, refreshData])
 
   const clearSelection = useCallback(() => {
     setSelectedItems([])
@@ -355,12 +442,15 @@ function CanvasInner() {
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={handleNodeClick}
+        onSelectionStart={() => { isLassoRef.current = true }}
+        onSelectionEnd={() => { setTimeout(() => { isLassoRef.current = false }, 50) }}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
         nodeTypes={nodeTypes}
         fitView
         minZoom={0.1}
         maxZoom={2}
+        zoomOnDoubleClick={false}
         panOnScroll
         panOnDrag={[1]}
         panActivationKeyCode="Space"
@@ -413,6 +503,15 @@ function CanvasInner() {
           items={selectedItems}
           position={multiSelectPosition}
           onClose={clearSelection}
+        />
+      )}
+
+      {/* Create object form (double-click on empty canvas) */}
+      {createForm && (
+        <CreateObjectForm
+          screenPosition={createForm.screen}
+          onSubmit={handleCreateObject}
+          onCancel={() => setCreateForm(null)}
         />
       )}
     </div>

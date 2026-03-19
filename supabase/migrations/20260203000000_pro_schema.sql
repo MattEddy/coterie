@@ -7,7 +7,7 @@
 --   - objects_overrides/connections_overrides = per-user layer (overrides + user-created)
 --   - maps = unified: store packages, user maps, shared maps
 --   - coteries = sharing groups with diff-based dissonance detection
---   - coterie_reviews = tracks user responses to dissonances
+--   - coteries_reviews = tracks user responses to dissonances
 --   - sectors = scoping for onboarding + map packages
 
 -- =============================================================================
@@ -16,7 +16,7 @@
 
 DROP VIEW IF EXISTS user_objects CASCADE;
 DROP VIEW IF EXISTS objects_with_types CASCADE;
-DROP TABLE IF EXISTS coterie_reviews CASCADE;
+DROP TABLE IF EXISTS coteries_reviews CASCADE;
 DROP TABLE IF EXISTS coteries_maps CASCADE;
 DROP TABLE IF EXISTS coteries_members CASCADE;
 DROP TABLE IF EXISTS coteries CASCADE;
@@ -166,26 +166,23 @@ CREATE TABLE objects (
     name TEXT,                           -- NULL for user-created objects (data lives in overrides)
     title TEXT,                          -- subtitle/description: job title, company tagline, logline
     status TEXT,                         -- lifecycle: active, development, released, defunct, etc.
-    phone TEXT,                          -- primary phone (companies/projects only)
-    phone_2 TEXT,                        -- secondary phone (companies/projects only)
-    email TEXT,                          -- primary email (companies/projects only)
-    website TEXT,                        -- primary URL
-    address TEXT,                        -- free-form location (companies/projects only)
     photo_url TEXT,                      -- headshot / logo / poster
     event_date DATE,                    -- when the event occurred (events only)
-    data JSONB DEFAULT '{}',            -- long tail: social links, genre, etc.
+    data JSONB DEFAULT '{}',            -- contacts array, plus any class-specific metadata
     is_canon BOOLEAN DEFAULT FALSE,     -- vetted/maintained by platform operators
     created_by UUID,                    -- NULL = platform-seeded; FK to profiles added after profiles table exists
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
-    -- GUIDING TENET: Person contact info is NEVER canonical.
-    -- Coterie shares who someone is (name, title, role), not how to reach them.
-    -- Personal reachability lives in objects_overrides only.
-    CONSTRAINT person_no_canonical_contact CHECK (
-        class != 'person' OR (
-            phone IS NULL AND phone_2 IS NULL AND email IS NULL AND address IS NULL
+    -- GUIDING TENET: Person private reachability is NEVER canonical.
+    -- Coterie shares who someone is, not how to reach them.
+    -- Phone, email, address contacts live in objects_overrides only.
+    -- Public URLs (website, YouTube, etc.) are allowed canonically.
+    CONSTRAINT person_no_canonical_private_contacts CHECK (
+        class != 'person' OR NOT jsonb_path_exists(
+            data,
+            '$.contacts[*] ? (@.type == "phone" || @.type == "email" || @.type == "address")'
         )
     )
 );
@@ -378,14 +375,9 @@ CREATE TABLE objects_overrides (
     name TEXT,
     title TEXT,
     status TEXT,
-    phone TEXT,
-    phone_2 TEXT,
-    email TEXT,
-    website TEXT,
-    address TEXT,
     photo_url TEXT,
     event_date DATE,                    -- when the event occurred (events only)
-    data JSONB,
+    data JSONB,                         -- contacts array, plus any class-specific metadata
 
     -- Landscape position (always per-user)
     map_x DOUBLE PRECISION,
@@ -514,19 +506,26 @@ CREATE TABLE coteries_maps (
 -- Tracks how a user has responded to each structural dissonance.
 -- Dissonances are detected via diff queries, not stored events.
 -- No row = unreviewed. Row with status = review state.
-CREATE TABLE coterie_reviews (
+-- Dismissal-only: if a row exists, the user has dismissed that dissonance.
+-- No row = unreviewed (the diff query determines if a dissonance exists).
+-- Accepted dissonances don't need a row — the data change IS the record.
+--
+-- NOTE: This table may go away. Dismissed dissonances are likely rare in practice
+-- (most get resolved one way or the other). If dismissals are uncommon enough,
+-- we could drop this table and let unresolved dissonances simply persist in the
+-- Dissonance View without a "dismiss" affordance.
+CREATE TABLE coteries_reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
     source_user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
     ref_type TEXT NOT NULL CHECK (ref_type IN ('object_override', 'connection_override')),
     ref_id UUID NOT NULL,             -- objects_overrides.id or connections_overrides.id
-    status TEXT NOT NULL CHECK (status IN ('dismissed', 'accepted')),
-    reviewed_at TIMESTAMPTZ DEFAULT NOW(),
+    dismissed_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, source_user_id, ref_type, ref_id)
 );
 
-CREATE INDEX idx_coterie_reviews_user ON coterie_reviews(user_id);
-CREATE INDEX idx_coterie_reviews_source ON coterie_reviews(source_user_id);
+CREATE INDEX idx_coteries_reviews_user ON coteries_reviews(user_id);
+CREATE INDEX idx_coteries_reviews_source ON coteries_reviews(source_user_id);
 
 -- =============================================================================
 -- DEFERRED FOREIGN KEYS
@@ -543,7 +542,7 @@ ALTER TABLE objects ADD CONSTRAINT fk_objects_created_by
 CREATE VIEW objects_with_types AS
 SELECT
     o.id, o.class, o.name, o.title, o.status,
-    o.phone, o.phone_2, o.email, o.website, o.address, o.photo_url, o.event_date,
+    o.photo_url, o.event_date,
     o.data, o.is_canon, o.created_by, o.is_active, o.created_at, o.updated_at,
     COALESCE(
         array_agg(ot.type_id) FILTER (WHERE ot.type_id IS NOT NULL),
@@ -566,13 +565,9 @@ SELECT
     COALESCE(ov.name, o.name) AS name,
     COALESCE(ov.title, o.title) AS title,
     COALESCE(ov.status, o.status) AS status,
-    COALESCE(ov.phone, o.phone) AS phone,
-    COALESCE(ov.phone_2, o.phone_2) AS phone_2,
-    COALESCE(ov.email, o.email) AS email,
-    COALESCE(ov.website, o.website) AS website,
-    COALESCE(ov.address, o.address) AS address,
     COALESCE(ov.photo_url, o.photo_url) AS photo_url,
     COALESCE(ov.event_date, o.event_date) AS event_date,
+    COALESCE(ov.data, o.data) AS data,
     o.is_canon,
     o.created_by,
     ov.map_x,

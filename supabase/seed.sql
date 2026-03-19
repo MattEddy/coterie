@@ -22,12 +22,13 @@ UPDATE profiles SET display_name = 'Matt', sector_id = 'entertainment' WHERE use
 UPDATE profiles SET display_name = 'Billy', sector_id = 'entertainment' WHERE user_id = 'cccc2222-2222-2222-2222-222222222222';
 
 -- Sample Companies (is_canon = true for platform-seeded data)
-INSERT INTO objects (id, class, name, title, website, is_canon) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'company', 'Disney', 'Major Studio & Streamer', 'disney.com', true),
-    ('22222222-2222-2222-2222-222222222222', 'company', 'Warner Bros', 'Major Studio', 'warnerbros.com', true),
-    ('33333333-3333-3333-3333-333333333333', 'company', 'Netflix', 'Streamer & Studio', 'netflix.com', true),
-    ('44444444-4444-4444-4444-444444444444', 'company', 'CAA', 'Talent Agency', 'caa.com', true),
-    ('55555555-5555-5555-5555-555555555555', 'company', 'Bad Robot', 'Production Company', 'badrobot.com', true);
+-- Contact info lives in data.contacts as typed/labeled entries
+INSERT INTO objects (id, class, name, title, data, is_canon) VALUES
+    ('11111111-1111-1111-1111-111111111111', 'company', 'Disney', 'Major Studio & Streamer', '{"contacts": [{"type": "url", "label": "Website", "value": "disney.com"}]}', true),
+    ('22222222-2222-2222-2222-222222222222', 'company', 'Warner Bros', 'Major Studio', '{"contacts": [{"type": "url", "label": "Website", "value": "warnerbros.com"}]}', true),
+    ('33333333-3333-3333-3333-333333333333', 'company', 'Netflix', 'Streamer & Studio', '{"contacts": [{"type": "url", "label": "Website", "value": "netflix.com"}]}', true),
+    ('44444444-4444-4444-4444-444444444444', 'company', 'CAA', 'Talent Agency', '{"contacts": [{"type": "url", "label": "Website", "value": "caa.com"}]}', true),
+    ('55555555-5555-5555-5555-555555555555', 'company', 'Bad Robot', 'Production Company', '{"contacts": [{"type": "url", "label": "Website", "value": "badrobot.com"}]}', true);
 
 -- Assign types to companies (can have multiple!)
 INSERT INTO objects_types (object_id, type_id, is_primary) VALUES

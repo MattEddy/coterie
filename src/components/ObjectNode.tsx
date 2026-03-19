@@ -3,6 +3,12 @@ import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import styles from './ObjectNode.module.css'
 
+export interface ContactEntry {
+  type: string    // phone, email, url, address, social
+  label: string   // Work, Cell, LinkedIn, etc.
+  value: string
+}
+
 export interface ObjectNodeData {
   id: string
   name: string
@@ -10,12 +16,8 @@ export interface ObjectNodeData {
   class: string
   status: string | null
   types: string[]
-  phone: string | null
-  phone_2: string | null
-  email: string | null
-  website: string | null
-  address: string | null
   photo_url: string | null
+  data: { contacts?: ContactEntry[] } | null
   shared_notes: string | null
   private_notes: string | null
   tags: string[] | null

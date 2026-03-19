@@ -59,6 +59,8 @@ function CanvasInner() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
+  const selectedItemsRef = useRef<SelectedItem[]>([])
+  selectedItemsRef.current = selectedItems
   const connectionsRef = useRef<{ id: string; source_id: string; target_id: string; type: string }[]>([])
   const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
 
@@ -123,6 +125,9 @@ function CanvasInner() {
 
     if (!objects) return
 
+    // Preserve selected state so React Flow doesn't fire spurious selection changes
+    const currentSelectedIds = new Set(selectedItemsRef.current.map(i => i.nodeId))
+
     const flowNodes: Node[] = objects.map((obj, i) => ({
       id: obj.id,
       type: 'object',
@@ -130,6 +135,7 @@ function CanvasInner() {
         x: obj.map_x ?? (i % 5) * 250,
         y: obj.map_y ?? Math.floor(i / 5) * 200,
       },
+      selected: currentSelectedIds.has(obj.id),
       data: {
         id: obj.id,
         name: obj.name,
@@ -137,12 +143,8 @@ function CanvasInner() {
         class: obj.class,
         status: obj.status,
         types: obj.types || [],
-        phone: obj.phone,
-        phone_2: obj.phone_2,
-        email: obj.email,
-        website: obj.website,
-        address: obj.address,
         photo_url: obj.photo_url,
+        data: obj.data,
         shared_notes: obj.shared_notes,
         private_notes: obj.private_notes,
         tags: obj.tags,

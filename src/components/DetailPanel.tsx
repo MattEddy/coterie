@@ -1,9 +1,9 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
 import { useReactFlow, useStore, useViewport } from '@xyflow/react'
-import { Pencil, Check, X } from 'lucide-react'
+import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import type { ObjectNodeData } from './ObjectNode'
+import type { ObjectNodeData, ContactEntry } from './ObjectNode'
 import type { NodeRect } from '../types'
 import styles from './DetailPanel.module.css'
 
@@ -20,64 +20,32 @@ interface DetailPanelProps {
   preferredSide?: 'left' | 'right'
 }
 
-const readFields: { key: string; label: string }[] = [
-  { key: 'title', label: 'Title' },
-  { key: 'status', label: 'Status' },
-  { key: 'phone', label: 'Phone' },
-  { key: 'phone_2', label: 'Phone 2' },
-  { key: 'email', label: 'Email' },
-  { key: 'website', label: 'Website' },
-  { key: 'address', label: 'Address' },
+type TabId = 'contact' | 'notes' | 'projects' | 'events'
+
+const tabs: { id: TabId; Icon: typeof Phone; label: string; heading: string }[] = [
+  { id: 'contact', Icon: Phone, label: 'Contact', heading: 'Contact Info' },
+  { id: 'notes', Icon: FileText, label: 'Notes', heading: 'Notes' },
+  { id: 'projects', Icon: Clipboard, label: 'Projects', heading: 'Projects' },
+  { id: 'events', Icon: Calendar, label: 'Events', heading: 'Events' },
 ]
 
-// Class-specific placeholders for the top fields
-const classPlaceholders: Record<string, { name: string; title: string; status: string }> = {
-  company: { name: 'Company Name', title: 'Description', status: 'Status' },
-  person:  { name: 'Name (First Last)', title: 'Title', status: 'Status' },
-  project: { name: 'Project Name', title: 'Description', status: 'e.g. Development, Production' },
+const classPlaceholders: Record<string, { name: string; title: string }> = {
+  company: { name: 'Company Name', title: 'Description' },
+  person:  { name: 'Name (First Last)', title: 'Title' },
+  project: { name: 'Project Name', title: 'Description' },
+  event:   { name: 'Event Name', title: 'Description' },
 }
 
 const typeTagPlaceholders: Record<string, string> = {
   company: 'e.g. studio, streamer, agency...',
   person:  'e.g. executive, producer, creative...',
   project: 'e.g. feature, tv series, documentary...',
+  event:   'e.g. meeting, call, pitch...',
 }
 
-interface EditFieldDef {
-  key: string
-  label: string
-  placeholder: string
-  type: 'text' | 'textarea'
-  group: string
-}
+const contactTypes = ['phone', 'email', 'url', 'address', 'social']
 
-const contactFields: EditFieldDef[] = [
-  { key: 'phone', label: 'Phone', placeholder: 'Phone', type: 'text', group: 'Contact' },
-  { key: 'phone_2', label: 'Phone 2', placeholder: 'Phone 2', type: 'text', group: 'Contact' },
-  { key: 'email', label: 'Email', placeholder: 'Email', type: 'text', group: 'Contact' },
-  { key: 'website', label: 'Website', placeholder: 'Website URL', type: 'text', group: 'Contact' },
-  { key: 'address', label: 'Address', placeholder: 'Address', type: 'text', group: 'Contact' },
-]
-
-const mediaFields: EditFieldDef[] = [
-  { key: 'photo_url', label: 'Photo URL', placeholder: 'Photo URL', type: 'text', group: 'Media' },
-]
-
-const notesFields: EditFieldDef[] = [
-  { key: 'shared_notes', label: 'Shared Notes', placeholder: 'Notes visible to your coterie...', type: 'textarea', group: 'Notes' },
-  { key: 'private_notes', label: 'Private Notes', placeholder: 'Private notes (never shared)...', type: 'textarea', group: 'Notes' },
-]
-
-type EditValues = Record<string, string>
-
-function getEditValues(obj: ObjectNodeData): EditValues {
-  const keys = ['name', 'title', 'status', 'phone', 'phone_2', 'email', 'website', 'address', 'photo_url', 'shared_notes', 'private_notes']
-  const values: EditValues = {}
-  for (const k of keys) {
-    values[k] = (obj[k] as string) ?? ''
-  }
-  return values
-}
+const emptyContact = (): ContactEntry => ({ type: 'phone', label: '', value: '' })
 
 // --- Tag Input Component ---
 
@@ -98,6 +66,10 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInput
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
     if (inputValue.length < 1) {
       setSuggestions([])
       return
@@ -114,7 +86,6 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInput
       .limit(8)
       .then(({ data }) => {
         if (data) {
-          // Filter out types already added
           setSuggestions(data.filter(t => !tags.includes(t.id)))
         }
       })
@@ -138,7 +109,6 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInput
     const id = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
     if (!id || tags.includes(id)) return
 
-    // Check if this type already exists
     const { data: existing } = await supabase
       .from('types')
       .select('id')
@@ -170,7 +140,6 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInput
       if (highlightIndex >= 0 && suggestions[highlightIndex]) {
         addTag(suggestions[highlightIndex].id)
       } else if (inputValue.trim()) {
-        // Check if input matches an existing suggestion exactly
         const exact = suggestions.find(s => s.display_name.toLowerCase() === inputValue.trim().toLowerCase())
         if (exact) {
           addTag(exact.id)
@@ -205,7 +174,6 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInput
           }}
           onFocus={() => setShowSuggestions(true)}
           onBlur={() => {
-            // Delay to allow click on suggestion
             setTimeout(() => setShowSuggestions(false), 200)
           }}
           onKeyDown={handleKeyDown}
@@ -234,21 +202,18 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInput
 // --- Detail Panel ---
 
 const GAP = 12
-const READ_WIDTH = 280
-const EDIT_WIDTH = 320
+const PANEL_WIDTH = 300
 
 export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, peerObject, preferredSide }: DetailPanelProps) {
   const { user } = useAuth()
   const { flowToScreenPosition } = useReactFlow()
   const viewport = useViewport()
 
-  // Subscribe to this node's position — re-renders on drag
   const nodePosition = useStore(
     useCallback(s => s.nodeLookup.get(nodeId)?.position ?? null, [nodeId]),
     (a, b) => a?.x === b?.x && a?.y === b?.y
   )
 
-  // Reactive nodeRect: recomputes on pan, zoom, and drag
   const nodeRect: NodeRect | null = useMemo(() => {
     if (!nodePosition) return null
     const topLeft = flowToScreenPosition(nodePosition)
@@ -260,17 +225,50 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   }, [nodePosition, viewport, flowToScreenPosition])
 
   const panelRef = useRef<HTMLDivElement>(null)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editValues, setEditValues] = useState<EditValues>(() => getEditValues(object))
-  const [editTypes, setEditTypes] = useState<string[]>(object.types || [])
-  const [saving, setSaving] = useState(false)
   const [pos, setPos] = useState({ left: 0, top: 0 })
-  const readTopRef = useRef(0)
+
+  // Tabs
+  const [activeTab, setActiveTab] = useState<TabId>('contact')
+
+  // Header editing (name + title)
+  const [headerEditing, setHeaderEditing] = useState(false)
+  const [headerValues, setHeaderValues] = useState({ name: object.name || '', title: object.title || '' })
+
+  // Types editing
+  const [showTagInput, setShowTagInput] = useState(false)
+  const [editTypes, setEditTypes] = useState<string[]>(object.types || [])
+
+  // Contact tab editing
+  const [contactEditing, setContactEditing] = useState(false)
+  const [editContacts, setEditContacts] = useState<ContactEntry[]>(
+    () => object.data?.contacts ?? []
+  )
+
+  // Notes tab editing
+  const [notesEditing, setNotesEditing] = useState(false)
+  const [notesValues, setNotesValues] = useState({
+    shared_notes: object.shared_notes || '',
+    private_notes: object.private_notes || '',
+  })
 
   const placeholders = classPlaceholders[object.class] || classPlaceholders.company
-  const panelWidth = isEditing ? EDIT_WIDTH : READ_WIDTH
 
-  // Position the panel adjacent to the node — runs before paint
+  // Reset all state when object changes
+  useEffect(() => {
+    setHeaderEditing(false)
+    setShowTagInput(false)
+    setContactEditing(false)
+    setNotesEditing(false)
+    setHeaderValues({ name: object.name || '', title: object.title || '' })
+    setEditTypes(object.types || [])
+    setEditContacts(object.data?.contacts ?? [])
+    setNotesValues({
+      shared_notes: object.shared_notes || '',
+      private_notes: object.private_notes || '',
+    })
+  }, [object.id])
+
+  // Position panel adjacent to node
   useLayoutEffect(() => {
     const el = panelRef.current
     if (!el || !nodeRect) return
@@ -278,210 +276,148 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     const vw = window.innerWidth
     const vh = window.innerHeight
     const nodeCenterY = (nodeRect.top + nodeRect.bottom) / 2
-    const w = isEditing ? EDIT_WIDTH : READ_WIDTH
     const h = el.scrollHeight
 
-    // Horizontal: use preferred side if set, otherwise open toward more room
     let left: number
     if (preferredSide === 'left') {
-      left = nodeRect.left - w - GAP
+      left = nodeRect.left - PANEL_WIDTH - GAP
     } else if (preferredSide === 'right') {
       left = nodeRect.right + GAP
     } else {
       left = (vw - nodeRect.right) >= nodeRect.left
         ? nodeRect.right + GAP
-        : nodeRect.left - w - GAP
+        : nodeRect.left - PANEL_WIDTH - GAP
     }
-    // Clamp to viewport
-    left = Math.max(GAP, Math.min(left, vw - w - GAP))
+    left = Math.max(GAP, Math.min(left, vw - PANEL_WIDTH - GAP))
 
-    let top: number
-    if (!isEditing) {
-      // Proportional anchor: ratio 0 at top (grow down), 1 at bottom (grow up)
-      const anchorRatio = Math.max(0, Math.min(1, nodeCenterY / vh))
-      top = nodeCenterY - (h * anchorRatio)
-      top = Math.max(GAP, Math.min(top, vh - h - GAP))
-      readTopRef.current = top
-    } else {
-      // Keep read-mode top, push up minimum needed to fit on screen
-      top = Math.min(readTopRef.current, vh - h - GAP)
-      top = Math.max(GAP, top)
-    }
+    const anchorRatio = Math.max(0, Math.min(1, nodeCenterY / vh))
+    let top = nodeCenterY - (h * anchorRatio)
+    top = Math.max(GAP, Math.min(top, vh - h - GAP))
 
     setPos({ left, top })
-  }, [nodeRect, isEditing, object.id])
+  }, [nodeRect, activeTab, headerEditing, contactEditing, notesEditing, showTagInput, object.id])
 
-  // Reset edit state when the selected object changes
-  useEffect(() => {
-    setIsEditing(false)
-    setEditValues(getEditValues(object))
-    setEditTypes(object.types || [])
-  }, [object.id])
+  // --- Save functions ---
 
-  function handleEdit() {
-    setEditValues(getEditValues(object))
-    setEditTypes(object.types || [])
-    setIsEditing(true)
-  }
-
-  function handleCancel() {
-    setEditValues(getEditValues(object))
-    setEditTypes(object.types || [])
-    setIsEditing(false)
-  }
-
-  async function handleSave() {
+  async function saveHeader() {
     if (!user) return
-    setSaving(true)
-
-    const payload: Record<string, string | null> = {}
-    const keys = ['name', 'title', 'status', 'phone', 'phone_2', 'email', 'website', 'address', 'photo_url', 'shared_notes', 'private_notes']
-    for (const k of keys) {
-      payload[k] = editValues[k]?.trim() || null
-    }
-
     await supabase
       .from('objects_overrides')
-      .update(payload)
+      .update({
+        name: headerValues.name.trim() || null,
+        title: headerValues.title.trim() || null,
+      })
       .eq('object_id', object.id)
       .eq('user_id', user.id)
+    setHeaderEditing(false)
+    onObjectUpdated?.()
+  }
 
+  async function saveTypes() {
+    if (!user) return
     await supabase
       .from('objects_types_overrides')
       .delete()
       .eq('object_id', object.id)
       .eq('user_id', user.id)
-
     if (editTypes.length > 0) {
       await supabase
         .from('objects_types_overrides')
         .insert(editTypes.map(typeId => ({ user_id: user.id, object_id: object.id, type_id: typeId })))
     }
-
-    setSaving(false)
-    setIsEditing(false)
+    setShowTagInput(false)
     onObjectUpdated?.()
   }
 
-  function handleChange(key: string, value: string) {
-    setEditValues(prev => ({ ...prev, [key]: value }))
+  async function saveContact() {
+    if (!user) return
+    // Filter out empty entries
+    const cleaned = editContacts.filter(c => c.value.trim())
+    const data = { ...(object.data || {}), contacts: cleaned.length > 0 ? cleaned : undefined }
+    await supabase
+      .from('objects_overrides')
+      .update({ data: Object.keys(data).length > 0 ? data : null })
+      .eq('object_id', object.id)
+      .eq('user_id', user.id)
+    setContactEditing(false)
+    onObjectUpdated?.()
   }
 
-  // Hide panel when node has scrolled off-screen
+  async function saveNotes() {
+    if (!user) return
+    await supabase
+      .from('objects_overrides')
+      .update({
+        shared_notes: notesValues.shared_notes.trim() || null,
+        private_notes: notesValues.private_notes.trim() || null,
+      })
+      .eq('object_id', object.id)
+      .eq('user_id', user.id)
+    setNotesEditing(false)
+    onObjectUpdated?.()
+  }
+
+  // Off-screen detection
   const nodeOffScreen = !nodeRect ||
     nodeRect.bottom < 0 || nodeRect.top > window.innerHeight ||
     nodeRect.right < 0 || nodeRect.left > window.innerWidth
 
-  const panelClass = `${styles.panel} ${isEditing ? styles.editing : ''}`
-
-  const fieldGroups = [
-    { name: 'Contact', fields: contactFields },
-    { name: 'Media', fields: mediaFields },
-    { name: 'Notes', fields: notesFields },
-  ]
-
   return (
-    <div ref={panelRef} className={panelClass} style={{ left: pos.left, top: pos.top, width: panelWidth, visibility: nodeOffScreen ? 'hidden' : 'visible' } as CSSProperties}>
+    <div ref={panelRef} className={styles.panel} style={{ left: pos.left, top: pos.top, width: PANEL_WIDTH, visibility: nodeOffScreen ? 'hidden' : 'visible' } as CSSProperties}>
+      {/* ===== HEADER ===== */}
       <div className={styles.header}>
-        {isEditing ? (
-          <input
-            className={styles.nameInput}
-            value={editValues.name}
-            onChange={e => handleChange('name', e.target.value)}
-            placeholder={placeholders.name}
-            autoFocus
-          />
-        ) : (
-          <h2 className={styles.name}>{object.name}</h2>
+        {object.photo_url && (
+          <img className={styles.photo} src={object.photo_url} alt="" />
         )}
-        <div className={styles.headerActions}>
-          {isEditing ? (
+        <div className={styles.identity}>
+          {headerEditing ? (
             <>
-              <button className={styles.iconButton} onClick={handleSave} title="Save" disabled={saving}>
-                <Check size={16} />
-              </button>
-              <button className={styles.iconButton} onClick={handleCancel} title="Cancel">
-                <X size={16} />
-              </button>
+              <input
+                className={styles.nameInput}
+                value={headerValues.name}
+                onChange={e => setHeaderValues(v => ({ ...v, name: e.target.value }))}
+                placeholder={placeholders.name}
+                autoComplete="off"
+                autoFocus
+              />
+              <input
+                className={styles.titleInput}
+                value={headerValues.title}
+                onChange={e => setHeaderValues(v => ({ ...v, title: e.target.value }))}
+                placeholder={placeholders.title}
+                autoComplete="off"
+              />
             </>
           ) : (
             <>
-              <button className={styles.iconButton} onClick={handleEdit} title="Edit">
-                <Pencil size={14} />
-              </button>
-              <button className={styles.iconButton} onClick={onClose} title="Close">
-                <X size={16} />
-              </button>
+              <h2 className={styles.name}>{object.name}</h2>
+              {object.title && <span className={styles.title}>{object.title}</span>}
             </>
           )}
-        </div>
-      </div>
-
-      {!isEditing && (
-        <>
-          <div className={styles.types}>
-            {object.types.map(t => (
-              <span key={t} className={styles.type}>{t.replace(/_/g, ' ')}</span>
-            ))}
-          </div>
-
-          <div className={styles.fields}>
-            {readFields.map(f => {
-              const value = object[f.key]
-              if (!value) return null
-              return (
-                <div key={f.key} className={styles.field}>
-                  <span className={styles.label}>{f.label}</span>
-                  <span className={styles.value}>{String(value)}</span>
-                </div>
-              )
-            })}
-          </div>
-
-          {object.shared_notes && (
-            <div className={styles.notes}>
-              <span className={styles.label}>Notes</span>
-              <p className={styles.noteText}>{object.shared_notes}</p>
+          <div className={styles.typesRow}>
+            <div className={styles.types}>
+              {(showTagInput ? editTypes : object.types).map(t => (
+                <span key={t} className={styles.type}>
+                  {t.replace(/_/g, ' ')}
+                  {showTagInput && (
+                    <button className={styles.tagRemoveInline} onClick={() => setEditTypes(prev => prev.filter(x => x !== t))} type="button">
+                      <X size={8} />
+                    </button>
+                  )}
+                </span>
+              ))}
             </div>
-          )}
-
-          {object.private_notes && (
-            <div className={styles.notes}>
-              <span className={styles.label}>Private Notes</span>
-              <p className={styles.noteText}>{object.private_notes}</p>
-            </div>
-          )}
-
-          {peerObject && (
-            <div className={styles.relationshipAction}>
-              <button className={styles.relationshipButton}>
-                &#x2194; Link to {peerObject.name}
+            {showTagInput ? (
+              <button className={styles.iconButtonSm} onClick={saveTypes} title="Save types">
+                <Check size={12} />
               </button>
-            </div>
-          )}
-        </>
-      )}
-
-      {isEditing && (
-        <div className={styles.editBody}>
-          {/* Top fields — no group label, no field labels, just placeholders */}
-          <div className={styles.topFields}>
-            <input
-              className={styles.editInput}
-              value={editValues.title}
-              onChange={e => handleChange('title', e.target.value)}
-              placeholder={placeholders.title}
-            />
-            <input
-              className={styles.editInput}
-              value={editValues.status}
-              onChange={e => handleChange('status', e.target.value)}
-              placeholder={placeholders.status}
-            />
+            ) : (
+              <button className={styles.iconButtonSm} onClick={() => { setEditTypes(object.types || []); setShowTagInput(true) }} title="Edit types">
+                <Plus size={12} />
+              </button>
+            )}
           </div>
-
-          {/* Type tags */}
-          <div className={styles.editField}>
+          {showTagInput && (
             <TagInput
               tags={editTypes}
               onChange={setEditTypes}
@@ -489,35 +425,229 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
               placeholder={typeTagPlaceholders[object.class] || 'Add types...'}
               userId={user!.id}
             />
-          </div>
+          )}
+        </div>
+        <div className={styles.headerActions}>
+          {headerEditing ? (
+            <>
+              <button className={styles.iconButton} onClick={saveHeader} title="Save">
+                <Check size={14} />
+              </button>
+              <button className={styles.iconButton} onClick={() => { setHeaderValues({ name: object.name || '', title: object.title || '' }); setHeaderEditing(false) }} title="Cancel">
+                <X size={14} />
+              </button>
+            </>
+          ) : (
+            <>
+              <button className={styles.iconButton} onClick={() => setHeaderEditing(true)} title="Edit name & title">
+                <Pencil size={12} />
+              </button>
+              <button className={styles.iconButton} onClick={onClose} title="Close">
+                <X size={14} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
-          {/* Labeled field groups */}
-          {fieldGroups.map(group => (
-            <div key={group.name} className={styles.fieldGroup}>
-              <span className={styles.groupLabel}>{group.name}</span>
-              {group.fields.map(f => (
-                <div key={f.key} className={styles.editField}>
-                  <label className={styles.label}>{f.label}</label>
-                  {f.type === 'textarea' ? (
-                    <textarea
-                      className={styles.editTextarea}
-                      value={editValues[f.key]}
-                      onChange={e => handleChange(f.key, e.target.value)}
-                      placeholder={f.placeholder}
-                      rows={3}
-                    />
-                  ) : (
-                    <input
-                      className={styles.editInput}
-                      value={editValues[f.key]}
-                      onChange={e => handleChange(f.key, e.target.value)}
-                      placeholder={f.placeholder}
-                    />
-                  )}
-                </div>
-              ))}
+      {/* ===== TAB BAR ===== */}
+      <div className={styles.tabBar}>
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            className={`${styles.tabButton} ${activeTab === tab.id ? styles.tabActive : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+            title={tab.label}
+          >
+            <tab.Icon size={16} />
+          </button>
+        ))}
+      </div>
+
+      {/* ===== TAB CONTENT ===== */}
+      <div className={styles.tabContent}>
+        {/* CONTACT TAB */}
+        {activeTab === 'contact' && (
+          <div className={styles.tabSection}>
+            <div className={styles.tabSectionHeader}>
+              <h3 className={styles.tabHeading}>Contact Info</h3>
+              {contactEditing ? (
+                <>
+                  <button className={styles.iconButtonSm} onClick={saveContact} title="Save"><Check size={12} /></button>
+                  <button className={styles.iconButtonSm} onClick={() => {
+                    setEditContacts(object.data?.contacts ?? [])
+                    setContactEditing(false)
+                  }} title="Cancel"><X size={12} /></button>
+                </>
+              ) : (
+                <button className={styles.iconButtonSm} onClick={() => {
+                  setEditContacts(object.data?.contacts ?? [])
+                  setContactEditing(true)
+                }} title="Edit contact info">
+                  <Pencil size={12} />
+                </button>
+              )}
             </div>
-          ))}
+            {contactEditing ? (
+              <div className={styles.editFields}>
+                {editContacts.map((c, i) => (
+                  <div key={i} className={styles.contactRow}>
+                    <select
+                      className={styles.contactType}
+                      value={c.type}
+                      onChange={e => setEditContacts(prev => prev.map((x, j) => j === i ? { ...x, type: e.target.value } : x))}
+                    >
+                      {contactTypes.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <input
+                      className={styles.contactLabel}
+                      value={c.label}
+                      onChange={e => setEditContacts(prev => prev.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
+                      placeholder="Label"
+                      autoComplete="off"
+                    />
+                    {c.type === 'address' ? (
+                      <textarea
+                        className={styles.contactValue}
+                        value={c.value}
+                        onChange={e => setEditContacts(prev => prev.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+                        placeholder="Value"
+                        rows={2}
+                      />
+                    ) : (
+                      <input
+                        className={styles.contactValue}
+                        value={c.value}
+                        onChange={e => setEditContacts(prev => prev.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+                        placeholder="Value"
+                        autoComplete="off"
+                      />
+                    )}
+                    <button
+                      className={styles.iconButtonSm}
+                      onClick={() => setEditContacts(prev => prev.filter((_, j) => j !== i))}
+                      title="Remove"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  className={styles.addButton}
+                  onClick={() => setEditContacts(prev => [...prev, emptyContact()])}
+                >
+                  <Plus size={12} /> Add contact
+                </button>
+              </div>
+            ) : (
+              <div className={styles.readFields}>
+                {(object.data?.contacts ?? []).map((c, i) => (
+                  <div key={i} className={styles.field}>
+                    <span className={styles.label}>{c.label || c.type}</span>
+                    <span className={styles.value}>{c.value}</span>
+                  </div>
+                ))}
+                {!(object.data?.contacts?.length) && (
+                  <span className={styles.emptyState}>No contact info</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* NOTES TAB */}
+        {activeTab === 'notes' && (
+          <div className={styles.tabSection}>
+            <div className={styles.tabSectionHeader}>
+              <h3 className={styles.tabHeading}>Notes</h3>
+              {notesEditing ? (
+                <>
+                  <button className={styles.iconButtonSm} onClick={saveNotes} title="Save"><Check size={12} /></button>
+                  <button className={styles.iconButtonSm} onClick={() => {
+                    setNotesValues({ shared_notes: object.shared_notes || '', private_notes: object.private_notes || '' })
+                    setNotesEditing(false)
+                  }} title="Cancel"><X size={12} /></button>
+                </>
+              ) : (
+                <button className={styles.iconButtonSm} onClick={() => setNotesEditing(true)} title="Edit notes">
+                  <Pencil size={12} />
+                </button>
+              )}
+            </div>
+            {notesEditing ? (
+              <div className={styles.editFields}>
+                <div className={styles.editField}>
+                  <label className={styles.label}>Shared with Coteries</label>
+                  <textarea
+                    className={styles.editTextarea}
+                    value={notesValues.shared_notes}
+                    onChange={e => setNotesValues(prev => ({ ...prev, shared_notes: e.target.value }))}
+                    placeholder="Notes visible to your coterie..."
+                    rows={3}
+                  />
+                </div>
+                <div className={styles.editField}>
+                  <label className={styles.label}>Private (Not Shared)</label>
+                  <textarea
+                    className={styles.editTextarea}
+                    value={notesValues.private_notes}
+                    onChange={e => setNotesValues(prev => ({ ...prev, private_notes: e.target.value }))}
+                    placeholder="Private notes (never shared)..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className={styles.readFields}>
+                {object.shared_notes && (
+                  <div className={styles.noteBlock}>
+                    <span className={styles.label}>Shared with Coteries</span>
+                    <p className={styles.noteText}>{object.shared_notes}</p>
+                  </div>
+                )}
+                {object.private_notes && (
+                  <div className={styles.noteBlock}>
+                    <span className={styles.label}>Private (Not Shared)</span>
+                    <p className={styles.noteText}>{object.private_notes}</p>
+                  </div>
+                )}
+                {!object.shared_notes && !object.private_notes && (
+                  <span className={styles.emptyState}>No notes</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PROJECTS TAB */}
+        {activeTab === 'projects' && (
+          <div className={styles.tabSection}>
+            <div className={styles.tabSectionHeader}>
+              <h3 className={styles.tabHeading}>Projects</h3>
+            </div>
+            <span className={styles.emptyState}>No projects yet</span>
+          </div>
+        )}
+
+        {/* EVENTS TAB */}
+        {activeTab === 'events' && (
+          <div className={styles.tabSection}>
+            <div className={styles.tabSectionHeader}>
+              <h3 className={styles.tabHeading}>Events</h3>
+            </div>
+            <span className={styles.emptyState}>No events yet</span>
+          </div>
+        )}
+      </div>
+
+      {/* Dual-select relationship action */}
+      {peerObject && (
+        <div className={styles.relationshipAction}>
+          <button className={styles.relationshipButton}>
+            &#x2194; Link to {peerObject.name}
+          </button>
         </div>
       )}
     </div>

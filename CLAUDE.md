@@ -249,7 +249,7 @@ connections_overrides   -- per-user: overrides + user-created connections + shar
 **Social:**
 ```
 coteries               -- sharing groups
-coterie_members        -- who's in which coterie (owner/member roles)
+coteries_members        -- who's in which coterie (owner/member roles)
 coteries_maps          -- maps shared with coteries
 coterie_reviews        -- per-user review state for coterie dissonances
 ```

@@ -71,10 +71,10 @@ INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
     ('bbbb1111-1111-1111-1111-111111111111', 'feature', true),
     ('bbbb2222-2222-2222-2222-222222222222', 'tv_series', true);
 
--- Sample Events (user-created, not canonical)
-INSERT INTO objects (id, class, name, title, event_date, is_canon, created_by) VALUES
-    ('eeee1111-1111-1111-1111-111111111111', 'event', 'Sundance Meeting', 'Ran into Alan Bergman at a screening', '2025-01-25', false, 'cccc1111-1111-1111-1111-111111111111'),
-    ('eeee2222-2222-2222-2222-222222222222', 'event', 'Avatar 3 Development Update', 'Discussed production timeline with Disney team', '2025-03-10', false, 'cccc1111-1111-1111-1111-111111111111');
+-- Sample Events (user-created, not canonical — skeleton rows, data lives in overrides)
+INSERT INTO objects (id, class, is_canon, created_by) VALUES
+    ('eeee1111-1111-1111-1111-111111111111', 'event', false, 'cccc1111-1111-1111-1111-111111111111'),
+    ('eeee2222-2222-2222-2222-222222222222', 'event', false, 'cccc1111-1111-1111-1111-111111111111');
 
 INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
     ('eeee1111-1111-1111-1111-111111111111', 'meeting', true),
@@ -120,6 +120,21 @@ INSERT INTO objects_overrides (user_id, object_id, map_x, map_y, shared_notes) V
     -- Projects (no map position — off-landscape, shown in detail panels)
     ('cccc1111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', NULL, NULL, NULL),
     ('cccc1111-1111-1111-1111-111111111111', 'bbbb2222-2222-2222-2222-222222222222', NULL, NULL, NULL),
-    -- Events (no map position — off-landscape, shown in detail panels)
+    -- Events (no map position — off-landscape, data lives in overrides per Option B)
     ('cccc1111-1111-1111-1111-111111111111', 'eeee1111-1111-1111-1111-111111111111', NULL, NULL, NULL),
     ('cccc1111-1111-1111-1111-111111111111', 'eeee2222-2222-2222-2222-222222222222', NULL, NULL, NULL);
+
+-- Event data in overrides (Option B: user-created object data lives in overrides)
+UPDATE objects_overrides SET
+    name = 'Sundance Meeting',
+    title = 'Ran into Alan Bergman at a screening',
+    event_date = '2025-01-25'
+WHERE user_id = 'cccc1111-1111-1111-1111-111111111111'
+  AND object_id = 'eeee1111-1111-1111-1111-111111111111';
+
+UPDATE objects_overrides SET
+    name = 'Avatar 3 Development Update',
+    title = 'Discussed production timeline with Disney team',
+    event_date = '2025-03-10'
+WHERE user_id = 'cccc1111-1111-1111-1111-111111111111'
+  AND object_id = 'eeee2222-2222-2222-2222-222222222222';

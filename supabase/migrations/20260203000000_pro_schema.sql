@@ -18,7 +18,7 @@ DROP VIEW IF EXISTS user_objects CASCADE;
 DROP VIEW IF EXISTS objects_with_types CASCADE;
 DROP TABLE IF EXISTS coterie_reviews CASCADE;
 DROP TABLE IF EXISTS coteries_maps CASCADE;
-DROP TABLE IF EXISTS coterie_members CASCADE;
+DROP TABLE IF EXISTS coteries_members CASCADE;
 DROP TABLE IF EXISTS coteries CASCADE;
 DROP TABLE IF EXISTS maps_objects CASCADE;
 DROP TABLE IF EXISTS maps CASCADE;
@@ -163,7 +163,7 @@ INSERT INTO types (id, display_name, class, icon, color, is_canon) VALUES
 CREATE TABLE objects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     class TEXT NOT NULL REFERENCES classes(id),
-    name TEXT NOT NULL,
+    name TEXT,                           -- NULL for user-created objects (data lives in overrides)
     title TEXT,                          -- subtitle/description: job title, company tagline, logline
     status TEXT,                         -- lifecycle: active, development, released, defunct, etc.
     phone TEXT,                          -- primary phone (companies/projects only)
@@ -384,6 +384,7 @@ CREATE TABLE objects_overrides (
     website TEXT,
     address TEXT,
     photo_url TEXT,
+    event_date DATE,                    -- when the event occurred (events only)
     data JSONB,
 
     -- Landscape position (always per-user)
@@ -491,7 +492,7 @@ CREATE TABLE coteries (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE coterie_members (
+CREATE TABLE coteries_members (
     coterie_id UUID NOT NULL REFERENCES coteries(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'member',  -- 'owner', 'member'
@@ -499,7 +500,7 @@ CREATE TABLE coterie_members (
     PRIMARY KEY (coterie_id, user_id)
 );
 
-CREATE INDEX idx_coterie_members_user ON coterie_members(user_id);
+CREATE INDEX idx_coteries_members_user ON coteries_members(user_id);
 
 -- Maps shared with coteries
 CREATE TABLE coteries_maps (
@@ -571,7 +572,7 @@ SELECT
     COALESCE(ov.website, o.website) AS website,
     COALESCE(ov.address, o.address) AS address,
     COALESCE(ov.photo_url, o.photo_url) AS photo_url,
-    o.event_date,
+    COALESCE(ov.event_date, o.event_date) AS event_date,
     o.is_canon,
     o.created_by,
     ov.map_x,

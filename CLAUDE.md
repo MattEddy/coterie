@@ -286,7 +286,7 @@ This is what makes Coterie not a data broker. It's the anti-ZoomInfo stance, enf
 
 ### Key design decisions
 
-- **Soft delete** (`is_active`) on objects, connections, and overrides — never lose data
+- **Deletion strategy**: Canonical tables (`objects`, `connections`) use soft delete (`is_active`). User tables (`objects_overrides`, `connections_overrides`) use hard delete — no zombie rows. User-created objects are hard-deleted when orphaned (no remaining connections). `connections_overrides` has a `deactivated` boolean for overriding canonical connections only.
 - **Every object gets a registry row** — `objects` is an entity registry, not curated truth. `is_canon` boolean distinguishes vetted from user-created. No orphan objects, ever.
 - **`objects_overrides.object_id` is always set** — no more `NULL` = user-created pattern. Overrides always point to an `objects` row.
 - **Landscape coordinates always live in overrides**, never canonical — everyone has their own layout

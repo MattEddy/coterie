@@ -569,3 +569,228 @@
 .relationshipButton:hover {
   background: rgba(59, 130, 246, 0.15);
 }
+
+/* ===== CONNECTED ITEMS (projects/events) ===== */
+
+.itemList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item {
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.itemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 8px;
+  font-family: var(--font-sans);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.itemHeader:hover {
+  background: var(--color-surface-2);
+}
+
+.itemHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.itemChevron {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.itemName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.itemHeader:not(.itemHeaderExpanded) .itemName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemDate {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.itemStatus {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: capitalize;
+  color: var(--color-project);
+  background: var(--color-project-dim);
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.itemBody {
+  padding: 4px 8px 8px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--color-border);
+}
+
+.itemDescription {
+  font-size: 12px;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.itemTypes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.itemMeta {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  text-transform: capitalize;
+}
+
+.itemActions {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.iconButtonSmDanger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.iconButtonSmDanger:hover {
+  color: var(--color-event);
+  background: var(--color-event-dim);
+}
+
+.itemEditBody {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ===== CREATE FORM ===== */
+
+.createForm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px dashed var(--color-border);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.createInput {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  width: 100%;
+  field-sizing: content;
+  resize: none;
+}
+
+.createInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.createInput::placeholder {
+  color: #555;
+}
+
+.createInput[type="date"] {
+  color-scheme: dark;
+}
+
+.createInput[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(45%) sepia(80%) saturate(2000%) hue-rotate(200deg) brightness(100%);
+  cursor: pointer;
+}
+
+.searchInput {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  width: 100%;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.searchInput::placeholder {
+  color: #555;
+}
+
+.linkedList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.linkedItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.linkedName {
+  font-size: 12px;
+  color: var(--color-text);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.createFormActions {
+  display: flex;
+  gap: 6px;
+}

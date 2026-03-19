@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
 import { useReactFlow, useStore, useViewport } from '@xyflow/react'
-import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, Plus } from 'lucide-react'
+import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, Plus, ChevronDown, ChevronRight, Search, Link } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { ObjectNodeData, ContactEntry } from './ObjectNode'
@@ -47,6 +47,40 @@ const contactTypes = ['phone', 'email', 'url', 'address', 'social']
 
 const emptyContact = (): ContactEntry => ({ type: 'phone', label: '', value: '' })
 
+// Connection type mapping: which connection to create based on the selected node's class
+const connectionConfig: Record<string, Record<string, { type: string; nodeIsSource: boolean }>> = {
+  person: {
+    project: { type: 'attached_to', nodeIsSource: true },
+    event:   { type: 'participated_in', nodeIsSource: true },
+  },
+  company: {
+    project: { type: 'produces', nodeIsSource: true },
+    event:   { type: 'held_at', nodeIsSource: false },  // event → company
+  },
+}
+
+// All connection types that link to projects or events
+const projectConnectionTypes = ['attached_to', 'produces']
+const eventConnectionTypes = ['participated_in', 'regarding', 'held_at']
+
+interface LinkedObject {
+  id: string
+  name: string
+  class: string
+  connectionType: string
+}
+
+interface ConnectedItem {
+  id: string
+  name: string
+  title: string | null
+  status: string | null
+  event_date: string | null
+  types: string[]
+  connectionType: string
+  linkedObjects?: LinkedObject[]
+}
+
 // --- Tag Input Component ---
 
 interface TagInputProps {
@@ -55,9 +89,10 @@ interface TagInputProps {
   objectClass: string
   placeholder: string
   userId: string
+  autoFocus?: boolean
 }
 
-function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInputProps) {
+function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus: shouldAutoFocus = true }: TagInputProps) {
   const [inputValue, setInputValue] = useState('')
   const [suggestions, setSuggestions] = useState<{ id: string; display_name: string; is_canon: boolean }[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -66,8 +101,8 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInput
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+    if (shouldAutoFocus) inputRef.current?.focus()
+  }, [shouldAutoFocus])
 
   useEffect(() => {
     if (inputValue.length < 1) {
@@ -170,7 +205,7 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInput
           onChange={e => {
             setInputValue(e.target.value)
             setShowSuggestions(true)
-            setHighlightIndex(-1)
+            setHighlightIndex(0)
           }}
           onFocus={() => setShowSuggestions(true)}
           onBlur={() => {
@@ -193,6 +228,125 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId }: TagInput
               {s.is_canon && <span className={styles.canonBadge}>canon</span>}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// --- Object Search Input (for name matching + link search) ---
+
+interface ObjectSearchProps {
+  userId: string
+  targetClass?: string        // filter to a specific class (e.g. 'project')
+  excludeIds?: string[]       // IDs to exclude from results
+  placeholder: string
+  onSelect: (obj: { id: string; name: string; class: string }) => void
+  onCreateNew?: (name: string) => void  // if provided, allows creating new from typed text
+  autoFocus?: boolean
+}
+
+function ObjectSearch({ userId, targetClass, excludeIds = [], placeholder, onSelect, onCreateNew, autoFocus }: ObjectSearchProps) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<{ id: string; name: string; class: string; title: string | null }[]>([])
+  const [showResults, setShowResults] = useState(false)
+  const [highlightIndex, setHighlightIndex] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus()
+  }, [autoFocus])
+
+  useEffect(() => {
+    if (query.length < 2) {
+      setResults([])
+      return
+    }
+
+    let q = supabase
+      .from('user_objects')
+      .select('id, name, class, title')
+      .eq('user_id', userId)
+      .ilike('name', `%${query}%`)
+      .limit(8)
+
+    if (targetClass) {
+      q = q.eq('class', targetClass)
+    } else {
+      // For link search, show landscape objects + projects
+      q = q.in('class', ['company', 'person', 'project'])
+    }
+
+    q.then(({ data }) => {
+      if (data) {
+        setResults(data.filter(o => !excludeIds.includes(o.id)))
+        setHighlightIndex(0)
+      }
+    })
+  }, [query, userId, targetClass, excludeIds])
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    const hasResults = results.length > 0
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlightIndex(prev => Math.min(prev + 1, results.length - (onCreateNew ? 0 : 1)))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlightIndex(prev => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (hasResults && highlightIndex < results.length) {
+        onSelect(results[highlightIndex])
+        setQuery('')
+        setResults([])
+      } else if (onCreateNew && query.trim()) {
+        onCreateNew(query.trim())
+        setQuery('')
+        setResults([])
+      }
+    }
+  }
+
+  return (
+    <div className={styles.tagInputContainer}>
+      <input
+        ref={inputRef}
+        className={styles.searchInput}
+        value={query}
+        onChange={e => {
+          setQuery(e.target.value)
+          setShowResults(true)
+          setHighlightIndex(0)
+        }}
+        onFocus={() => setShowResults(true)}
+        onBlur={() => setTimeout(() => setShowResults(false), 200)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        autoComplete="off"
+      />
+      {showResults && (results.length > 0 || (onCreateNew && query.trim())) && (
+        <div className={styles.suggestions}>
+          {results.map((r, i) => (
+            <button
+              key={r.id}
+              className={`${styles.suggestion} ${i === highlightIndex ? styles.suggestionHighlight : ''}`}
+              onMouseDown={() => { onSelect(r); setQuery(''); setResults([]) }}
+              type="button"
+            >
+              <span>{r.name}</span>
+              <span className={styles.canonBadge}>{r.class}</span>
+            </button>
+          ))}
+          {onCreateNew && query.trim() && (
+            <button
+              className={`${styles.suggestion} ${highlightIndex === results.length ? styles.suggestionHighlight : ''}`}
+              onMouseDown={() => { onCreateNew(query.trim()); setQuery(''); setResults([]) }}
+              type="button"
+            >
+              <span>Create "{query.trim()}"</span>
+              <span className={styles.canonBadge}>new</span>
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -251,7 +405,264 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     private_notes: object.private_notes || '',
   })
 
+  // Connected items (projects/events)
+  const [connectedProjects, setConnectedProjects] = useState<ConnectedItem[]>([])
+  const [connectedEvents, setConnectedEvents] = useState<ConnectedItem[]>([])
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [editItemValues, setEditItemValues] = useState({ name: '', title: '', status: '', event_date: '' })
+  const [editItemTypes, setEditItemTypes] = useState<string[]>([])
+
+  // Linked objects for expanded items
+  const [linkedObjects, setLinkedObjects] = useState<LinkedObject[]>([])
+  const [showLinkSearch, setShowLinkSearch] = useState(false)
+
+  // Create form state
+  const [creatingProject, setCreatingProject] = useState(false)
+  const [creatingEvent, setCreatingEvent] = useState(false)
+  const [newItemLinks, setNewItemLinks] = useState<{ id: string; name: string; class: string }[]>([])
+  const [newItemValues, setNewItemValues] = useState({ name: '', title: '', status: '', event_date: '' })
+  const [newItemTypes, setNewItemTypes] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
+
   const placeholders = classPlaceholders[object.class] || classPlaceholders.company
+
+  // Load connected projects/events when tab activates
+  const loadConnectedItems = useCallback(async (objectId: string, targetClass: 'project' | 'event') => {
+    if (!user) return
+
+    const relevantTypes = targetClass === 'project' ? projectConnectionTypes : eventConnectionTypes
+
+    // Query canonical connections
+    const { data: canonConns } = await supabase
+      .from('connections')
+      .select('id, source_id, target_id, type')
+      .eq('is_active', true)
+      .or(`source_id.eq.${objectId},target_id.eq.${objectId}`)
+      .in('type', relevantTypes)
+
+    // Query user-created connections (existence = active, no is_active flag)
+    const { data: userConns } = await supabase
+      .from('connections_overrides')
+      .select('id, source_id, target_id, type')
+      .eq('user_id', user.id)
+      .is('connection_id', null)
+      .or(`source_id.eq.${objectId},target_id.eq.${objectId}`)
+      .in('type', relevantTypes)
+
+    // Also check for deactivated canonical connections (to exclude them)
+    const { data: deactivated } = await supabase
+      .from('connections_overrides')
+      .select('connection_id')
+      .eq('user_id', user.id)
+      .not('connection_id', 'is', null)
+      .eq('deactivated', true)
+
+    const deactivatedIds = new Set((deactivated || []).map(d => d.connection_id))
+
+    // Collect the "other" object IDs and their connection types
+    const filteredCanon = (canonConns || []).filter(c => !deactivatedIds.has(c.id))
+    const allConns = [...filteredCanon, ...(userConns || [])]
+    const itemMap = new Map<string, string>()  // objectId → connectionType
+    for (const c of allConns) {
+      const otherId = c.source_id === objectId ? c.target_id : c.source_id
+      if (otherId) itemMap.set(otherId, c.type)
+    }
+
+    if (itemMap.size === 0) {
+      if (targetClass === 'project') setConnectedProjects([])
+      else setConnectedEvents([])
+      return
+    }
+
+    // Fetch the connected objects — try user_objects first, fall back to objects
+    const ids = Array.from(itemMap.keys())
+    const { data: userObjs } = await supabase
+      .from('user_objects')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('class', targetClass)
+      .in('id', ids)
+
+    // For any IDs not found in user_objects (no override row), query objects directly
+    const foundIds = new Set((userObjs || []).map(o => o.id))
+    const missingIds = ids.filter(id => !foundIds.has(id))
+    let fallbackObjs: typeof userObjs = []
+    if (missingIds.length > 0) {
+      const { data } = await supabase
+        .from('objects')
+        .select('id, class, name, title, status, event_date')
+        .eq('class', targetClass)
+        .eq('is_active', true)
+        .in('id', missingIds)
+      fallbackObjs = data || []
+    }
+
+    const items: ConnectedItem[] = [
+      ...(userObjs || []).map(o => ({
+        id: o.id,
+        name: o.name || '(unnamed)',
+        title: o.title,
+        status: o.status,
+        event_date: o.event_date,
+        types: o.types || [],
+        connectionType: itemMap.get(o.id) || '',
+      })),
+      ...(fallbackObjs || []).map(o => ({
+        id: o.id,
+        name: o.name || '(unnamed)',
+        title: o.title,
+        status: o.status,
+        event_date: o.event_date,
+        types: [],
+        connectionType: itemMap.get(o.id) || '',
+      })),
+    ]
+
+    // Sort: events by date desc, projects alphabetically
+    if (targetClass === 'event') {
+      items.sort((a, b) => (b.event_date || '').localeCompare(a.event_date || ''))
+    } else {
+      items.sort((a, b) => (a.name).localeCompare(b.name))
+    }
+
+    if (targetClass === 'project') setConnectedProjects(items)
+    else setConnectedEvents(items)
+  }, [user])
+
+  useEffect(() => {
+    if (activeTab === 'projects') loadConnectedItems(object.id, 'project')
+    if (activeTab === 'events') loadConnectedItems(object.id, 'event')
+  }, [activeTab, object.id, loadConnectedItems])
+
+  // Load all objects linked to a specific event/project (for expanded view)
+  const loadLinkedObjects = useCallback(async (itemId: string) => {
+    if (!user) return
+
+    // Get all connections involving this item
+    const { data: canonConns } = await supabase
+      .from('connections')
+      .select('id, source_id, target_id, type')
+      .eq('is_active', true)
+      .or(`source_id.eq.${itemId},target_id.eq.${itemId}`)
+
+    const { data: userConns } = await supabase
+      .from('connections_overrides')
+      .select('source_id, target_id, type')
+      .eq('user_id', user.id)
+      .is('connection_id', null)
+      .or(`source_id.eq.${itemId},target_id.eq.${itemId}`)
+
+    const { data: deactivated } = await supabase
+      .from('connections_overrides')
+      .select('connection_id')
+      .eq('user_id', user.id)
+      .not('connection_id', 'is', null)
+      .eq('deactivated', true)
+
+    const deactivatedIds = new Set((deactivated || []).map(d => d.connection_id))
+    const filteredCanon = (canonConns || []).filter(c => !deactivatedIds.has(c.id))
+    const allConns = [...filteredCanon, ...(userConns || [])]
+    const otherMap = new Map<string, string>()  // otherId → connectionType
+    for (const c of allConns) {
+      const otherId = c.source_id === itemId ? c.target_id : c.source_id
+      if (otherId && otherId !== object.id) otherMap.set(otherId, c.type)
+    }
+
+    if (otherMap.size === 0) {
+      setLinkedObjects([])
+      return
+    }
+
+    const { data: objs } = await supabase
+      .from('user_objects')
+      .select('id, name, class')
+      .eq('user_id', user.id)
+      .in('id', Array.from(otherMap.keys()))
+
+    // Fallback for objects not in user_objects
+    const foundIds = new Set((objs || []).map(o => o.id))
+    const missingIds = Array.from(otherMap.keys()).filter(id => !foundIds.has(id))
+    let fallback: { id: string; name: string; class: string }[] = []
+    if (missingIds.length > 0) {
+      const { data } = await supabase
+        .from('objects')
+        .select('id, name, class')
+        .eq('is_active', true)
+        .in('id', missingIds)
+      fallback = (data || []).map(o => ({ id: o.id, name: o.name || '(unnamed)', class: o.class }))
+    }
+
+    setLinkedObjects([
+      ...(objs || []).map(o => ({ id: o.id, name: o.name || '(unnamed)', class: o.class, connectionType: otherMap.get(o.id) || '' })),
+      ...fallback.map(o => ({ ...o, connectionType: otherMap.get(o.id) || '' })),
+    ])
+  }, [user, object.id])
+
+  // When an item is expanded, load its linked objects
+  useEffect(() => {
+    if (expandedItemId) {
+      loadLinkedObjects(expandedItemId)
+      setShowLinkSearch(false)
+    } else {
+      setLinkedObjects([])
+    }
+  }, [expandedItemId, loadLinkedObjects])
+
+  // Link an existing object to an event/project
+  async function linkObjectToItem(itemId: string, targetObj: { id: string; name: string; class: string }, itemClass: 'project' | 'event') {
+    if (!user) return
+    // Determine connection type based on what we're linking
+    const config = connectionConfig[targetObj.class]?.[itemClass]
+    if (!config) return
+
+    await supabase.from('connections_overrides').insert({
+      user_id: user.id,
+      source_id: config.nodeIsSource ? targetObj.id : itemId,
+      target_id: config.nodeIsSource ? itemId : targetObj.id,
+      type: config.type,
+    })
+
+    loadLinkedObjects(itemId)
+    onObjectUpdated?.()
+  }
+
+  // Link existing project to current node (feature A: name matching picked an existing project)
+  async function linkExistingItem(existingId: string, targetClass: 'project' | 'event') {
+    if (!user) return
+    setSaving(true)
+
+    const config = connectionConfig[object.class]?.[targetClass]
+    if (config) {
+      await supabase.from('connections_overrides').insert({
+        user_id: user.id,
+        source_id: config.nodeIsSource ? object.id : existingId,
+        target_id: config.nodeIsSource ? existingId : object.id,
+        type: config.type,
+      })
+
+      // Ensure override row exists so it shows up in user_objects
+      const { data: existing } = await supabase
+        .from('objects_overrides')
+        .select('id')
+        .eq('object_id', existingId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (!existing) {
+        await supabase.from('objects_overrides').insert({ user_id: user.id, object_id: existingId })
+      }
+    }
+
+    setSaving(false)
+    if (targetClass === 'project') {
+      setCreatingProject(false)
+      loadConnectedItems(object.id, 'project')
+    } else {
+      setCreatingEvent(false)
+      loadConnectedItems(object.id, 'event')
+    }
+    onObjectUpdated?.()
+  }
 
   // Reset all state when object changes
   useEffect(() => {
@@ -259,6 +670,14 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     setShowTagInput(false)
     setContactEditing(false)
     setNotesEditing(false)
+    setCreatingProject(false)
+    setCreatingEvent(false)
+    setExpandedItemId(null)
+    setEditingItemId(null)
+    setDateInputActive(false)
+    setLinkedObjects([])
+    setShowLinkSearch(false)
+    setNewItemLinks([])
     setHeaderValues({ name: object.name || '', title: object.title || '' })
     setEditTypes(object.types || [])
     setEditContacts(object.data?.contacts ?? [])
@@ -295,7 +714,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     top = Math.max(GAP, Math.min(top, vh - h - GAP))
 
     setPos({ left, top })
-  }, [nodeRect, activeTab, headerEditing, contactEditing, notesEditing, showTagInput, object.id])
+  }, [nodeRect, activeTab, headerEditing, contactEditing, notesEditing, showTagInput, creatingProject, creatingEvent, expandedItemId, editingItemId, object.id])
 
   // --- Save functions ---
 
@@ -331,7 +750,6 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
   async function saveContact() {
     if (!user) return
-    // Filter out empty entries
     const cleaned = editContacts.filter(c => c.value.trim())
     const data = { ...(object.data || {}), contacts: cleaned.length > 0 ? cleaned : undefined }
     await supabase
@@ -357,10 +775,562 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     onObjectUpdated?.()
   }
 
+  async function createConnectedItem(targetClass: 'project' | 'event') {
+    if (!user || !newItemValues.name.trim()) return
+    setSaving(true)
+
+    // 1. Create skeleton objects row
+    const { data: newObj } = await supabase
+      .from('objects')
+      .insert({ class: targetClass, is_canon: false, created_by: user.id })
+      .select('id')
+      .single()
+
+    if (!newObj) { setSaving(false); return }
+
+    // 2. Create objects_overrides with all user data
+    const overridePayload: Record<string, unknown> = {
+      user_id: user.id,
+      object_id: newObj.id,
+      name: newItemValues.name.trim(),
+      title: newItemValues.title.trim() || null,
+      status: newItemValues.status.trim() || null,
+    }
+    if (targetClass === 'event' && newItemValues.event_date) {
+      overridePayload.event_date = newItemValues.event_date
+    }
+    await supabase.from('objects_overrides').insert(overridePayload)
+
+    // 3. Create types overrides
+    if (newItemTypes.length > 0) {
+      await supabase
+        .from('objects_types_overrides')
+        .insert(newItemTypes.map(typeId => ({ user_id: user.id, object_id: newObj.id, type_id: typeId })))
+    }
+
+    // 4. Create connection to current node
+    const config = connectionConfig[object.class]?.[targetClass]
+    if (config) {
+      await supabase.from('connections_overrides').insert({
+        user_id: user.id,
+        source_id: config.nodeIsSource ? object.id : newObj.id,
+        target_id: config.nodeIsSource ? newObj.id : object.id,
+        type: config.type,
+      })
+    }
+
+    // 5. Create additional connections from the link picker
+    for (const link of newItemLinks) {
+      const linkConfig = connectionConfig[link.class]?.[targetClass]
+      if (linkConfig) {
+        await supabase.from('connections_overrides').insert({
+          user_id: user.id,
+          source_id: linkConfig.nodeIsSource ? link.id : newObj.id,
+          target_id: linkConfig.nodeIsSource ? newObj.id : link.id,
+          type: linkConfig.type,
+        })
+      }
+    }
+
+    // Reset and reload
+    setSaving(false)
+    setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+    setNewItemTypes([])
+    setNewItemLinks([])
+    if (targetClass === 'project') {
+      setCreatingProject(false)
+      loadConnectedItems(object.id, 'project')
+    } else {
+      setCreatingEvent(false)
+      loadConnectedItems(object.id, 'event')
+    }
+    onObjectUpdated?.()
+  }
+
+  async function saveEditItem(itemId: string, targetClass: 'project' | 'event') {
+    if (!user) return
+    setSaving(true)
+
+    const payload: Record<string, unknown> = {
+      name: editItemValues.name.trim() || null,
+      title: editItemValues.title.trim() || null,
+      status: editItemValues.status.trim() || null,
+    }
+    if (targetClass === 'event') {
+      payload.event_date = editItemValues.event_date || null
+    }
+
+    // Upsert override (might not exist yet for canonical objects)
+    const { data: existing } = await supabase
+      .from('objects_overrides')
+      .select('id')
+      .eq('object_id', itemId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (existing) {
+      await supabase
+        .from('objects_overrides')
+        .update(payload)
+        .eq('object_id', itemId)
+        .eq('user_id', user.id)
+    } else {
+      await supabase
+        .from('objects_overrides')
+        .insert({ user_id: user.id, object_id: itemId, ...payload })
+    }
+
+    // Save types
+    await supabase
+      .from('objects_types_overrides')
+      .delete()
+      .eq('object_id', itemId)
+      .eq('user_id', user.id)
+    if (editItemTypes.length > 0) {
+      await supabase
+        .from('objects_types_overrides')
+        .insert(editItemTypes.map(typeId => ({ user_id: user.id, object_id: itemId, type_id: typeId })))
+    }
+
+    setSaving(false)
+    setEditingItemId(null)
+    loadConnectedItems(object.id, targetClass)
+    onObjectUpdated?.()
+  }
+
+  async function deleteConnectedItem(itemId: string, targetClass: 'project' | 'event') {
+    if (!user) return
+
+    // Deactivate canonical connections between this node and the item
+    const { data: canonConns } = await supabase
+      .from('connections')
+      .select('id')
+      .eq('is_active', true)
+      .or(`and(source_id.eq.${object.id},target_id.eq.${itemId}),and(source_id.eq.${itemId},target_id.eq.${object.id})`)
+
+    if (canonConns && canonConns.length > 0) {
+      for (const conn of canonConns) {
+        await supabase.from('connections_overrides').upsert({
+          user_id: user.id,
+          connection_id: conn.id,
+          deactivated: true,
+        }, { onConflict: 'user_id,connection_id' })
+      }
+    }
+
+    // Hard delete user-created connections between this node and the item
+    await supabase
+      .from('connections_overrides')
+      .delete()
+      .eq('user_id', user.id)
+      .is('connection_id', null)
+      .or(`and(source_id.eq.${object.id},target_id.eq.${itemId}),and(source_id.eq.${itemId},target_id.eq.${object.id})`)
+
+    // Check if the item has any remaining connections for this user
+    // Canonical connections not deactivated by this user
+    const { data: allCanonConns } = await supabase
+      .from('connections')
+      .select('id')
+      .eq('is_active', true)
+      .or(`source_id.eq.${itemId},target_id.eq.${itemId}`)
+
+    const { data: allDeactivated } = await supabase
+      .from('connections_overrides')
+      .select('connection_id')
+      .eq('user_id', user.id)
+      .not('connection_id', 'is', null)
+      .eq('deactivated', true)
+
+    const deactivatedIds = new Set((allDeactivated || []).map(d => d.connection_id))
+    const activeCanon = (allCanonConns || []).filter(c => !deactivatedIds.has(c.id)).length
+
+    // Remaining user-created connections
+    const { count: remainingUser } = await supabase
+      .from('connections_overrides')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .is('connection_id', null)
+      .or(`source_id.eq.${itemId},target_id.eq.${itemId}`)
+
+    const totalRemaining = activeCanon + (remainingUser || 0)
+
+    // If no remaining connections, clean up the orphaned item
+    if (totalRemaining <= 0) {
+      // Hard delete the user's override
+      await supabase
+        .from('objects_overrides')
+        .delete()
+        .eq('object_id', itemId)
+        .eq('user_id', user.id)
+
+      // Hard delete type overrides
+      await supabase
+        .from('objects_types_overrides')
+        .delete()
+        .eq('object_id', itemId)
+        .eq('user_id', user.id)
+
+      // If user created it and it's not canonical, hard delete the objects row too
+      const { data: obj } = await supabase
+        .from('objects')
+        .select('is_canon, created_by')
+        .eq('id', itemId)
+        .single()
+
+      if (obj && !obj.is_canon && obj.created_by === user.id) {
+        await supabase
+          .from('objects')
+          .delete()
+          .eq('id', itemId)
+      }
+    }
+
+    setExpandedItemId(null)
+    setEditingItemId(null)
+    loadConnectedItems(object.id, targetClass)
+    onObjectUpdated?.()
+  }
+
+  function formatDate(dateStr: string | null): string {
+    if (!dateStr) return ''
+    const d = new Date(dateStr + 'T00:00:00')
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
   // Off-screen detection
   const nodeOffScreen = !nodeRect ||
     nodeRect.bottom < 0 || nodeRect.top > window.innerHeight ||
     nodeRect.right < 0 || nodeRect.left > window.innerWidth
+
+  const [dateInputActive, setDateInputActive] = useState(false)
+
+  // --- Create form (reused for projects and events) ---
+  // IDs already connected to this node (to exclude from search)
+  const connectedIds = useMemo(() => {
+    const ids = [object.id]
+    for (const p of connectedProjects) ids.push(p.id)
+    for (const e of connectedEvents) ids.push(e.id)
+    return ids
+  }, [object.id, connectedProjects, connectedEvents])
+
+  function renderCreateForm(targetClass: 'project' | 'event') {
+    return (
+      <div className={styles.createForm}>
+        {targetClass === 'event' && (
+          <TagInput
+            tags={newItemTypes}
+            onChange={setNewItemTypes}
+            objectClass="event"
+            placeholder="Event Type(s)"
+            userId={user!.id}
+          />
+        )}
+
+        {/* Feature A: Project name matching — search existing or type new */}
+        {targetClass === 'project' ? (
+          <ObjectSearch
+            userId={user!.id}
+            targetClass="project"
+            excludeIds={connectedIds}
+            placeholder="Project name (search existing or type new)"
+            autoFocus
+            onSelect={proj => linkExistingItem(proj.id, 'project')}
+            onCreateNew={name => setNewItemValues(prev => ({ ...prev, name }))}
+          />
+        ) : (
+          <textarea
+            className={styles.createInput}
+            value={newItemValues.name}
+            onChange={e => setNewItemValues(prev => ({ ...prev, name: e.target.value }))}
+            placeholder="Event name"
+            autoComplete="off"
+            rows={1}
+          />
+        )}
+
+        {/* Only show remaining fields once a new name is set (not linking existing) */}
+        {newItemValues.name && (
+          <>
+            <textarea
+              className={styles.createInput}
+              value={newItemValues.title}
+              onChange={e => setNewItemValues(prev => ({ ...prev, title: e.target.value }))}
+              placeholder="Description"
+              autoComplete="off"
+              rows={1}
+            />
+            {targetClass === 'event' && (
+              <>
+                {dateInputActive || newItemValues.event_date ? (
+                  <input
+                    className={styles.createInput}
+                    type="date"
+                    value={newItemValues.event_date}
+                    onChange={e => setNewItemValues(prev => ({ ...prev, event_date: e.target.value }))}
+                    autoFocus={dateInputActive && !newItemValues.event_date}
+                  />
+                ) : (
+                  <input
+                    className={styles.createInput}
+                    readOnly
+                    placeholder="Event Date"
+                    onFocus={() => setDateInputActive(true)}
+                  />
+                )}
+              </>
+            )}
+            {targetClass === 'project' && (
+              <>
+                <textarea
+                  className={styles.createInput}
+                  value={newItemValues.status}
+                  onChange={e => setNewItemValues(prev => ({ ...prev, status: e.target.value }))}
+                  placeholder="Status"
+                  autoComplete="off"
+                  rows={1}
+                />
+                <TagInput
+                  tags={newItemTypes}
+                  onChange={setNewItemTypes}
+                  objectClass="project"
+                  placeholder="Formats & Genres"
+                  userId={user!.id}
+                  autoFocus={false}
+                />
+              </>
+            )}
+
+            {/* Feature C: Link additional objects during creation */}
+            {newItemLinks.length > 0 && (
+              <div className={styles.linkedList}>
+                <span className={styles.label}>Also linked to</span>
+                {newItemLinks.map(link => (
+                  <div key={link.id} className={styles.linkedItem}>
+                    <span className={styles.linkedName}>{link.name}</span>
+                    <span className={styles.canonBadge}>{link.class}</span>
+                    <button
+                      className={styles.iconButtonSm}
+                      onClick={() => setNewItemLinks(prev => prev.filter(l => l.id !== link.id))}
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <ObjectSearch
+              userId={user!.id}
+              excludeIds={[...connectedIds, ...newItemLinks.map(l => l.id)]}
+              placeholder="Link to another person, company, or project..."
+              onSelect={obj => setNewItemLinks(prev => [...prev, obj])}
+              autoFocus={false}
+            />
+
+            <div className={styles.createFormActions}>
+              <button
+                className={styles.addButton}
+                onClick={() => createConnectedItem(targetClass)}
+                disabled={saving || !newItemValues.name.trim()}
+              >
+                <Check size={12} /> {saving ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                className={styles.addButton}
+                onClick={() => {
+                  if (targetClass === 'project') setCreatingProject(false)
+                  else setCreatingEvent(false)
+                  setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+                  setNewItemTypes([])
+                  setNewItemLinks([])
+                  setDateInputActive(false)
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // --- Item list (reused for projects and events) ---
+  function renderItemList(items: ConnectedItem[], targetClass: 'project' | 'event') {
+    if (items.length === 0) {
+      return <span className={styles.emptyState}>No {targetClass}s yet</span>
+    }
+
+    return (
+      <div className={styles.itemList}>
+        {items.map(item => {
+          const isExpanded = expandedItemId === item.id
+          const isEditing = editingItemId === item.id
+          return (
+            <div key={item.id} className={styles.item}>
+              <button
+                className={`${styles.itemHeader} ${isExpanded ? styles.itemHeaderExpanded : ''}`}
+                onClick={() => {
+                  if (isEditing) return
+                  setExpandedItemId(isExpanded ? null : item.id)
+                  setEditingItemId(null)
+                }}
+              >
+                <div className={styles.itemHeaderLeft}>
+                  {isExpanded
+                    ? <ChevronDown size={12} className={styles.itemChevron} />
+                    : <ChevronRight size={12} className={styles.itemChevron} />
+                  }
+                  <span className={styles.itemName}>{item.name}</span>
+                </div>
+                {targetClass === 'event' && item.event_date && (
+                  <span className={styles.itemDate}>{formatDate(item.event_date)}</span>
+                )}
+                {targetClass === 'project' && item.status && (
+                  <span className={styles.itemStatus}>{item.status}</span>
+                )}
+              </button>
+              {isExpanded && !isEditing && (
+                <div className={styles.itemBody}>
+                  {item.title && <p className={styles.itemDescription}>{item.title}</p>}
+                  {item.types.length > 0 && (
+                    <div className={styles.itemTypes}>
+                      {item.types.map(t => (
+                        <span key={t} className={styles.type}>{t.replace(/_/g, ' ')}</span>
+                      ))}
+                    </div>
+                  )}
+                  {targetClass === 'event' && item.event_date && (
+                    <div className={styles.itemMeta}>{formatDate(item.event_date)}</div>
+                  )}
+                  {targetClass === 'project' && item.status && (
+                    <div className={styles.itemMeta}>{item.status}</div>
+                  )}
+                  {/* Feature D: Show all linked objects */}
+                  {linkedObjects.length > 0 && (
+                    <div className={styles.linkedList}>
+                      <span className={styles.label}>Also linked to</span>
+                      {linkedObjects.map(lo => (
+                        <div key={lo.id} className={styles.linkedItem}>
+                          <span className={styles.linkedName}>{lo.name}</span>
+                          <span className={styles.canonBadge}>{lo.class}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Feature C: Link search in expanded view */}
+                  {showLinkSearch ? (
+                    <ObjectSearch
+                      userId={user!.id}
+                      excludeIds={[object.id, item.id, ...linkedObjects.map(lo => lo.id)]}
+                      placeholder="Link to person, company, or project..."
+                      onSelect={obj => linkObjectToItem(item.id, obj, targetClass)}
+                      autoFocus
+                    />
+                  ) : null}
+
+                  <div className={styles.itemActions}>
+                    <button
+                      className={styles.iconButtonSm}
+                      onClick={() => setShowLinkSearch(!showLinkSearch)}
+                      title="Link to another object"
+                    >
+                      <Link size={11} />
+                    </button>
+                    <button
+                      className={styles.iconButtonSm}
+                      onClick={() => {
+                        setEditingItemId(item.id)
+                        setEditItemValues({
+                          name: item.name || '',
+                          title: item.title || '',
+                          status: item.status || '',
+                          event_date: item.event_date || '',
+                        })
+                        setEditItemTypes(item.types || [])
+                      }}
+                      title="Edit"
+                    >
+                      <Pencil size={11} />
+                    </button>
+                    <button
+                      className={styles.iconButtonSmDanger}
+                      onClick={() => deleteConnectedItem(item.id, targetClass)}
+                      title="Remove"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                </div>
+              )}
+              {isEditing && (
+                <div className={styles.itemEditBody}>
+                  <textarea
+                    className={styles.createInput}
+                    value={editItemValues.name}
+                    onChange={e => setEditItemValues(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Name"
+                    autoComplete="off"
+                    rows={1}
+                    autoFocus
+                  />
+                  <textarea
+                    className={styles.createInput}
+                    value={editItemValues.title}
+                    onChange={e => setEditItemValues(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="Description"
+                    autoComplete="off"
+                    rows={1}
+                  />
+                  {targetClass === 'event' && (
+                    <input
+                      className={styles.createInput}
+                      type="date"
+                      value={editItemValues.event_date}
+                      onChange={e => setEditItemValues(prev => ({ ...prev, event_date: e.target.value }))}
+                    />
+                  )}
+                  {targetClass === 'project' && (
+                    <textarea
+                      className={styles.createInput}
+                      value={editItemValues.status}
+                      onChange={e => setEditItemValues(prev => ({ ...prev, status: e.target.value }))}
+                      placeholder="Status"
+                      autoComplete="off"
+                      rows={1}
+                    />
+                  )}
+                  <TagInput
+                    tags={editItemTypes}
+                    onChange={setEditItemTypes}
+                    objectClass={targetClass}
+                    placeholder={targetClass === 'project' ? 'Formats & Genres' : 'Event Type(s)'}
+                    userId={user!.id}
+                    autoFocus={false}
+                  />
+                  <div className={styles.createFormActions}>
+                    <button
+                      className={styles.addButton}
+                      onClick={() => saveEditItem(item.id, targetClass)}
+                      disabled={saving || !editItemValues.name.trim()}
+                    >
+                      <Check size={12} /> {saving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      className={styles.addButton}
+                      onClick={() => setEditingItemId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <div ref={panelRef} className={styles.panel} style={{ left: pos.left, top: pos.top, width: PANEL_WIDTH, visibility: nodeOffScreen ? 'hidden' : 'visible' } as CSSProperties}>
@@ -626,8 +1596,18 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
           <div className={styles.tabSection}>
             <div className={styles.tabSectionHeader}>
               <h3 className={styles.tabHeading}>Projects</h3>
+              {!creatingProject && (
+                <button className={styles.iconButtonSm} onClick={() => {
+                  setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+                  setNewItemTypes([])
+                  setCreatingProject(true)
+                }} title="Add project">
+                  <Plus size={12} />
+                </button>
+              )}
             </div>
-            <span className={styles.emptyState}>No projects yet</span>
+            {creatingProject && renderCreateForm('project')}
+            {renderItemList(connectedProjects, 'project')}
           </div>
         )}
 
@@ -636,8 +1616,18 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
           <div className={styles.tabSection}>
             <div className={styles.tabSectionHeader}>
               <h3 className={styles.tabHeading}>Events</h3>
+              {!creatingEvent && (
+                <button className={styles.iconButtonSm} onClick={() => {
+                  setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+                  setNewItemTypes([])
+                  setCreatingEvent(true)
+                }} title="Add event">
+                  <Plus size={12} />
+                </button>
+              )}
             </div>
-            <span className={styles.emptyState}>No events yet</span>
+            {creatingEvent && renderCreateForm('event')}
+            {renderItemList(connectedEvents, 'event')}
           </div>
         )}
       </div>

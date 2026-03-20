@@ -20,9 +20,12 @@ import type { ObjectNodeData } from './ObjectNode'
 import DetailPanel from './DetailPanel'
 import MultiSelectPanel from './MultiSelectPanel'
 import CreateObjectForm from './CreateObjectForm'
+import ConnectionRoleForm from './ConnectionRoleForm'
+import RoleEdge from './RoleEdge'
 import styles from './Canvas.module.css'
 
 const nodeTypes = { object: ObjectNode }
+const edgeTypes = { role: RoleEdge }
 
 // Must match ObjectNode.module.css .card width/height
 export const NODE_WIDTH = 180
@@ -62,23 +65,35 @@ function CanvasInner() {
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
   const selectedItemsRef = useRef<SelectedItem[]>([])
   selectedItemsRef.current = selectedItems
-  const connectionsRef = useRef<{ id: string; source_id: string; target_id: string; type: string }[]>([])
+  const nodesRef = useRef<Node[]>([])
+  nodesRef.current = nodes
+  const connectionsRef = useRef<{ id: string; object_a_id: string; object_b_id: string; role_a: string | null; role_b: string | null; isUserCreated: boolean }[]>([])
   const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
   const [createForm, setCreateForm] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
+  const [connectForm, setConnectForm] = useState<{
+    objectA: { id: string; name: string; class: string }
+    objectB: { id: string; name: string; class: string }
+    screenPosition: { x: number; y: number }
+    editingConnectionId?: string
+    isUserCreated?: boolean
+    initialRoleA?: string
+    initialRoleB?: string
+  } | null>(null)
 
   const rebuildEdges = useCallback(() => {
     const flowEdges: Edge[] = connectionsRef.current.map(conn => {
-      const srcPos = nodePositionsRef.current.get(conn.source_id) || { x: 0, y: 0 }
-      const tgtPos = nodePositionsRef.current.get(conn.target_id) || { x: 0, y: 0 }
+      const srcPos = nodePositionsRef.current.get(conn.object_a_id) || { x: 0, y: 0 }
+      const tgtPos = nodePositionsRef.current.get(conn.object_b_id) || { x: 0, y: 0 }
       const { sourceHandle, targetHandle } = getNearestHandles(srcPos, tgtPos)
 
       return {
         id: conn.id,
-        source: conn.source_id,
-        target: conn.target_id,
+        type: 'role',
+        source: conn.object_a_id,
+        target: conn.object_b_id,
         sourceHandle,
         targetHandle,
-        data: { connectionType: conn.type },
+        data: { role_a: conn.role_a, role_b: conn.role_b, highlighted: false },
         style: { stroke: '#444', strokeWidth: 1.5 },
       }
     })
@@ -92,7 +107,7 @@ function CanvasInner() {
 
       const betweenIds = new Set(
         connectionsRef.current
-          .filter(c => selectedIds.has(c.source_id) && selectedIds.has(c.target_id))
+          .filter(c => selectedIds.has(c.object_a_id) && selectedIds.has(c.object_b_id))
           .map(c => c.id)
       )
 
@@ -102,10 +117,8 @@ function CanvasInner() {
             if (betweenIds.has(e.id)) {
               return {
                 ...e,
-                label: (e.data?.connectionType as string)?.replace(/_/g, ' ') || '',
+                data: { ...e.data, highlighted: true },
                 style: { stroke: '#fff', strokeWidth: 2.5 },
-                labelStyle: { fontSize: 10, fill: '#fff' },
-                labelBgStyle: { fill: 'var(--color-bg)', fillOpacity: 0.8 },
               }
             }
             return e
@@ -171,17 +184,68 @@ function CanvasInner() {
     )
 
     const objectIds = objects.map(o => o.id)
-    const { data: connections } = await supabase
-      .from('connections')
-      .select('id, source_id, target_id, type')
-      .eq('is_active', true)
-      .in('source_id', objectIds)
-      .in('target_id', objectIds)
 
-    if (connections) {
-      connectionsRef.current = connections
-      rebuildEdges()
+    // Load canonical connections
+    const { data: canonConns } = await supabase
+      .from('connections')
+      .select('id, object_a_id, object_b_id, role_a, role_b')
+      .eq('is_active', true)
+      .in('object_a_id', objectIds)
+      .in('object_b_id', objectIds)
+
+    // Load user-created connections
+    const { data: userConns } = await supabase
+      .from('connections_overrides')
+      .select('id, object_a_id, object_b_id, role_a, role_b')
+      .eq('user_id', user.id)
+      .is('connection_id', null)
+      .eq('deactivated', false)
+
+    // Filter user connections to only those between visible objects
+    const objectIdSet = new Set(objectIds)
+    const visibleUserConns = (userConns || []).filter(
+      c => c.object_a_id && c.object_b_id && objectIdSet.has(c.object_a_id) && objectIdSet.has(c.object_b_id)
+    )
+
+    // Exclude deactivated canonical connections
+    const { data: deactivated } = await supabase
+      .from('connections_overrides')
+      .select('connection_id')
+      .eq('user_id', user.id)
+      .eq('deactivated', true)
+      .not('connection_id', 'is', null)
+
+    const deactivatedIds = new Set((deactivated || []).map(d => d.connection_id))
+    const visibleCanon = (canonConns || []).filter(c => !deactivatedIds.has(c.id))
+
+    const allConns = [...visibleCanon, ...visibleUserConns]
+
+    // Resolve role UUIDs to display_names for edge labels
+    const roleIds = new Set<string>()
+    for (const c of allConns) {
+      if (c.role_a) roleIds.add(c.role_a)
+      if (c.role_b) roleIds.add(c.role_b)
     }
+
+    let roleMap = new Map<string, string>()
+    if (roleIds.size > 0) {
+      const { data: roles } = await supabase
+        .from('roles')
+        .select('id, display_name')
+        .in('id', Array.from(roleIds))
+      for (const r of roles || []) {
+        roleMap.set(r.id, r.display_name)
+      }
+    }
+
+    const userConnIds = new Set(visibleUserConns.map(c => c.id))
+    connectionsRef.current = allConns.map(c => ({
+      ...c,
+      role_a: c.role_a ? roleMap.get(c.role_a) || null : null,
+      role_b: c.role_b ? roleMap.get(c.role_b) || null : null,
+      isUserCreated: userConnIds.has(c.id),
+    }))
+    rebuildEdges()
   }, [user, setNodes, rebuildEdges])
 
   useEffect(() => {
@@ -282,27 +346,60 @@ function CanvasInner() {
     })
   }, [selectedItems, setNodes])
 
+  // Double-click detection for edges
+  const lastEdgeClickRef = useRef<{ time: number; edgeId: string }>({ time: 0, edgeId: '' })
+
   // Handle edge selection — show label + turn white when selected
   const handleEdgeClick = useCallback(
-    (_event: React.MouseEvent, edge: Edge) => {
+    (event: React.MouseEvent, edge: Edge) => {
+      const now = Date.now()
+      const last = lastEdgeClickRef.current
+
+      if (now - last.time < 400 && last.edgeId === edge.id) {
+        // Double-click on edge — open edit form
+        lastEdgeClickRef.current = { time: 0, edgeId: '' }
+        const conn = connectionsRef.current.find(c => c.id === edge.id)
+        if (!conn) return
+
+        const nodeA = nodesRef.current.find(n => n.id === conn.object_a_id)
+        const nodeB = nodesRef.current.find(n => n.id === conn.object_b_id)
+        if (!nodeA || !nodeB) return
+
+        const posA = nodePositionsRef.current.get(conn.object_a_id) || { x: 0, y: 0 }
+        const posB = nodePositionsRef.current.get(conn.object_b_id) || { x: 0, y: 0 }
+        const midFlow = { x: (posA.x + posB.x) / 2 + NODE_WIDTH / 2, y: (posA.y + posB.y) / 2 + NODE_HEIGHT / 2 }
+        const screenPos = flowToScreenPosition(midFlow)
+
+        const dataA = nodeA.data as unknown as ObjectNodeData
+        const dataB = nodeB.data as unknown as ObjectNodeData
+
+        setConnectForm({
+          objectA: { id: conn.object_a_id, name: dataA.name, class: dataA.class },
+          objectB: { id: conn.object_b_id, name: dataB.name, class: dataB.class },
+          screenPosition: screenPos,
+          editingConnectionId: conn.id,
+          isUserCreated: conn.isUserCreated,
+          initialRoleA: conn.role_a || '',
+          initialRoleB: conn.role_b || '',
+        })
+        return
+      }
+
+      lastEdgeClickRef.current = { time: now, edgeId: edge.id }
       setSelectedItems([])
       setEdges(current =>
         current.map(e => {
           if (e.id === edge.id) {
             return {
               ...e,
-              label: (e.data?.connectionType as string)?.replace(/_/g, ' ') || '',
+              data: { ...e.data, highlighted: true },
               style: { stroke: '#fff', strokeWidth: 2 },
-              labelStyle: { fontSize: 10, fill: '#fff' },
-              labelBgStyle: { fill: 'var(--color-bg)', fillOpacity: 0.8 },
             }
           }
           return {
             ...e,
-            label: undefined,
+            data: { ...e.data, highlighted: false },
             style: { stroke: '#444', strokeWidth: 1.5 },
-            labelStyle: undefined,
-            labelBgStyle: undefined,
           }
         })
       )
@@ -332,14 +429,13 @@ function CanvasInner() {
     lastPaneClickRef.current = { time: now, x: event.clientX, y: event.clientY }
 
     setCreateForm(null)
+    setConnectForm(null)
     // Selection clearing is handled by useOnSelectionChange — just reset edge styles
     setEdges(current =>
       current.map(e => ({
         ...e,
-        label: undefined,
+        data: { ...e.data, highlighted: false },
         style: { stroke: '#444', strokeWidth: 1.5 },
-        labelStyle: undefined,
-        labelBgStyle: undefined,
       }))
     )
   }, [setEdges, screenToFlowPosition])
@@ -400,6 +496,154 @@ function CanvasInner() {
     }])
   }, [user, createForm, refreshData])
 
+  // Handle drag-to-connect between nodes
+  const handleConnect = useCallback((connection: { source: string | null; target: string | null }) => {
+    if (!connection.source || !connection.target || connection.source === connection.target) return
+
+    const sourceNode = nodesRef.current.find(n => n.id === connection.source)
+    const targetNode = nodesRef.current.find(n => n.id === connection.target)
+    if (!sourceNode || !targetNode) return
+
+    const sourceData = sourceNode.data as unknown as ObjectNodeData
+    const targetData = targetNode.data as unknown as ObjectNodeData
+
+    // Position the form at the midpoint between the two nodes
+    const posA = nodePositionsRef.current.get(connection.source) || { x: 0, y: 0 }
+    const posB = nodePositionsRef.current.get(connection.target) || { x: 0, y: 0 }
+    const midFlow = { x: (posA.x + posB.x) / 2 + NODE_WIDTH / 2, y: (posA.y + posB.y) / 2 + NODE_HEIGHT / 2 }
+    const screenPos = flowToScreenPosition(midFlow)
+
+    setConnectForm({
+      objectA: { id: connection.source, name: sourceData.name, class: sourceData.class },
+      objectB: { id: connection.target, name: targetData.name, class: targetData.class },
+      screenPosition: screenPos,
+    })
+  }, [flowToScreenPosition])
+
+  const resolveRoleId = useCallback(async (value: string | null): Promise<string | null> => {
+    if (!value || !user) return null
+
+    // Look up by display_name first (handles both existing selections and typed text)
+    const { data: existing } = await supabase
+      .from('roles')
+      .select('id')
+      .eq('display_name', value)
+      .maybeSingle()
+
+    if (existing) return existing.id
+
+    // Create a new custom role (UUID auto-generated)
+    const { data: newRole, error } = await supabase
+      .from('roles')
+      .insert({
+        display_name: value,
+        is_canon: false,
+        created_by: user.id,
+      })
+      .select('id')
+      .single()
+
+    if (error || !newRole) return null
+    return newRole.id
+  }, [user])
+
+  const handleConnectSubmit = useCallback(async (roleA: string | null, roleB: string | null) => {
+    if (!user || !connectForm) return
+
+    const resolvedA = await resolveRoleId(roleA)
+    const resolvedB = await resolveRoleId(roleB)
+
+    if (connectForm.editingConnectionId) {
+      // Editing existing connection
+      if (connectForm.isUserCreated) {
+        await supabase
+          .from('connections_overrides')
+          .update({ role_a: resolvedA, role_b: resolvedB })
+          .eq('id', connectForm.editingConnectionId)
+      } else {
+        // Canonical connection — create/update override
+        const { data: existing } = await supabase
+          .from('connections_overrides')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('connection_id', connectForm.editingConnectionId)
+          .maybeSingle()
+
+        if (existing) {
+          await supabase
+            .from('connections_overrides')
+            .update({ role_a: resolvedA, role_b: resolvedB })
+            .eq('id', existing.id)
+        } else {
+          await supabase
+            .from('connections_overrides')
+            .insert({
+              user_id: user.id,
+              connection_id: connectForm.editingConnectionId,
+              object_a_id: connectForm.objectA.id,
+              object_b_id: connectForm.objectB.id,
+              role_a: resolvedA,
+              role_b: resolvedB,
+            })
+        }
+      }
+    } else {
+      // Creating new connection
+      await supabase
+        .from('connections_overrides')
+        .insert({
+          user_id: user.id,
+          object_a_id: connectForm.objectA.id,
+          object_b_id: connectForm.objectB.id,
+          role_a: resolvedA,
+          role_b: resolvedB,
+        })
+    }
+
+    setConnectForm(null)
+    await refreshData()
+  }, [user, connectForm, refreshData, resolveRoleId])
+
+  const handleConnectDelete = useCallback(async () => {
+    if (!user || !connectForm?.editingConnectionId) return
+
+    if (connectForm.isUserCreated) {
+      // Hard-delete user-created connection
+      await supabase
+        .from('connections_overrides')
+        .delete()
+        .eq('id', connectForm.editingConnectionId)
+    } else {
+      // Deactivate canonical connection
+      const { data: existing } = await supabase
+        .from('connections_overrides')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('connection_id', connectForm.editingConnectionId)
+        .maybeSingle()
+
+      if (existing) {
+        await supabase
+          .from('connections_overrides')
+          .update({ deactivated: true })
+          .eq('id', existing.id)
+      } else {
+        await supabase
+          .from('connections_overrides')
+          .insert({
+            user_id: user.id,
+            connection_id: connectForm.editingConnectionId,
+            object_a_id: connectForm.objectA.id,
+            object_b_id: connectForm.objectB.id,
+            deactivated: true,
+          })
+      }
+    }
+
+    setConnectForm(null)
+    await refreshData()
+  }, [user, connectForm, refreshData])
+
   const clearSelection = useCallback(() => {
     setSelectedItems([])
   }, [])
@@ -444,9 +688,11 @@ function CanvasInner() {
         onNodeClick={handleNodeClick}
         onSelectionStart={() => { isLassoRef.current = true }}
         onSelectionEnd={() => { setTimeout(() => { isLassoRef.current = false }, 50) }}
+        onConnect={handleConnect}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         minZoom={0.1}
         maxZoom={2}
@@ -512,6 +758,21 @@ function CanvasInner() {
           screenPosition={createForm.screen}
           onSubmit={handleCreateObject}
           onCancel={() => setCreateForm(null)}
+        />
+      )}
+
+      {/* Connection role form (drag handle to handle) */}
+      {connectForm && (
+        <ConnectionRoleForm
+          objectA={connectForm.objectA}
+          objectB={connectForm.objectB}
+          userId={user!.id}
+          screenPosition={connectForm.screenPosition}
+          onSubmit={handleConnectSubmit}
+          onDelete={connectForm.editingConnectionId ? handleConnectDelete : undefined}
+          onCancel={() => setConnectForm(null)}
+          initialRoleA={connectForm.initialRoleA}
+          initialRoleB={connectForm.initialRoleB}
         />
       )}
     </div>

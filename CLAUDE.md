@@ -498,6 +498,9 @@ When ready to deploy:
 - [x] Canvas loads both canonical + user-created connections, filtering deactivated
 - [x] Drag-opens-panel bug fixed (useOnSelectionChange skips single-node mousedown selections)
 - [x] `nodesRef` pattern for stable access to current nodes in edge/connection handlers
+- [x] Dual-select "Connect to" / "Connected to" button (checks existing connections, opens role form)
+- [x] Connection stays highlighted after create/edit form closes
+- [x] Straight connection line style throughout (including drag preview via `connectionLineType`)
 - [x] `--color-text-muted` unified across components, brightened to #999
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)

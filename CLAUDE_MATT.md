@@ -34,6 +34,12 @@ Huge session covering canvas CRUD (add/delete objects, create/edit/delete connec
 
 **Autocomplete dropdown persistence bug.** ConnectionRoleForm's `useEffect` on `value` re-triggered fetch + reopened dropdown after Enter selection (value changes → fetch → show suggestions). Fixed with `isTyping` flag — only fetch when user is actively typing, not on programmatic value changes.
 
+**Dual-select "Connect to" button.** When two objects are selected, each detail panel shows either "Connect to [Name]" (opens ConnectionRoleForm between them) or static "Connected to [Name]" if a connection already exists. Checks both canonical and user-created connections.
+
+**Post-form connection highlight.** After creating or editing a connection via the form, the edge stays highlighted (role labels visible). Captures object IDs before clearing form state, then re-highlights the matching edge after `refreshData()`.
+
+**Straight drag preview line.** The temp line shown while dragging handle-to-handle was still the default bezier. Fixed with `connectionLineType={ConnectionLineType.Straight}`.
+
 **Minor styling.** Muted text color unified to `var(--color-text-muted)` (was hardcoded `#777` on node types). Brightened from `#888` to `#999`. Type tag placeholders updated: person = "Tags (eg jobs, roles, etc.)", company = "Organization Type(s)".
 
 **Company → Organization rename explored.** Matt felt "company" was too narrow — doesn't cover unions, government agencies, departments. Explored "Organization" but felt it was "a little sweaty." Sleeping on it.
@@ -48,7 +54,7 @@ Huge session covering canvas CRUD (add/delete objects, create/edit/delete connec
 - `src/components/ConnectionRoleForm.module.css` — New: role input, suggestions dropdown, delete/connect buttons
 - `src/components/RoleEdge.tsx` — New: custom edge with role labels near endpoints
 - `src/components/DetailPanel.tsx` — Delete with cascade confirmation, `connectionConfig`/`projectConnectionTypes`/`eventConnectionTypes` removed, all queries updated `source_id`→`object_a_id` / `target_id`→`object_b_id`, TagInput uses display_names with UUID resolution on save, type creation uses UUID
-- `src/components/DetailPanel.module.css` — Delete confirmation overlay styles
+- `src/components/DetailPanel.module.css` — Delete confirmation overlay styles, `.relationshipConnected` style
 - `src/components/ObjectNode.tsx` — `is_canon` + `created_by` added to `ObjectNodeData`
 - `src/components/ObjectNode.module.css` — Type color uses `var(--color-text-muted)`
 - `src/styles/global.css` — `--color-text-muted` brightened to `#999`

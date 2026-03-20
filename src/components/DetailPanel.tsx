@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
 import { useReactFlow, useStore, useViewport } from '@xyflow/react'
-import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, Plus, ChevronDown, ChevronRight, Search, Link, Trash2 } from 'lucide-react'
+import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, CalendarCheck, Plus, ChevronDown, ChevronRight, Search, Link, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { ObjectNodeData, ContactEntry } from './ObjectNode'
@@ -1379,13 +1379,23 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             {targetClass === 'event' && (
               <>
                 {dateInputActive || newItemValues.event_date ? (
-                  <input
-                    className={styles.createInput}
-                    type="date"
-                    value={newItemValues.event_date}
-                    onChange={e => setNewItemValues(prev => ({ ...prev, event_date: e.target.value }))}
-                    autoFocus={dateInputActive && !newItemValues.event_date}
-                  />
+                  <div className={styles.dateRow}>
+                    <input
+                      className={styles.createInput}
+                      type="date"
+                      value={newItemValues.event_date}
+                      onChange={e => setNewItemValues(prev => ({ ...prev, event_date: e.target.value }))}
+                      autoFocus={dateInputActive && !newItemValues.event_date}
+                    />
+                    <button
+                      className={styles.todayBtn}
+                      onClick={() => setNewItemValues(prev => ({ ...prev, event_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}` }))}
+                      title="Today"
+                      type="button"
+                    >
+                      <CalendarCheck size={14} />
+                    </button>
+                  </div>
                 ) : (
                   <input
                     className={styles.createInput}
@@ -1600,12 +1610,22 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                     rows={1}
                   />
                   {targetClass === 'event' && (
-                    <input
-                      className={styles.createInput}
-                      type="date"
-                      value={editItemValues.event_date}
-                      onChange={e => setEditItemValues(prev => ({ ...prev, event_date: e.target.value }))}
-                    />
+                    <div className={styles.dateRow}>
+                      <input
+                        className={styles.createInput}
+                        type="date"
+                        value={editItemValues.event_date}
+                        onChange={e => setEditItemValues(prev => ({ ...prev, event_date: e.target.value }))}
+                      />
+                      <button
+                        className={styles.todayBtn}
+                        onClick={() => setEditItemValues(prev => ({ ...prev, event_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}` }))}
+                        title="Today"
+                        type="button"
+                      >
+                        <CalendarCheck size={14} />
+                      </button>
+                    </div>
                   )}
                   {targetClass === 'project' && (
                     <textarea

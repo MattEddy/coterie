@@ -751,8 +751,44 @@
 }
 
 .createInput[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(45%) sepia(80%) saturate(2000%) hue-rotate(200deg) brightness(100%);
+  filter: invert(45%) sepia(98%) saturate(2000%) hue-rotate(200deg) brightness(100%);
   cursor: pointer;
+  order: 2;
+}
+
+.dateRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.dateRow .createInput {
+  width: 100%;
+  direction: rtl;
+}
+
+.dateRow .createInput::-webkit-datetime-edit {
+  direction: ltr;
+  margin-right: auto;
+}
+
+.todayBtn {
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  transition: opacity 0.15s;
+}
+
+.todayBtn:hover {
+  opacity: 0.8;
 }
 
 .searchInput {

@@ -10,6 +10,7 @@ import {
   useOnSelectionChange,
   BackgroundVariant,
   SelectionMode,
+  ConnectionLineType,
 } from '@xyflow/react'
 import type { Node, Edge, NodeChange } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -600,9 +601,24 @@ function CanvasInner() {
         })
     }
 
+    const objectAId = connectForm.objectA.id
+    const objectBId = connectForm.objectB.id
     setConnectForm(null)
     await refreshData()
-  }, [user, connectForm, refreshData, resolveRoleId])
+
+    // Re-highlight the connection after refresh
+    setEdges(current =>
+      current.map(e => {
+        const isMatch =
+          (e.source === objectAId && e.target === objectBId) ||
+          (e.source === objectBId && e.target === objectAId)
+        if (isMatch) {
+          return { ...e, data: { ...e.data, highlighted: true }, style: { stroke: '#fff', strokeWidth: 2 } }
+        }
+        return e
+      })
+    )
+  }, [user, connectForm, refreshData, resolveRoleId, setEdges])
 
   const handleConnectDelete = useCallback(async () => {
     if (!user || !connectForm?.editingConnectionId) return
@@ -647,6 +663,23 @@ function CanvasInner() {
   const clearSelection = useCallback(() => {
     setSelectedItems([])
   }, [])
+
+  // Open connection form between the two selected items
+  const openPeerConnect = useCallback(() => {
+    if (selectedItems.length !== 2) return
+    const a = selectedItems[0]
+    const b = selectedItems[1]
+    const posA = nodePositionsRef.current.get(a.nodeId) || { x: 0, y: 0 }
+    const posB = nodePositionsRef.current.get(b.nodeId) || { x: 0, y: 0 }
+    const midFlow = { x: (posA.x + posB.x) / 2 + NODE_WIDTH / 2, y: (posA.y + posB.y) / 2 + NODE_HEIGHT / 2 }
+    const screenPos = flowToScreenPosition(midFlow)
+
+    setConnectForm({
+      objectA: { id: a.nodeId, name: a.data.name, class: a.data.class },
+      objectB: { id: b.nodeId, name: b.data.name, class: b.data.class },
+      screenPosition: screenPos,
+    })
+  }, [selectedItems, flowToScreenPosition])
 
   // Dual selection: assign opposite sides so panels don't overlap
   const dualSides = selectedItems.length === 2 ? (() => {
@@ -697,6 +730,7 @@ function CanvasInner() {
         minZoom={0.1}
         maxZoom={2}
         zoomOnDoubleClick={false}
+        connectionLineType={ConnectionLineType.Straight}
         panOnScroll
         panOnDrag={[1]}
         panActivationKeyCode="Space"
@@ -731,6 +765,7 @@ function CanvasInner() {
             onObjectUpdated={refreshData}
             peerObject={selectedItems[1].data}
             preferredSide={dualSides[0]}
+            onConnectToPeer={openPeerConnect}
           />
           <DetailPanel
             nodeId={selectedItems[1].nodeId}
@@ -739,6 +774,7 @@ function CanvasInner() {
             onObjectUpdated={refreshData}
             peerObject={selectedItems[0].data}
             preferredSide={dualSides[1]}
+            onConnectToPeer={openPeerConnect}
           />
         </>
       )}

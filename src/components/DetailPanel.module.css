@@ -570,6 +570,14 @@
   background: rgba(59, 130, 246, 0.15);
 }
 
+.relationshipConnected {
+  display: block;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
 /* ===== CONNECTED ITEMS (projects/events) ===== */
 
 .itemList {

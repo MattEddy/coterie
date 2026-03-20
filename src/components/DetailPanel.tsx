@@ -18,6 +18,7 @@ interface DetailPanelProps {
   onObjectUpdated?: () => void
   peerObject?: ObjectNodeData
   preferredSide?: 'left' | 'right'
+  onConnectToPeer?: () => void
 }
 
 type TabId = 'contact' | 'notes' | 'projects' | 'events'
@@ -353,7 +354,7 @@ function ObjectSearch({ userId, targetClass, excludeIds = [], placeholder, onSel
 const GAP = 12
 const PANEL_WIDTH = 300
 
-export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, peerObject, preferredSide }: DetailPanelProps) {
+export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, peerObject, preferredSide, onConnectToPeer }: DetailPanelProps) {
   const { user } = useAuth()
   const { flowToScreenPosition } = useReactFlow()
   const viewport = useViewport()
@@ -426,6 +427,32 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     orphanedProjects: number
     orphanedEvents: number
   } | null>(null)
+
+  // Check if a connection to the peer object already exists
+  const [peerConnected, setPeerConnected] = useState(false)
+
+  useEffect(() => {
+    if (!peerObject || !user) { setPeerConnected(false); return }
+
+    async function check() {
+      const { count: canonCount } = await supabase
+        .from('connections')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .or(`and(object_a_id.eq.${object.id},object_b_id.eq.${peerObject!.id}),and(object_a_id.eq.${peerObject!.id},object_b_id.eq.${object.id})`)
+
+      const { count: userCount } = await supabase
+        .from('connections_overrides')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user!.id)
+        .is('connection_id', null)
+        .eq('deactivated', false)
+        .or(`and(object_a_id.eq.${object.id},object_b_id.eq.${peerObject!.id}),and(object_a_id.eq.${peerObject!.id},object_b_id.eq.${object.id})`)
+
+      setPeerConnected(((canonCount || 0) + (userCount || 0)) > 0)
+    }
+    check()
+  }, [peerObject, object.id, user])
 
   const placeholders = classPlaceholders[object.class] || classPlaceholders.company
 
@@ -1928,9 +1955,13 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       {/* Dual-select relationship action */}
       {peerObject && (
         <div className={styles.relationshipAction}>
-          <button className={styles.relationshipButton}>
-            &#x2194; Link to {peerObject.name}
-          </button>
+          {peerConnected ? (
+            <span className={styles.relationshipConnected}>Connected to {peerObject.name}</span>
+          ) : (
+            <button className={styles.relationshipButton} onClick={onConnectToPeer}>
+              Connect to {peerObject.name}
+            </button>
+          )}
         </div>
       )}
 

@@ -76,7 +76,7 @@ coterie/
 │   ├── pages/
 │   │   ├── Login.tsx           # Email/password login
 │   │   ├── Login.module.css
-│   │   ├── Landscape.tsx       # Main canvas page (top bar + canvas)
+│   │   ├── Landscape.tsx       # Main canvas page (canvas + NavBar + frames)
 │   │   └── Landscape.module.css
 │   ├── components/
 │   │   ├── Canvas.tsx          # React Flow wrapper (loads objects + connections, drag-to-save)
@@ -91,7 +91,18 @@ coterie/
 │   │   ├── CreateObjectForm.module.css
 │   │   ├── ConnectionRoleForm.tsx # Role editor for creating/editing connections
 │   │   ├── ConnectionRoleForm.module.css
-│   │   └── RoleEdge.tsx          # Custom edge with role labels near each endpoint
+│   │   ├── RoleEdge.tsx          # Custom edge with role labels near each endpoint
+│   │   ├── Frame.tsx             # Shared draggable frame (z-index management, close button)
+│   │   ├── Frame.module.css
+│   │   ├── NavBar.tsx            # Fixed top-right nav (account icon, menu popover, logo)
+│   │   ├── NavBar.module.css
+│   │   ├── SearchFrame.tsx       # Search → zoom (keyboard nav, debounced query)
+│   │   ├── SearchFrame.module.css
+│   │   ├── AccountFrame.tsx      # Account details + sign out
+│   │   ├── AccountFrame.module.css
+│   │   ├── MapsFrame.tsx         # Maps management (stub)
+│   │   ├── CoteriesFrame.tsx     # Coteries management (stub)
+│   │   └── SettingsFrame.tsx     # Settings (stub, has © info)
 │   ├── types.ts                # Shared types (NodeRect)
 │   └── styles/
 │       └── global.css          # CSS variables, reset, dark theme
@@ -384,6 +395,47 @@ Edge/connection handlers registered with `useCallback` capture `nodes` at creati
 ### CSS clip-path Stacking Context
 `clip-path` creates a stacking context. A `::before` pseudo-element with `z-index: -1` inside a clip-path parent will render ABOVE the parent's background (covering it), not behind it. Don't use `::before` for border effects on clip-path elements.
 
+### Chrome Extensions and `position: fixed`
+Chrome extensions like Dark Reader (Filter mode) inject `filter` on `<html>` or `<body>`, which creates a new containing block for `position: fixed` elements — they position relative to the ancestor instead of the viewport. Symptoms: fixed elements slide off the right edge proportionally to window width. Safari unaffected. Fix: use `<meta name="darkreader-lock" />` in index.html, or ensure hard reload after CSS changes (Vite HMR doesn't always flush structural CSS changes, which can look identical to this bug).
+
+## UI Architecture: Frames
+
+The app uses a **Frame system** for all UI panels outside the canvas:
+
+- **Frame** (`Frame.tsx`): shared draggable component with header, close button, z-index-on-click (click to bring to front). NavBar z-index 200, frames start at 100.
+- **NavBar** (`NavBar.tsx`): fixed top-right — Account icon, hamburger menu, "Coterie" wordmark (gold). Not draggable.
+- **Menu**: popover from hamburger — Search, Maps, Coteries, Settings. Click opens a Frame, popover dismisses.
+- **Feature frames**: AccountFrame, SearchFrame, MapsFrame, CoteriesFrame, SettingsFrame — each wraps content in a `<Frame>`.
+- **Canvas** exposes `zoomToNode(nodeId)` via `forwardRef` — SearchFrame calls this to zoom + select.
+
+DetailPanel, MultiSelectPanel, CreateObjectForm, and ConnectionRoleForm still use their own positioning (inside the Canvas component). Future: migrate DetailPanel to use Frame (draggable, detach from node on drag).
+
+## Color Scheme: Dusty Rose + Warm Amber
+
+Palette chosen from iterative mockup exploration (`color-schemes.html` in project root).
+
+| Role | Hex | CSS Variable |
+|------|-----|-------------|
+| Background | `#0f0e0e` | `--color-bg` |
+| Surface | `#1a1a1a` | `--color-surface` |
+| Surface 2 | `#252525` | `--color-surface-2` |
+| Border | `#2a2626` | `--color-border` |
+| Text | `#e0dcd8` | `--color-text` |
+| Muted text | `#7a7070` | `--color-text-muted` |
+| Accent (gold) | `#bfa058` | `--color-accent` |
+| Org | `#8a6070` | `--color-org` (dusty rose) |
+| Org dim | `#221a1e` | `--color-org-dim` |
+| Person | `#b89060` | `--color-person` (warm amber) |
+| Person dim | `#241e14` | `--color-person-dim` |
+
+Node borders are class-specific: `#3a2830` (org), `#3e3220` (person). Edge colors: `#3a3232` (default), `#e0dcd8` (highlighted).
+
+## Typography
+
+Two fonts:
+- **Urbanist** (`--font-sans`): primary display font — headings, names, labels, buttons, everything by default
+- **Inter**: data/functional text only — type labels on object cards, and data fields in DetailPanel (title, types, contact values, notes, item names/dates, edit inputs). Set at 2px smaller than the Urbanist equivalent to account for Inter's larger x-height.
+
 ## Running Locally
 
 ```bash
@@ -502,6 +554,22 @@ When ready to deploy:
 - [x] Connection stays highlighted after create/edit form closes
 - [x] Straight connection line style throughout (including drag preview via `connectionLineType`)
 - [x] `--color-text-muted` unified across components, brightened to #999
+- [x] Company → Org class rename (schema, seed, CSS, all components)
+- [x] CreateObjectForm: "Create a new:" heading + cancel button
+- [x] Frame system: shared draggable `Frame` component (z-index-on-click, close button)
+- [x] NavBar: fixed top-right with account icon, hamburger menu popover, "Coterie" wordmark
+- [x] Menu popover: Search, Maps, Coteries, Settings — click opens frame, popover dismisses
+- [x] SearchFrame: live search → zoom to node (debounced query, arrow key nav, Enter to select, Escape clears/closes)
+- [x] Canvas `zoomToNode` via `forwardRef` + `useImperativeHandle` (animated center + select)
+- [x] AccountFrame with email display + sign out
+- [x] Maps/Coteries/Settings frames as stubs
+- [x] Old top bar removed — canvas fills full viewport, React Flow Controls removed
+- [x] Event date "today" button (CalendarCheck icon inside date input, accent blue)
+- [x] UTC date bug fix: `toISOString()` → local `getFullYear/getMonth/getDate`
+- [x] Color scheme redesign: "Dusty Rose + Warm Amber" palette (scheme 10)
+- [x] Two-font system: Urbanist (display) + Inter (data fields on cards and detail panel)
+- [x] Node type labels colored by class (org=rose, person=amber) instead of muted gray
+- [x] Class-specific node border colors (rose for orgs, amber for people)
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -512,10 +580,10 @@ When ready to deploy:
 - [x] Local SQLite database
 
 ### Next Up
-- [ ] Company → Organization rename (class rename — Matt sleeping on the exact word)
-- [ ] Connection type directionality design (two-pole model explored, deferred)
-- [ ] RLS policies (before multi-user)
-- [ ] Search → zoom → floating detail panel (the core UX loop)
+- [ ] Maps frame: list user maps, create/edit, browse store packages
+- [ ] Coteries frame: list coteries, create/invite, share maps
+- [ ] Settings frame: real settings content
+- [ ] DetailPanel migration to Frame component (draggable, detach from node on drag)
 
 ### Planned
 - [ ] Map packages (store) with relative coordinates + stamp placement
@@ -524,6 +592,7 @@ When ready to deploy:
 - [ ] Dissonance View UI
 - [ ] Operator dedup tooling (merge duplicate community objects)
 - [ ] Canon check / diff-merge UI
+- [ ] RLS policies (before deploy — deferred until features are complete)
 - [ ] Free tier (carved from Pro)
 - [ ] AI contact intelligence (see `docs/STUDIO_CONTACT_INTELLIGENCE.md`)
 - [ ] Contact sync: link person objects to Google/Microsoft contacts, one-way pull via sync tokens (both APIs are free, fits override architecture naturally — contact data is per-user). Sync button + linked badge in detail card header. Apple has no web API — would need native shell.

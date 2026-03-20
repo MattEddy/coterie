@@ -55,7 +55,7 @@ function RoleEdge({
           <text
             textAnchor="middle"
             dominantBaseline="central"
-            style={{ fontSize: 10, fill: '#fff', fontFamily: 'var(--font-sans)' }}
+            style={{ fontSize: 10, fill: '#e0dcd8', fontFamily: 'var(--font-sans)' }}
           >
             {roleA}
           </text>
@@ -75,7 +75,7 @@ function RoleEdge({
           <text
             textAnchor="middle"
             dominantBaseline="central"
-            style={{ fontSize: 10, fill: '#fff', fontFamily: 'var(--font-sans)' }}
+            style={{ fontSize: 10, fill: '#e0dcd8', fontFamily: 'var(--font-sans)' }}
           >
             {roleB}
           </text>

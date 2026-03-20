@@ -47,21 +47,6 @@ const contactTypes = ['phone', 'email', 'url', 'address', 'social']
 
 const emptyContact = (): ContactEntry => ({ type: 'phone', label: '', value: '' })
 
-// Connection type mapping: which connection to create based on the selected node's class
-const connectionConfig: Record<string, Record<string, { type: string; nodeIsSource: boolean }>> = {
-  person: {
-    project: { type: 'attached_to', nodeIsSource: true },
-    event:   { type: 'participated_in', nodeIsSource: true },
-  },
-  company: {
-    project: { type: 'produces', nodeIsSource: true },
-    event:   { type: 'held_at', nodeIsSource: false },  // event → company
-  },
-}
-
-// All connection types that link to projects or events
-const projectConnectionTypes = ['attached_to', 'produces']
-const eventConnectionTypes = ['participated_in', 'regarding', 'held_at']
 
 interface LinkedObject {
   id: string
@@ -77,7 +62,6 @@ interface ConnectedItem {
   status: string | null
   event_date: string | null
   types: string[]
-  connectionType: string
   linkedObjects?: LinkedObject[]
 }
 
@@ -117,19 +101,21 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus:
       .select('id, display_name, is_canon')
       .eq('class', objectClass)
       .ilike('display_name', `%${query}%`)
+      .or(`is_canon.eq.true,created_by.eq.${userId}`)
       .order('is_canon', { ascending: false })
       .order('display_name')
       .limit(8)
       .then(({ data }) => {
         if (data) {
-          setSuggestions(data.filter(t => !tags.includes(t.id)))
+          // Filter out already-added tags (compare by display_name)
+          setSuggestions(data.filter(t => !tags.includes(t.display_name)))
         }
       })
-  }, [inputValue, objectClass, tags])
+  }, [inputValue, objectClass, tags, userId])
 
-  function addTag(typeId: string) {
-    if (!tags.includes(typeId)) {
-      onChange([...tags, typeId])
+  function addTag(displayName: string) {
+    if (!tags.includes(displayName)) {
+      onChange([...tags, displayName])
     }
     setInputValue('')
     setSuggestions([])
@@ -137,31 +123,32 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus:
     inputRef.current?.focus()
   }
 
-  function removeTag(typeId: string) {
-    onChange(tags.filter(t => t !== typeId))
+  function removeTag(displayName: string) {
+    onChange(tags.filter(t => t !== displayName))
   }
 
   async function createAndAddTag(name: string) {
-    const id = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
-    if (!id || tags.includes(id)) return
+    const trimmed = name.trim()
+    if (!trimmed || tags.includes(trimmed)) return
 
+    // Check if type with this display_name already exists for this class
     const { data: existing } = await supabase
       .from('types')
       .select('id')
-      .eq('id', id)
+      .eq('display_name', trimmed)
+      .eq('class', objectClass)
       .maybeSingle()
 
     if (!existing) {
       await supabase.from('types').insert({
-        id,
-        display_name: name.trim(),
+        display_name: trimmed,
         class: objectClass,
         is_canon: false,
         created_by: userId,
       })
     }
 
-    addTag(id)
+    addTag(trimmed)
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -174,11 +161,11 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus:
     } else if (e.key === 'Enter') {
       e.preventDefault()
       if (highlightIndex >= 0 && suggestions[highlightIndex]) {
-        addTag(suggestions[highlightIndex].id)
+        addTag(suggestions[highlightIndex].display_name)
       } else if (inputValue.trim()) {
         const exact = suggestions.find(s => s.display_name.toLowerCase() === inputValue.trim().toLowerCase())
         if (exact) {
-          addTag(exact.id)
+          addTag(exact.display_name)
         } else {
           createAndAddTag(inputValue.trim())
         }
@@ -196,7 +183,7 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus:
       <div className={styles.tagInputField}>
         {tags.map(t => (
           <span key={t} className={styles.tagChip}>
-            {t.replace(/_/g, ' ')}
+            {t}
             <button className={styles.tagRemove} onClick={() => removeTag(t)} type="button">
               <X size={10} />
             </button>
@@ -225,7 +212,7 @@ function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus:
             <button
               key={s.id}
               className={`${styles.suggestion} ${i === highlightIndex ? styles.suggestionHighlight : ''}`}
-              onMouseDown={() => addTag(s.id)}
+              onMouseDown={() => addTag(s.display_name)}
               type="button"
             >
               <span>{s.display_name}</span>
@@ -446,26 +433,22 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const loadConnectedItems = useCallback(async (objectId: string, targetClass: 'project' | 'event') => {
     if (!user) return
 
-    const relevantTypes = targetClass === 'project' ? projectConnectionTypes : eventConnectionTypes
-
-    // Query canonical connections
+    // Query all canonical connections involving this object
     const { data: canonConns } = await supabase
       .from('connections')
-      .select('id, source_id, target_id, type')
+      .select('id, object_a_id, object_b_id, role_a, role_b')
       .eq('is_active', true)
-      .or(`source_id.eq.${objectId},target_id.eq.${objectId}`)
-      .in('type', relevantTypes)
+      .or(`object_a_id.eq.${objectId},object_b_id.eq.${objectId}`)
 
-    // Query user-created connections (existence = active, no is_active flag)
+    // Query user-created connections
     const { data: userConns } = await supabase
       .from('connections_overrides')
-      .select('id, source_id, target_id, type')
+      .select('id, object_a_id, object_b_id, role_a, role_b')
       .eq('user_id', user.id)
       .is('connection_id', null)
-      .or(`source_id.eq.${objectId},target_id.eq.${objectId}`)
-      .in('type', relevantTypes)
+      .or(`object_a_id.eq.${objectId},object_b_id.eq.${objectId}`)
 
-    // Also check for deactivated canonical connections (to exclude them)
+    // Exclude deactivated canonical connections
     const { data: deactivated } = await supabase
       .from('connections_overrides')
       .select('connection_id')
@@ -475,23 +458,23 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
     const deactivatedIds = new Set((deactivated || []).map(d => d.connection_id))
 
-    // Collect the "other" object IDs and their connection types
+    // Collect the "other" object IDs
     const filteredCanon = (canonConns || []).filter(c => !deactivatedIds.has(c.id))
     const allConns = [...filteredCanon, ...(userConns || [])]
-    const itemMap = new Map<string, string>()  // objectId → connectionType
+    const itemIds = new Set<string>()
     for (const c of allConns) {
-      const otherId = c.source_id === objectId ? c.target_id : c.source_id
-      if (otherId) itemMap.set(otherId, c.type)
+      const otherId = c.object_a_id === objectId ? c.object_b_id : c.object_a_id
+      if (otherId) itemIds.add(otherId)
     }
 
-    if (itemMap.size === 0) {
+    if (itemIds.size === 0) {
       if (targetClass === 'project') setConnectedProjects([])
       else setConnectedEvents([])
       return
     }
 
     // Fetch the connected objects — try user_objects first, fall back to objects
-    const ids = Array.from(itemMap.keys())
+    const ids = Array.from(itemIds)
     const { data: userObjs } = await supabase
       .from('user_objects')
       .select('*')
@@ -521,7 +504,6 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         status: o.status,
         event_date: o.event_date,
         types: o.types || [],
-        connectionType: itemMap.get(o.id) || '',
       })),
       ...(fallbackObjs || []).map(o => ({
         id: o.id,
@@ -530,7 +512,6 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         status: o.status,
         event_date: o.event_date,
         types: [],
-        connectionType: itemMap.get(o.id) || '',
       })),
     ]
 
@@ -557,16 +538,16 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     // Get all connections involving this item
     const { data: canonConns } = await supabase
       .from('connections')
-      .select('id, source_id, target_id, type')
+      .select('id, object_a_id, object_b_id')
       .eq('is_active', true)
-      .or(`source_id.eq.${itemId},target_id.eq.${itemId}`)
+      .or(`object_a_id.eq.${itemId},object_b_id.eq.${itemId}`)
 
     const { data: userConns } = await supabase
       .from('connections_overrides')
-      .select('source_id, target_id, type')
+      .select('object_a_id, object_b_id')
       .eq('user_id', user.id)
       .is('connection_id', null)
-      .or(`source_id.eq.${itemId},target_id.eq.${itemId}`)
+      .or(`object_a_id.eq.${itemId},object_b_id.eq.${itemId}`)
 
     const { data: deactivated } = await supabase
       .from('connections_overrides')
@@ -578,26 +559,27 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     const deactivatedIds = new Set((deactivated || []).map(d => d.connection_id))
     const filteredCanon = (canonConns || []).filter(c => !deactivatedIds.has(c.id))
     const allConns = [...filteredCanon, ...(userConns || [])]
-    const otherMap = new Map<string, string>()  // otherId → connectionType
+    const otherIds = new Set<string>()
     for (const c of allConns) {
-      const otherId = c.source_id === itemId ? c.target_id : c.source_id
-      if (otherId && otherId !== object.id) otherMap.set(otherId, c.type)
+      const otherId = c.object_a_id === itemId ? c.object_b_id : c.object_a_id
+      if (otherId && otherId !== object.id) otherIds.add(otherId)
     }
 
-    if (otherMap.size === 0) {
+    if (otherIds.size === 0) {
       setLinkedObjects([])
       return
     }
 
+    const ids = Array.from(otherIds)
     const { data: objs } = await supabase
       .from('user_objects')
       .select('id, name, class')
       .eq('user_id', user.id)
-      .in('id', Array.from(otherMap.keys()))
+      .in('id', ids)
 
     // Fallback for objects not in user_objects
     const foundIds = new Set((objs || []).map(o => o.id))
-    const missingIds = Array.from(otherMap.keys()).filter(id => !foundIds.has(id))
+    const missingIds = ids.filter(id => !foundIds.has(id))
     let fallback: { id: string; name: string; class: string }[] = []
     if (missingIds.length > 0) {
       const { data } = await supabase
@@ -609,8 +591,8 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     }
 
     setLinkedObjects([
-      ...(objs || []).map(o => ({ id: o.id, name: o.name || '(unnamed)', class: o.class, connectionType: otherMap.get(o.id) || '' })),
-      ...fallback.map(o => ({ ...o, connectionType: otherMap.get(o.id) || '' })),
+      ...(objs || []).map(o => ({ id: o.id, name: o.name || '(unnamed)', class: o.class, connectionType: '' })),
+      ...fallback.map(o => ({ ...o, connectionType: '' })),
     ])
   }, [user, object.id])
 
@@ -625,17 +607,13 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   }, [expandedItemId, loadLinkedObjects])
 
   // Link an existing object to an event/project
-  async function linkObjectToItem(itemId: string, targetObj: { id: string; name: string; class: string }, itemClass: 'project' | 'event') {
+  async function linkObjectToItem(itemId: string, targetObj: { id: string; name: string; class: string }, _itemClass: 'project' | 'event') {
     if (!user) return
-    // Determine connection type based on what we're linking
-    const config = connectionConfig[targetObj.class]?.[itemClass]
-    if (!config) return
 
     await supabase.from('connections_overrides').insert({
       user_id: user.id,
-      source_id: config.nodeIsSource ? targetObj.id : itemId,
-      target_id: config.nodeIsSource ? itemId : targetObj.id,
-      type: config.type,
+      object_a_id: targetObj.id,
+      object_b_id: itemId,
     })
 
     loadLinkedObjects(itemId)
@@ -647,25 +625,21 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (!user) return
     setSaving(true)
 
-    const config = connectionConfig[object.class]?.[targetClass]
-    if (config) {
-      await supabase.from('connections_overrides').insert({
-        user_id: user.id,
-        source_id: config.nodeIsSource ? object.id : existingId,
-        target_id: config.nodeIsSource ? existingId : object.id,
-        type: config.type,
-      })
+    await supabase.from('connections_overrides').insert({
+      user_id: user.id,
+      object_a_id: object.id,
+      object_b_id: existingId,
+    })
 
-      // Ensure override row exists so it shows up in user_objects
-      const { data: existing } = await supabase
-        .from('objects_overrides')
-        .select('id')
-        .eq('object_id', existingId)
-        .eq('user_id', user.id)
-        .maybeSingle()
-      if (!existing) {
-        await supabase.from('objects_overrides').insert({ user_id: user.id, object_id: existingId })
-      }
+    // Ensure override row exists so it shows up in user_objects
+    const { data: existing } = await supabase
+      .from('objects_overrides')
+      .select('id')
+      .eq('object_id', existingId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!existing) {
+      await supabase.from('objects_overrides').insert({ user_id: user.id, object_id: existingId })
     }
 
     setSaving(false)
@@ -747,6 +721,16 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     onObjectUpdated?.()
   }
 
+  async function resolveTypeIds(displayNames: string[]): Promise<string[]> {
+    if (displayNames.length === 0) return []
+    const { data } = await supabase
+      .from('types')
+      .select('id, display_name')
+      .in('display_name', displayNames)
+      .eq('class', object.class)
+    return (data || []).map(t => t.id)
+  }
+
   async function saveTypes() {
     if (!user) return
     await supabase
@@ -755,9 +739,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       .eq('object_id', object.id)
       .eq('user_id', user.id)
     if (editTypes.length > 0) {
-      await supabase
-        .from('objects_types_overrides')
-        .insert(editTypes.map(typeId => ({ user_id: user.id, object_id: object.id, type_id: typeId })))
+      const typeIds = await resolveTypeIds(editTypes)
+      if (typeIds.length > 0) {
+        await supabase
+          .from('objects_types_overrides')
+          .insert(typeIds.map(typeId => ({ user_id: user.id, object_id: object.id, type_id: typeId })))
+      }
     }
     setShowTagInput(false)
     onObjectUpdated?.()
@@ -806,16 +793,16 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     // Get canonical connections involving this object
     const { data: canonConns } = await supabase
       .from('connections')
-      .select('id, source_id, target_id, type')
+      .select('id, object_a_id, object_b_id, role_a, role_b')
       .eq('is_active', true)
-      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
+      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
 
     // Get user-created connections involving this object
     const { data: userConns } = await supabase
       .from('connections_overrides')
-      .select('id, source_id, target_id, type')
+      .select('id, object_a_id, object_b_id, role_a, role_b')
       .eq('user_id', user.id)
-      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
+      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
 
     // Get deactivated canonical connection IDs so we can exclude them
     const { data: deactivated } = await supabase
@@ -831,26 +818,23 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     // and the connection isn't already deactivated
     const visibleCanon = (canonConns || []).filter(c => {
       if (deactivatedIds.has(c.id)) return false
-      const otherId = c.source_id === object.id ? c.target_id : c.source_id
+      const otherId = c.object_a_id === object.id ? c.object_b_id : c.object_a_id
       return userObjectIds.has(otherId)
     })
 
     const visibleUser = (userConns || []).filter(c => {
       if (c.connection_id) return false // deactivation overrides aren't real connections
-      const otherId = c.source_id === object.id ? c.target_id : c.source_id
+      const otherId = c.object_a_id === object.id ? c.object_b_id : c.object_a_id
       return userObjectIds.has(otherId)
     })
 
     const totalConnections = visibleCanon.length + visibleUser.length
 
     // Find connected off-landscape objects (projects/events) that would be orphaned
-    const allConnTypes = [...projectConnectionTypes, ...eventConnectionTypes]
     const allConns = [...(canonConns || []).filter(c => !deactivatedIds.has(c.id)), ...(userConns || []).filter(c => !c.connection_id)]
-    const offLandscape = allConns.filter(c => allConnTypes.includes(c.type))
-
     const relatedIds = new Set<string>()
-    for (const c of offLandscape) {
-      const otherId = c.source_id === object.id ? c.target_id : c.source_id
+    for (const c of allConns) {
+      const otherId = c.object_a_id === object.id ? c.object_b_id : c.object_a_id
       relatedIds.add(otherId)
     }
 
@@ -862,18 +846,18 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         .from('connections')
         .select('id', { count: 'exact', head: true })
         .eq('is_active', true)
-        .or(`source_id.eq.${relId},target_id.eq.${relId}`)
-        .neq('source_id', object.id)
-        .neq('target_id', object.id)
+        .or(`object_a_id.eq.${relId},object_b_id.eq.${relId}`)
+        .neq('object_a_id', object.id)
+        .neq('object_b_id', object.id)
 
       const { count: otherUserConns } = await supabase
         .from('connections_overrides')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .is('connection_id', null)
-        .or(`source_id.eq.${relId},target_id.eq.${relId}`)
-        .neq('source_id', object.id)
-        .neq('target_id', object.id)
+        .or(`object_a_id.eq.${relId},object_b_id.eq.${relId}`)
+        .neq('object_a_id', object.id)
+        .neq('object_b_id', object.id)
 
       if ((otherConns || 0) + (otherUserConns || 0) === 0) {
         const { data: relObj } = await supabase
@@ -898,31 +882,22 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       .from('connections_overrides')
       .delete()
       .eq('user_id', user.id)
-      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
+      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
 
     // 2. Deactivate canonical connections (create override with deactivated=true)
     const { data: canonConns } = await supabase
       .from('connections')
       .select('id')
       .eq('is_active', true)
-      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
+      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
 
     if (canonConns?.length) {
-      const deactivations = canonConns.map(c => ({
-        user_id: user.id,
-        connection_id: c.id,
-        source_id: object.id, // placeholder — not used for deactivation overrides
-        target_id: object.id,
-        type: 'deactivated',
-        deactivated: true,
-      }))
-      // Upsert to avoid duplicates if override already exists
-      for (const d of deactivations) {
+      for (const c of canonConns) {
         const { data: existing } = await supabase
           .from('connections_overrides')
           .select('id')
           .eq('user_id', user.id)
-          .eq('connection_id', d.connection_id)
+          .eq('connection_id', c.id)
           .maybeSingle()
 
         if (existing) {
@@ -931,11 +906,11 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             .update({ deactivated: true })
             .eq('id', existing.id)
         } else {
-          // Need real source/target/type from the canonical connection
+          // Need real object_a/object_b from the canonical connection
           const { data: conn } = await supabase
             .from('connections')
-            .select('source_id, target_id, type')
-            .eq('id', d.connection_id)
+            .select('object_a_id, object_b_id')
+            .eq('id', c.id)
             .single()
 
           if (conn) {
@@ -943,10 +918,9 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
               .from('connections_overrides')
               .insert({
                 user_id: user.id,
-                connection_id: d.connection_id,
-                source_id: conn.source_id,
-                target_id: conn.target_id,
-                type: conn.type,
+                connection_id: c.id,
+                object_a_id: conn.object_a_id,
+                object_b_id: conn.object_b_id,
                 deactivated: true,
               })
           }
@@ -955,25 +929,22 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     }
 
     // 3. Clean up orphaned off-landscape objects
-    const allConnTypes = [...projectConnectionTypes, ...eventConnectionTypes]
     const { data: offConns } = await supabase
       .from('connections')
-      .select('source_id, target_id')
+      .select('object_a_id, object_b_id')
       .eq('is_active', true)
-      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
-      .in('type', allConnTypes)
+      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
 
     const { data: offUserConns } = await supabase
       .from('connections_overrides')
-      .select('source_id, target_id')
+      .select('object_a_id, object_b_id')
       .eq('user_id', user.id)
       .is('connection_id', null)
-      .or(`source_id.eq.${object.id},target_id.eq.${object.id}`)
-      .in('type', allConnTypes)
+      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
 
     const orphanCandidates = new Set<string>()
     for (const c of [...(offConns || []), ...(offUserConns || [])]) {
-      orphanCandidates.add(c.source_id === object.id ? c.target_id : c.source_id)
+      orphanCandidates.add(c.object_a_id === object.id ? c.object_b_id : c.object_a_id)
     }
 
     for (const orphanId of orphanCandidates) {
@@ -984,18 +955,18 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         .from('connections')
         .select('id', { count: 'exact', head: true })
         .eq('is_active', true)
-        .or(`source_id.eq.${orphanId},target_id.eq.${orphanId}`)
-        .neq('source_id', object.id)
-        .neq('target_id', object.id)
+        .or(`object_a_id.eq.${orphanId},object_b_id.eq.${orphanId}`)
+        .neq('object_a_id', object.id)
+        .neq('object_b_id', object.id)
 
       const { count: remainingUser } = await supabase
         .from('connections_overrides')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .is('connection_id', null)
-        .or(`source_id.eq.${orphanId},target_id.eq.${orphanId}`)
-        .neq('source_id', object.id)
-        .neq('target_id', object.id)
+        .or(`object_a_id.eq.${orphanId},object_b_id.eq.${orphanId}`)
+        .neq('object_a_id', object.id)
+        .neq('object_b_id', object.id)
 
       if ((remaining || 0) + (remainingUser || 0) === 0) {
         // Orphan — hard-delete override and (if user-created) the object
@@ -1060,35 +1031,35 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     }
     await supabase.from('objects_overrides').insert(overridePayload)
 
-    // 3. Create types overrides
+    // 3. Create types overrides (resolve display_names to UUIDs)
     if (newItemTypes.length > 0) {
-      await supabase
-        .from('objects_types_overrides')
-        .insert(newItemTypes.map(typeId => ({ user_id: user.id, object_id: newObj.id, type_id: typeId })))
+      const { data: typeRows } = await supabase
+        .from('types')
+        .select('id, display_name')
+        .in('display_name', newItemTypes)
+        .eq('class', targetClass)
+      const typeIds = (typeRows || []).map(t => t.id)
+      if (typeIds.length > 0) {
+        await supabase
+          .from('objects_types_overrides')
+          .insert(typeIds.map(typeId => ({ user_id: user.id, object_id: newObj.id, type_id: typeId })))
+      }
     }
 
     // 4. Create connection to current node
-    const config = connectionConfig[object.class]?.[targetClass]
-    if (config) {
-      await supabase.from('connections_overrides').insert({
-        user_id: user.id,
-        source_id: config.nodeIsSource ? object.id : newObj.id,
-        target_id: config.nodeIsSource ? newObj.id : object.id,
-        type: config.type,
-      })
-    }
+    await supabase.from('connections_overrides').insert({
+      user_id: user.id,
+      object_a_id: object.id,
+      object_b_id: newObj.id,
+    })
 
     // 5. Create additional connections from the link picker
     for (const link of newItemLinks) {
-      const linkConfig = connectionConfig[link.class]?.[targetClass]
-      if (linkConfig) {
-        await supabase.from('connections_overrides').insert({
-          user_id: user.id,
-          source_id: linkConfig.nodeIsSource ? link.id : newObj.id,
-          target_id: linkConfig.nodeIsSource ? newObj.id : link.id,
-          type: linkConfig.type,
-        })
-      }
+      await supabase.from('connections_overrides').insert({
+        user_id: user.id,
+        object_a_id: link.id,
+        object_b_id: newObj.id,
+      })
     }
 
     // Reset and reload
@@ -1146,9 +1117,17 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       .eq('object_id', itemId)
       .eq('user_id', user.id)
     if (editItemTypes.length > 0) {
-      await supabase
-        .from('objects_types_overrides')
-        .insert(editItemTypes.map(typeId => ({ user_id: user.id, object_id: itemId, type_id: typeId })))
+      const { data: typeRows } = await supabase
+        .from('types')
+        .select('id, display_name')
+        .in('display_name', editItemTypes)
+        .eq('class', targetClass)
+      const typeIds = (typeRows || []).map(t => t.id)
+      if (typeIds.length > 0) {
+        await supabase
+          .from('objects_types_overrides')
+          .insert(typeIds.map(typeId => ({ user_id: user.id, object_id: itemId, type_id: typeId })))
+      }
     }
 
     setSaving(false)
@@ -1165,7 +1144,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       .from('connections')
       .select('id')
       .eq('is_active', true)
-      .or(`and(source_id.eq.${object.id},target_id.eq.${itemId}),and(source_id.eq.${itemId},target_id.eq.${object.id})`)
+      .or(`and(object_a_id.eq.${object.id},object_b_id.eq.${itemId}),and(object_a_id.eq.${itemId},object_b_id.eq.${object.id})`)
 
     if (canonConns && canonConns.length > 0) {
       for (const conn of canonConns) {
@@ -1183,7 +1162,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       .delete()
       .eq('user_id', user.id)
       .is('connection_id', null)
-      .or(`and(source_id.eq.${object.id},target_id.eq.${itemId}),and(source_id.eq.${itemId},target_id.eq.${object.id})`)
+      .or(`and(object_a_id.eq.${object.id},object_b_id.eq.${itemId}),and(object_a_id.eq.${itemId},object_b_id.eq.${object.id})`)
 
     // Check if the item has any remaining connections for this user
     // Canonical connections not deactivated by this user
@@ -1191,7 +1170,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       .from('connections')
       .select('id')
       .eq('is_active', true)
-      .or(`source_id.eq.${itemId},target_id.eq.${itemId}`)
+      .or(`object_a_id.eq.${itemId},object_b_id.eq.${itemId}`)
 
     const { data: allDeactivated } = await supabase
       .from('connections_overrides')
@@ -1209,7 +1188,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .is('connection_id', null)
-      .or(`source_id.eq.${itemId},target_id.eq.${itemId}`)
+      .or(`object_a_id.eq.${itemId},object_b_id.eq.${itemId}`)
 
     const totalRemaining = activeCanon + (remainingUser || 0)
 

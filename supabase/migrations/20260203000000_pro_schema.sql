@@ -30,6 +30,7 @@ DROP TABLE IF EXISTS profiles CASCADE;
 DROP TABLE IF EXISTS objects_types CASCADE;
 DROP TABLE IF EXISTS connections CASCADE;
 DROP TABLE IF EXISTS objects CASCADE;
+DROP TABLE IF EXISTS roles CASCADE;
 DROP TABLE IF EXISTS connection_types CASCADE;
 DROP TABLE IF EXISTS types CASCADE;
 DROP TABLE IF EXISTS classes CASCADE;
@@ -97,7 +98,7 @@ INSERT INTO classes (id, display_name, icon, color, landscape_visible) VALUES
 -- =============================================================================
 
 CREATE TABLE types (
-    id TEXT PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     display_name TEXT NOT NULL,
     class TEXT NOT NULL REFERENCES classes(id),
     icon TEXT,
@@ -108,49 +109,49 @@ CREATE TABLE types (
 );
 
 -- Company types (canonical)
-INSERT INTO types (id, display_name, class, icon, color, is_canon) VALUES
-    ('studio', 'Studio', 'company', 'building.2.fill', '#3B82F6', TRUE),
-    ('parent_company', 'Parent Company', 'company', 'building.columns', '#1E40AF', TRUE),
-    ('network', 'Network', 'company', 'tv', '#7C3AED', TRUE),
-    ('streamer', 'Streamer', 'company', 'play.tv', '#DC2626', TRUE),
-    ('production_company', 'Production Company', 'company', 'film.stack', '#059669', TRUE),
-    ('agency', 'Agency', 'company', 'person.3', '#EA580C', TRUE),
-    ('management', 'Management', 'company', 'person.2', '#DB2777', TRUE),
-    ('financier', 'Financier', 'company', 'dollarsign.circle', '#CA8A04', TRUE),
-    ('distributor', 'Distributor', 'company', 'shippingbox', '#0891B2', TRUE),
-    ('guild_union', 'Guild/Union', 'company', 'person.badge.shield.checkmark', '#6B7280', TRUE);
+INSERT INTO types (display_name, class, icon, color, is_canon) VALUES
+    ('Studio', 'company', 'building.2.fill', '#3B82F6', TRUE),
+    ('Parent Company', 'company', 'building.columns', '#1E40AF', TRUE),
+    ('Network', 'company', 'tv', '#7C3AED', TRUE),
+    ('Streamer', 'company', 'play.tv', '#DC2626', TRUE),
+    ('Production Company', 'company', 'film.stack', '#059669', TRUE),
+    ('Agency', 'company', 'person.3', '#EA580C', TRUE),
+    ('Management', 'company', 'person.2', '#DB2777', TRUE),
+    ('Financier', 'company', 'dollarsign.circle', '#CA8A04', TRUE),
+    ('Distributor', 'company', 'shippingbox', '#0891B2', TRUE),
+    ('Guild/Union', 'company', 'person.badge.shield.checkmark', '#6B7280', TRUE);
 
 -- Person types (canonical)
-INSERT INTO types (id, display_name, class, icon, color, is_canon) VALUES
-    ('executive', 'Executive', 'person', 'person.badge.key', '#1E40AF', TRUE),
-    ('producer', 'Producer', 'person', 'person.crop.rectangle', '#7C3AED', TRUE),
-    ('creative', 'Creative', 'person', 'pencil.and.outline', '#059669', TRUE),
-    ('talent', 'Talent', 'person', 'star', '#CA8A04', TRUE),
-    ('agent', 'Agent', 'person', 'briefcase', '#EA580C', TRUE),
-    ('manager', 'Manager', 'person', 'person.badge.clock', '#DB2777', TRUE),
-    ('lawyer', 'Lawyer', 'person', 'text.book.closed', '#6B7280', TRUE),
-    ('investor', 'Investor', 'person', 'chart.line.uptrend.xyaxis', '#0891B2', TRUE);
+INSERT INTO types (display_name, class, icon, color, is_canon) VALUES
+    ('Executive', 'person', 'person.badge.key', '#1E40AF', TRUE),
+    ('Producer', 'person', 'person.crop.rectangle', '#7C3AED', TRUE),
+    ('Creative', 'person', 'pencil.and.outline', '#059669', TRUE),
+    ('Talent', 'person', 'star', '#CA8A04', TRUE),
+    ('Agent', 'person', 'briefcase', '#EA580C', TRUE),
+    ('Manager', 'person', 'person.badge.clock', '#DB2777', TRUE),
+    ('Lawyer', 'person', 'text.book.closed', '#6B7280', TRUE),
+    ('Investor', 'person', 'chart.line.uptrend.xyaxis', '#0891B2', TRUE);
 
 -- Project types (canonical)
-INSERT INTO types (id, display_name, class, icon, color, is_canon) VALUES
-    ('feature', 'Feature', 'project', 'film', '#F59E0B', TRUE),
-    ('tv_series', 'TV Series', 'project', 'tv', '#7C3AED', TRUE),
-    ('limited_series', 'Limited Series', 'project', 'tv.inset.filled', '#DC2626', TRUE),
-    ('pilot', 'Pilot', 'project', 'play.rectangle', '#059669', TRUE),
-    ('documentary', 'Documentary', 'project', 'doc.text.image', '#3B82F6', TRUE),
-    ('short', 'Short', 'project', 'film.stack', '#6B7280', TRUE),
-    ('unscripted', 'Unscripted', 'project', 'person.wave.2', '#EA580C', TRUE);
+INSERT INTO types (display_name, class, icon, color, is_canon) VALUES
+    ('Feature', 'project', 'film', '#F59E0B', TRUE),
+    ('TV Series', 'project', 'tv', '#7C3AED', TRUE),
+    ('Limited Series', 'project', 'tv.inset.filled', '#DC2626', TRUE),
+    ('Pilot', 'project', 'play.rectangle', '#059669', TRUE),
+    ('Documentary', 'project', 'doc.text.image', '#3B82F6', TRUE),
+    ('Short', 'project', 'film.stack', '#6B7280', TRUE),
+    ('Unscripted', 'project', 'person.wave.2', '#EA580C', TRUE);
 
 -- Event types (canonical)
-INSERT INTO types (id, display_name, class, icon, color, is_canon) VALUES
-    ('meeting', 'Meeting', 'event', 'person.2', '#DC2626', TRUE),
-    ('call', 'Call', 'event', 'phone', '#3B82F6', TRUE),
-    ('email_exchange', 'Email Exchange', 'event', 'envelope', '#10B981', TRUE),
-    ('pitch', 'Pitch', 'event', 'presentation', '#F59E0B', TRUE),
-    ('screening', 'Screening', 'event', 'film', '#7C3AED', TRUE),
-    ('premiere', 'Premiere', 'event', 'star', '#EA580C', TRUE),
-    ('introduction', 'Introduction', 'event', 'person.badge.plus', '#059669', TRUE),
-    ('general', 'General', 'event', 'note.text', '#6B7280', TRUE);
+INSERT INTO types (display_name, class, icon, color, is_canon) VALUES
+    ('Meeting', 'event', 'person.2', '#DC2626', TRUE),
+    ('Call', 'event', 'phone', '#3B82F6', TRUE),
+    ('Email Exchange', 'event', 'envelope', '#10B981', TRUE),
+    ('Pitch', 'event', 'presentation', '#F59E0B', TRUE),
+    ('Screening', 'event', 'film', '#7C3AED', TRUE),
+    ('Premiere', 'event', 'star', '#EA580C', TRUE),
+    ('Introduction', 'event', 'person.badge.plus', '#059669', TRUE),
+    ('General', 'event', 'note.text', '#6B7280', TRUE);
 
 -- =============================================================================
 -- OBJECTS (entity registry — all entities, vetted and user-created)
@@ -164,7 +165,7 @@ CREATE TABLE objects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     class TEXT NOT NULL REFERENCES classes(id),
     name TEXT,                           -- NULL for user-created objects (data lives in overrides)
-    title TEXT,                          -- subtitle/description: job title, company tagline, logline
+    title TEXT,                          -- subtitle/description: job title, org tagline, logline
     status TEXT,                         -- lifecycle: active, development, released, defunct, etc.
     photo_url TEXT,                      -- headshot / logo / poster
     event_date DATE,                    -- when the event occurred (events only)
@@ -212,7 +213,7 @@ CREATE INDEX idx_objects_sectors_sector ON objects_sectors(sector_id);
 
 CREATE TABLE objects_types (
     object_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-    type_id TEXT NOT NULL REFERENCES types(id),
+    type_id UUID NOT NULL REFERENCES types(id),
     is_primary BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (object_id, type_id)
@@ -240,54 +241,69 @@ CREATE TRIGGER check_type_class_match_trigger
     FOR EACH ROW EXECUTE FUNCTION check_type_class_match();
 
 -- =============================================================================
--- CONNECTION TYPES (kinds of connections between objects)
+-- ROLES (vocabulary for connection endpoints)
 -- =============================================================================
+-- Each connection has two objects and (optionally) a role for each side.
+-- Roles describe what the object IS in the relationship: employee, client, parent, etc.
+-- Direction-agnostic — the role labels tell you who's who.
 
-CREATE TABLE connection_types (
-    id TEXT PRIMARY KEY,
+CREATE TABLE roles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     display_name TEXT NOT NULL,
-    valid_source_classes TEXT[],
-    valid_target_classes TEXT[],
-    icon TEXT,
-    color TEXT,
+    is_canon BOOLEAN DEFAULT FALSE,
+    created_by UUID,               -- NULL = platform-seeded; FK added after profiles
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO connection_types (id, display_name, valid_source_classes, valid_target_classes, icon) VALUES
-    ('owns', 'Owns', '{company}', '{company}', 'arrow.down.circle'),
-    ('division_of', 'Division Of', '{company}', '{company}', 'square.grid.2x2'),
-    ('employed_by', 'Employed By', '{person}', '{company}', 'briefcase'),
-    ('reports_to', 'Reports To', '{person}', '{person}', 'arrow.up.circle'),
-    ('has_deal_at', 'Has Deal At', '{company}', '{company}', 'doc.text'),
-    ('represents', 'Represents', '{company}', '{person}', 'person.badge.shield.checkmark'),
-    ('represented_by', 'Represented By', '{person}', '{company}', 'person.badge.shield.checkmark'),
-    ('set_up_at', 'Set Up At', '{project}', '{company}', 'building.2'),
-    ('attached_to', 'Attached To', '{person}', '{project}', 'paperclip'),
-    ('produces', 'Produces', '{company}', '{project}', 'film'),
-    ('related_to', 'Related To', NULL, NULL, 'link'),
-    ('participated_in', 'Participated In', '{person}', '{event}', 'person.badge.clock'),
-    ('regarding', 'Regarding', '{event}', '{project}', 'doc.text'),
-    ('held_at', 'Held At', '{event}', '{company}', 'building.2');
+INSERT INTO roles (display_name, is_canon) VALUES
+    ('Employee', TRUE),
+    ('Employer', TRUE),
+    ('Rep', TRUE),
+    ('Client', TRUE),
+    ('Parent', TRUE),
+    ('Subsidiary', TRUE),
+    ('Division', TRUE),
+    ('Supervisor', TRUE),
+    ('Direct Report', TRUE),
+    ('Deal Partner', TRUE),
+    ('Producer', TRUE),
+    ('Production', TRUE),
+    ('Talent', TRUE),
+    ('Participant', TRUE),
+    ('Venue', TRUE),
+    ('Subject', TRUE),
+    ('Collaborator', TRUE),
+    ('Partner', TRUE),
+    ('Related', TRUE);
 
 -- =============================================================================
 -- CONNECTIONS (canonical connections — the shared truth)
 -- =============================================================================
+-- Direction-agnostic: object_a/object_b have no implied ordering.
+-- Roles are optional — a connection can be a bare line.
 
 CREATE TABLE connections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-    target_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-    type TEXT NOT NULL REFERENCES connection_types(id),
+    object_a_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+    object_b_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+    role_a UUID REFERENCES roles(id),   -- what object_a IS in this relationship
+    role_b UUID REFERENCES roles(id),   -- what object_b IS in this relationship
     data JSONB DEFAULT '{}',
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(source_id, target_id, type)
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_connections_source ON connections(source_id);
-CREATE INDEX idx_connections_target ON connections(target_id);
-CREATE INDEX idx_connections_type ON connections(type);
+-- Prevent exact duplicate connections (same objects, same roles)
+-- Uses '00000000-0000-0000-0000-000000000000' as sentinel for NULL UUIDs
+CREATE UNIQUE INDEX idx_connections_unique ON connections(
+    object_a_id, object_b_id,
+    COALESCE(role_a, '00000000-0000-0000-0000-000000000000'::UUID),
+    COALESCE(role_b, '00000000-0000-0000-0000-000000000000'::UUID)
+);
+
+CREATE INDEX idx_connections_a ON connections(object_a_id);
+CREATE INDEX idx_connections_b ON connections(object_b_id);
 CREATE INDEX idx_connections_active ON connections(is_active);
 
 -- =============================================================================
@@ -319,6 +335,10 @@ CREATE TRIGGER on_auth_user_created
 
 -- Deferred FK: types.created_by → profiles (types created before profiles)
 ALTER TABLE types ADD CONSTRAINT types_created_by_fkey
+    FOREIGN KEY (created_by) REFERENCES profiles(user_id);
+
+-- Deferred FK: roles.created_by → profiles (roles created before profiles)
+ALTER TABLE roles ADD CONSTRAINT roles_created_by_fkey
     FOREIGN KEY (created_by) REFERENCES profiles(user_id);
 
 -- =============================================================================
@@ -411,7 +431,7 @@ CREATE INDEX idx_objects_overrides_object ON objects_overrides(object_id);
 CREATE TABLE objects_types_overrides (
     user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
     object_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-    type_id TEXT NOT NULL REFERENCES types(id),
+    type_id UUID NOT NULL REFERENCES types(id),
     is_primary BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (user_id, object_id, type_id)
@@ -430,9 +450,9 @@ CREATE TRIGGER check_type_override_class_match_trigger
 -- =============================================================================
 -- Two modes:
 --   1. Override: connection_id points to canonical. Nullable fields override.
---   2. User-created: connection_id is NULL. source/target/type are required.
+--   2. User-created: connection_id is NULL. object_a/object_b are required.
 --
--- Source and target always reference objects.id (entity registry model).
+-- Direction-agnostic, matching the connections table.
 
 CREATE TABLE connections_overrides (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -440,9 +460,10 @@ CREATE TABLE connections_overrides (
     connection_id UUID REFERENCES connections(id) ON DELETE CASCADE,
 
     -- For user-created connections (connection_id IS NULL)
-    source_id UUID REFERENCES objects(id) ON DELETE CASCADE,
-    target_id UUID REFERENCES objects(id) ON DELETE CASCADE,
-    type TEXT REFERENCES connection_types(id),
+    object_a_id UUID REFERENCES objects(id) ON DELETE CASCADE,
+    object_b_id UUID REFERENCES objects(id) ON DELETE CASCADE,
+    role_a UUID REFERENCES roles(id),
+    role_b UUID REFERENCES roles(id),
 
     -- Overridable
     data JSONB,
@@ -463,14 +484,14 @@ CREATE TABLE connections_overrides (
     UNIQUE(user_id, connection_id)
 );
 
--- User-created connections must have source, target, and type
-ALTER TABLE connections_overrides ADD CONSTRAINT user_created_connection_requires_fields
-    CHECK (connection_id IS NOT NULL OR (source_id IS NOT NULL AND target_id IS NOT NULL AND type IS NOT NULL));
+-- User-created connections must have both objects (roles are optional)
+ALTER TABLE connections_overrides ADD CONSTRAINT user_created_connection_requires_objects
+    CHECK (connection_id IS NOT NULL OR (object_a_id IS NOT NULL AND object_b_id IS NOT NULL));
 
 CREATE INDEX idx_connections_overrides_user ON connections_overrides(user_id);
 CREATE INDEX idx_connections_overrides_bond ON connections_overrides(connection_id);
-CREATE INDEX idx_connections_overrides_source ON connections_overrides(source_id);
-CREATE INDEX idx_connections_overrides_target ON connections_overrides(target_id);
+CREATE INDEX idx_connections_overrides_a ON connections_overrides(object_a_id);
+CREATE INDEX idx_connections_overrides_b ON connections_overrides(object_b_id);
 CREATE INDEX idx_connections_overrides_deactivated ON connections_overrides(deactivated) WHERE deactivated = true;
 
 -- =============================================================================
@@ -547,11 +568,12 @@ SELECT
     o.photo_url, o.event_date,
     o.data, o.is_canon, o.created_by, o.is_active, o.created_at, o.updated_at,
     COALESCE(
-        array_agg(ot.type_id) FILTER (WHERE ot.type_id IS NOT NULL),
+        array_agg(t.display_name) FILTER (WHERE t.display_name IS NOT NULL),
         '{}'::TEXT[]
     ) AS types
 FROM objects o
 LEFT JOIN objects_types ot ON ot.object_id = o.id
+LEFT JOIN types t ON t.id = ot.type_id
 WHERE o.is_active = TRUE
 GROUP BY o.id;
 
@@ -578,9 +600,11 @@ SELECT
     ov.private_notes,
     ov.tags,
     COALESCE(
-        (SELECT array_agg(oto.type_id) FROM objects_types_overrides oto
+        (SELECT array_agg(t.display_name) FROM objects_types_overrides oto
+         JOIN types t ON t.id = oto.type_id
          WHERE oto.user_id = ov.user_id AND oto.object_id = o.id),
-        (SELECT array_agg(ot.type_id) FROM objects_types ot
+        (SELECT array_agg(t.display_name) FROM objects_types ot
+         JOIN types t ON t.id = ot.type_id
          WHERE ot.object_id = o.id),
         '{}'::TEXT[]
     ) AS types

@@ -30,21 +30,15 @@ INSERT INTO objects (id, class, name, title, data, is_canon) VALUES
     ('44444444-4444-4444-4444-444444444444', 'company', 'CAA', 'Talent Agency', '{"contacts": [{"type": "url", "label": "Website", "value": "caa.com"}]}', true),
     ('55555555-5555-5555-5555-555555555555', 'company', 'Bad Robot', 'Production Company', '{"contacts": [{"type": "url", "label": "Website", "value": "badrobot.com"}]}', true);
 
--- Assign types to companies (can have multiple!)
-INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
-    -- Disney is a studio and parent company
-    ('11111111-1111-1111-1111-111111111111', 'studio', true),
-    ('11111111-1111-1111-1111-111111111111', 'parent_company', false),
-    ('11111111-1111-1111-1111-111111111111', 'streamer', false),
-    -- Warner Bros is a studio
-    ('22222222-2222-2222-2222-222222222222', 'studio', true),
-    -- Netflix is a streamer and studio
-    ('33333333-3333-3333-3333-333333333333', 'streamer', true),
-    ('33333333-3333-3333-3333-333333333333', 'studio', false),
-    -- CAA is an agency
-    ('44444444-4444-4444-4444-444444444444', 'agency', true),
-    -- Bad Robot is a production company
-    ('55555555-5555-5555-5555-555555555555', 'production_company', true);
+-- Assign types to companies — use individual INSERTs with subqueries (UUID type IDs)
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT '11111111-1111-1111-1111-111111111111', id, true FROM types WHERE display_name = 'Studio';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT '11111111-1111-1111-1111-111111111111', id, false FROM types WHERE display_name = 'Parent Company';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT '11111111-1111-1111-1111-111111111111', id, false FROM types WHERE display_name = 'Streamer';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT '22222222-2222-2222-2222-222222222222', id, true FROM types WHERE display_name = 'Studio';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT '33333333-3333-3333-3333-333333333333', id, true FROM types WHERE display_name = 'Streamer';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT '33333333-3333-3333-3333-333333333333', id, false FROM types WHERE display_name = 'Studio';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT '44444444-4444-4444-4444-444444444444', id, true FROM types WHERE display_name = 'Agency';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT '55555555-5555-5555-5555-555555555555', id, true FROM types WHERE display_name = 'Production Company';
 
 -- Sample People
 INSERT INTO objects (id, class, name, title, status, is_canon) VALUES
@@ -54,52 +48,42 @@ INSERT INTO objects (id, class, name, title, status, is_canon) VALUES
     ('aaaa4444-4444-4444-4444-444444444444', 'person', 'Bryan Lourd', 'Co-Chairman, CAA', 'active', true);
 
 -- Assign types to people
-INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
-    ('aaaa1111-1111-1111-1111-111111111111', 'executive', true),
-    ('aaaa2222-2222-2222-2222-222222222222', 'executive', true),
-    ('aaaa3333-3333-3333-3333-333333333333', 'producer', true),
-    ('aaaa3333-3333-3333-3333-333333333333', 'creative', false),
-    ('aaaa4444-4444-4444-4444-444444444444', 'agent', true),
-    ('aaaa4444-4444-4444-4444-444444444444', 'executive', false);
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT 'aaaa1111-1111-1111-1111-111111111111', id, true FROM types WHERE display_name = 'Executive';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT 'aaaa2222-2222-2222-2222-222222222222', id, true FROM types WHERE display_name = 'Executive';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT 'aaaa3333-3333-3333-3333-333333333333', id, true FROM types WHERE display_name = 'Producer' AND class = 'person';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT 'aaaa3333-3333-3333-3333-333333333333', id, false FROM types WHERE display_name = 'Creative';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT 'aaaa4444-4444-4444-4444-444444444444', id, true FROM types WHERE display_name = 'Agent';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT 'aaaa4444-4444-4444-4444-444444444444', id, false FROM types WHERE display_name = 'Executive';
 
 -- Sample Projects
 INSERT INTO objects (id, class, name, title, status, is_canon) VALUES
     ('bbbb1111-1111-1111-1111-111111111111', 'project', 'Avatar 3', 'The next chapter in the Avatar saga', 'production', true),
     ('bbbb2222-2222-2222-2222-222222222222', 'project', 'Stranger Things 5', 'Final season of the hit series', 'production', true);
 
--- Assign types to projects
-INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
-    ('bbbb1111-1111-1111-1111-111111111111', 'feature', true),
-    ('bbbb2222-2222-2222-2222-222222222222', 'tv_series', true);
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT 'bbbb1111-1111-1111-1111-111111111111', id, true FROM types WHERE display_name = 'Feature';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT 'bbbb2222-2222-2222-2222-222222222222', id, true FROM types WHERE display_name = 'TV Series';
 
 -- Sample Events (user-created, not canonical — skeleton rows, data lives in overrides)
 INSERT INTO objects (id, class, is_canon, created_by) VALUES
     ('eeee1111-1111-1111-1111-111111111111', 'event', false, 'cccc1111-1111-1111-1111-111111111111'),
     ('eeee2222-2222-2222-2222-222222222222', 'event', false, 'cccc1111-1111-1111-1111-111111111111');
 
-INSERT INTO objects_types (object_id, type_id, is_primary) VALUES
-    ('eeee1111-1111-1111-1111-111111111111', 'meeting', true),
-    ('eeee2222-2222-2222-2222-222222222222', 'meeting', true);
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT 'eeee1111-1111-1111-1111-111111111111', id, true FROM types WHERE display_name = 'Meeting';
+INSERT INTO objects_types (object_id, type_id, is_primary) SELECT 'eeee2222-2222-2222-2222-222222222222', id, true FROM types WHERE display_name = 'Meeting';
 
--- Connections
-INSERT INTO connections (source_id, target_id, type, data) VALUES
-    -- People employed by companies
-    ('aaaa1111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 'employed_by', '{}'),
-    ('aaaa2222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'employed_by', '{}'),
-    ('aaaa3333-3333-3333-3333-333333333333', '55555555-5555-5555-5555-555555555555', 'employed_by', '{}'),
-    ('aaaa4444-4444-4444-4444-444444444444', '44444444-4444-4444-4444-444444444444', 'employed_by', '{}'),
-    -- Bad Robot has deal at Warner Bros
-    ('55555555-5555-5555-5555-555555555555', '22222222-2222-2222-2222-222222222222', 'has_deal_at', '{}'),
-    -- Disney produces Avatar 3
-    ('11111111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', 'produces', '{}'),
-    -- Netflix produces Stranger Things
-    ('33333333-3333-3333-3333-333333333333', 'bbbb2222-2222-2222-2222-222222222222', 'produces', '{}'),
-    -- CAA represents J.J. Abrams
-    ('44444444-4444-4444-4444-444444444444', 'aaaa3333-3333-3333-3333-333333333333', 'represents', '{}'),
-    -- Event connections
-    ('aaaa1111-1111-1111-1111-111111111111', 'eeee1111-1111-1111-1111-111111111111', 'participated_in', '{}'),
-    ('eeee2222-2222-2222-2222-222222222222', 'bbbb1111-1111-1111-1111-111111111111', 'regarding', '{}'),
-    ('eeee2222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'held_at', '{}');
+-- Connections (direction-agnostic with role UUIDs looked up by display_name)
+INSERT INTO connections (object_a_id, object_b_id, role_a, role_b) VALUES
+    ('aaaa1111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', (SELECT id FROM roles WHERE display_name = 'Employee'), (SELECT id FROM roles WHERE display_name = 'Employer')),
+    ('aaaa2222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', (SELECT id FROM roles WHERE display_name = 'Employee'), (SELECT id FROM roles WHERE display_name = 'Employer')),
+    ('aaaa3333-3333-3333-3333-333333333333', '55555555-5555-5555-5555-555555555555', (SELECT id FROM roles WHERE display_name = 'Employee'), (SELECT id FROM roles WHERE display_name = 'Employer')),
+    ('aaaa4444-4444-4444-4444-444444444444', '44444444-4444-4444-4444-444444444444', (SELECT id FROM roles WHERE display_name = 'Employee'), (SELECT id FROM roles WHERE display_name = 'Employer')),
+    ('55555555-5555-5555-5555-555555555555', '22222222-2222-2222-2222-222222222222', (SELECT id FROM roles WHERE display_name = 'Deal Partner'), (SELECT id FROM roles WHERE display_name = 'Deal Partner')),
+    ('11111111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', (SELECT id FROM roles WHERE display_name = 'Producer'), (SELECT id FROM roles WHERE display_name = 'Production')),
+    ('33333333-3333-3333-3333-333333333333', 'bbbb2222-2222-2222-2222-222222222222', (SELECT id FROM roles WHERE display_name = 'Producer'), (SELECT id FROM roles WHERE display_name = 'Production')),
+    ('44444444-4444-4444-4444-444444444444', 'aaaa3333-3333-3333-3333-333333333333', (SELECT id FROM roles WHERE display_name = 'Rep'), (SELECT id FROM roles WHERE display_name = 'Client')),
+    ('aaaa1111-1111-1111-1111-111111111111', 'eeee1111-1111-1111-1111-111111111111', (SELECT id FROM roles WHERE display_name = 'Participant'), NULL),
+    ('eeee2222-2222-2222-2222-222222222222', 'bbbb1111-1111-1111-1111-111111111111', NULL, (SELECT id FROM roles WHERE display_name = 'Subject')),
+    ('eeee2222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', NULL, (SELECT id FROM roles WHERE display_name = 'Venue'));
 
 -- =============================================================================
 -- MATT'S LANDSCAPE (objects_overrides with positions)

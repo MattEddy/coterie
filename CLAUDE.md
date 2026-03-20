@@ -86,7 +86,12 @@ coterie/
 │   │   ├── DetailPanel.tsx     # Floating panel (read/edit mode, tag input, reactive positioning)
 │   │   ├── DetailPanel.module.css
 │   │   ├── MultiSelectPanel.tsx  # Panel for 3+ selected nodes (bounding box positioning)
-│   │   └── MultiSelectPanel.module.css
+│   │   ├── MultiSelectPanel.module.css
+│   │   ├── CreateObjectForm.tsx  # Inline form for double-click object creation
+│   │   ├── CreateObjectForm.module.css
+│   │   ├── ConnectionRoleForm.tsx # Role editor for creating/editing connections
+│   │   ├── ConnectionRoleForm.module.css
+│   │   └── RoleEdge.tsx          # Custom edge with role labels near each endpoint
 │   ├── types.ts                # Shared types (NodeRect)
 │   └── styles/
 │       └── global.css          # CSS variables, reset, dark theme
@@ -224,12 +229,12 @@ When two coterie members independently create the same real-world entity, the di
 ```
 sectors                -- entertainment, tech, finance, etc.
 classes                -- company, person, project (fixed)
-types                  -- studio, executive, feature, etc. (extensible)
+types                  -- UUID PK, display_name, class, is_canon, created_by (extensible vocabulary)
+roles                  -- UUID PK, display_name, is_canon, created_by (connection endpoint vocabulary)
 objects                -- ALL entities (is_canon boolean, created_by tracks origin, event_date for events)
 objects_sectors        -- many-to-many: object ↔ sectors
 objects_types          -- many-to-many: object ↔ types (canonical)
-connection_types       -- employed_by, produces, represents, etc.
-connections            -- canonical connections (source, target, type, is_active)
+connections            -- direction-agnostic (object_a, object_b, role_a, role_b, is_active)
 ```
 
 **Maps:**
@@ -292,7 +297,9 @@ This is what makes Coterie not a data broker. It's the anti-ZoomInfo stance, enf
 - **Landscape deletion = cascade with confirmation** — show the user what they'll lose (connections, orphaned events/projects), one click to proceed. Canonical objects just lose their override (user stops seeing them). User-created objects with no remaining connections are hard-deleted.
 - **`objects_overrides.object_id` is always set** — no more `NULL` = user-created pattern. Overrides always point to an `objects` row.
 - **Landscape coordinates always live in overrides**, never canonical — everyone has their own layout
-- **`connections_overrides` source/target have no FK** — can reference any `objects.id`; flexible for user-created connections
+- **Connections are direction-agnostic** — `object_a_id`/`object_b_id` with no implied ordering; roles label each side
+- **`connections_overrides` object_a/object_b have no FK** — can reference any `objects.id`; flexible for user-created connections
+- **UUID IDs for user-creatable vocabulary** — `types` and `roles` use UUID PKs to prevent slug collisions between users
 - **`maps_objects.object_ref_id`** always references `objects.id` — no ambiguity about which table to look in
 - **Coterie sharing is diff-based** — dissonances computed from comparing overrides, not stored events. Self-correcting when changes are reversed.
 - **Coterie intel is a query pattern** — no extra table; join coterie members' overrides, exclude `private_notes`
@@ -303,17 +310,22 @@ This is what makes Coterie not a data broker. It's the anti-ZoomInfo stance, enf
 - **All FKs reference `profiles(user_id)`** not `auth.users(id)` — keeps all relationships in the public schema
 - **Auto-create profile on signup** via trigger on `auth.users`
 
-### Key Connection Types
+### Connection Roles (replacing Connection Types)
 
-- `employed_by`: person → company
-- `has_deal_at`: company → company
-- `produces`: company → project
-- `attached_to`: person → project
-- `represents`: company → person
-- `reports_to`: person → person
-- `participated_in`: person → event
-- `regarding`: event → project/company
-- `held_at`: event → company
+Connections are **direction-agnostic** — no source/target, just `object_a` and `object_b` with optional **roles** describing what each object IS in the relationship. Roles are a shared vocabulary (`roles` table) with `is_canon` + `created_by`, same pattern as `types`.
+
+Example canonical role pairs:
+- `Employee` / `Employer` (person ↔ company)
+- `Rep` / `Client` (company ↔ person)
+- `Parent` / `Subsidiary` (company ↔ company)
+- `Producer` / `Production` (company ↔ project)
+- `Supervisor` / `Direct Report` (person ↔ person)
+
+Roles are **not class-restricted** — any role can be used on any class. Users can create custom roles on the fly (same as custom types).
+
+### UUID IDs for Vocabulary Tables
+
+Both `types` and `roles` tables use **UUID primary keys** (not slugs). This prevents collisions when multiple users independently create custom entries with the same display name. The `user_objects` view joins through to `types.display_name` so the UI works with display names, resolving to UUIDs only when writing to the DB.
 
 ## User Experience (Pro)
 
@@ -359,6 +371,15 @@ DetailPanel tracks its node through pan/zoom/drag using React Flow hooks:
 
 ### Multi-Select Panel Positioning
 For 3+ selected nodes, compute bounding box of all selected nodes in screen space, then position the panel beside the box (whichever side has more room).
+
+### React Flow v12 Missing Events
+React Flow v12 does NOT have `onPaneDoubleClick`. Detect double-click manually via timing in `onPaneClick` (track last click time + position, 400ms window, 10px tolerance). Same pattern needed for `onEdgeDoubleClick` — detect in `handleEdgeClick`.
+
+### React Flow `useOnSelectionChange` Fires on Mousedown
+`useOnSelectionChange` fires when React Flow internally selects a node on mousedown, NOT on mouseup. This causes detail panels to open during drags. Fix: skip single-node changes in the handler unless a lasso is in progress (`isLassoRef` set via `onSelectionStart`/`onSelectionEnd`). Let `onNodeClick` (mouseup, doesn't fire after drag) be the sole driver for single-node panel opening.
+
+### Stale Closures in React Flow Callbacks
+Edge/connection handlers registered with `useCallback` capture `nodes` at creation time. If the dependency array doesn't include `nodes`, the handler sees an empty array and crashes on `.find()`. Fix: use a `nodesRef` pattern (`const nodesRef = useRef<Node[]>([]); nodesRef.current = nodes`) and access `nodesRef.current` in callbacks.
 
 ### CSS clip-path Stacking Context
 `clip-path` creates a stacking context. A `::before` pseudo-element with `z-index: -1` inside a clip-path parent will render ABOVE the parent's background (covering it), not behind it. Don't use `::before` for border effects on clip-path elements.
@@ -465,6 +486,19 @@ When ready to deploy:
 - [x] `coteries_reviews` simplified to dismissal-only (accepted = the data change IS the record)
 - [x] Escape key layering: closes edit forms → closes panel
 - [x] Canvas refresh preserves selection state (fixes blank-screen bug on save)
+- [x] Double-click empty canvas to create objects (Person/Company toggle + name input)
+- [x] Landscape object deletion with cascade confirmation (blast radius query + overlay)
+- [x] Direction-agnostic connections with roles (replaces directional connection_types)
+- [x] `roles` table: shared vocabulary for connection endpoints, UUID PK, is_canon + created_by
+- [x] `types` table migrated to UUID PKs (prevents multi-user slug collisions)
+- [x] Views join through to `display_name` for types (no more slug-to-display mapping in UI)
+- [x] Visual connection creation via drag handle-to-handle + role assignment form
+- [x] Connection editing via double-click edge (edit roles, delete connection)
+- [x] Custom RoleEdge component: role labels positioned near each respective node
+- [x] Canvas loads both canonical + user-created connections, filtering deactivated
+- [x] Drag-opens-panel bug fixed (useOnSelectionChange skips single-node mousedown selections)
+- [x] `nodesRef` pattern for stable access to current nodes in edge/connection handlers
+- [x] `--color-text-muted` unified across components, brightened to #999
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -475,11 +509,10 @@ When ready to deploy:
 - [x] Local SQLite database
 
 ### Next Up
-- [ ] Search → zoom → floating detail panel (the core UX loop)
-- [ ] Add new objects to the Landscape (people, companies)
-- [ ] Landscape object deletion with cascade confirmation (design decided: option #3 — show blast radius, one click to proceed)
-- [ ] Visual connection creation via drag handles (both landscape and detail panel)
+- [ ] Company → Organization rename (class rename — Matt sleeping on the exact word)
+- [ ] Connection type directionality design (two-pole model explored, deferred)
 - [ ] RLS policies (before multi-user)
+- [ ] Search → zoom → floating detail panel (the core UX loop)
 
 ### Planned
 - [ ] Map packages (store) with relative coordinates + stamp placement

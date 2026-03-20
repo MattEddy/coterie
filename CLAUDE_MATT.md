@@ -5,55 +5,57 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-07-08
+**Date:** 2026-03-19
 **Branch:** main
 
 ### Narrative
 
-Massive session — detail panel redesign, schema overhaul, and full projects/events implementation. Matt came back rusty on the schema and we spent good time re-grounding before building.
+Huge session covering canvas CRUD (add/delete objects, create/edit/delete connections) and a major schema evolution from directional connection types to symmetric roles.
 
-**Schema review & Option B storage.** Walked through the four-class model and how user-created objects (events, projects) store data. Landed on "Option B": user-created objects get a skeleton `objects` row (just id, class, is_canon, created_by) with ALL content in `objects_overrides`. This makes the merge-to-canonical flow clean — just repoint overrides. Updated `objects.name` to nullable, added `event_date` to `objects_overrides`, updated `user_objects` view to COALESCE `event_date`. Seed data updated so events use skeleton rows + override UPDATEs.
+**Double-click to create objects.** Inline form appears at click position — Person/Company toggle (Tab key switches) + name input. Creates skeleton `objects` row + `objects_overrides` with name and map position. Detail panel auto-opens on the new node. React Flow v12 has no `onPaneDoubleClick` — detected via timing in `onPaneClick` (400ms window, 10px tolerance). Disabled the useless default double-click-to-zoom.
 
-**JSONB contacts model.** Matt questioned the rigid contact columns (phone, phone_2, email, website, address). Researched best practices — landed on the vCard/Apple Contacts pattern: `data.contacts` array of `{type, label, value}` entries. Dropped all fixed contact columns from both `objects` and `objects_overrides`. Person private reachability CHECK constraint preserved via `jsonb_path_exists` on the JSONB. Company public contact info (website, switchboard) can be canonical; person phone/email/address is override-only. The `data` JSONB column serves double duty — contacts for people/companies, future metadata for projects/events.
+**Drag-opens-panel bug fixed.** `useOnSelectionChange` fires on mousedown (when React Flow internally selects a node), not mouseup. This caused the detail panel to open whenever you started dragging. Root cause fix: `useOnSelectionChange` now skips single-node changes unless a lasso is in progress (`isLassoRef` via `onSelectionStart`/`onSelectionEnd`). `onNodeClick` (mouseup, suppressed after drag) is the sole driver for single-node panel opening.
 
-**Detail panel redesign.** Complete overhaul from a flat read/edit panel to a structured tabbed layout:
-- **Header**: photo (optional) + name + title (editable via pencil) + types (editable via +)
-- **Tab bar**: Contact Info, Notes, Projects, Events (icon buttons)
-- **Per-section editing**: each tab has its own edit toggle, no global edit mode
-- Contact tab renders dynamic typed/labeled entries from `data.contacts`
-- Notes tab has "Shared with Coteries" and "Private (Not Shared)" sections with per-block scroll boundaries
-- UX details: auto-focus tag input, `field-sizing: content` on textareas, `white-space: pre-wrap` for line breaks, address uses textarea, `autoComplete="off"` everywhere, dark date picker via `color-scheme: dark`
+**Landscape deletion with cascade confirmation.** Trash icon in detail panel header. On click: queries blast radius (visible connections, orphaned projects/events — only counts connections where both endpoints are on the user's landscape). Confirmation overlay shows "Delete Name? This will also delete X connections and Y projects and Z events." Canonical objects: delete override (disappears from landscape). User-created objects: hard-delete override + object row. Orphaned off-landscape objects cleaned up.
 
-**Projects/Events tabs — full implementation.** The big feature. Connected projects/events load lazily when the tab activates. Connection type mapping handles directionality (person→project via `attached_to`, company→project via `produces`, event→company via `held_at` where event is source). Items render as expandable cards with chevron, name, date/status pill. Create form: events lead with Event Type(s), projects lead with Project name. Project creation uses ObjectSearch with name matching — search existing projects to link, or "Create [name]" to make new. Multi-object linking via "Also link to..." search in both create form and expanded view. Edit mode inline with same fields as creation.
+**Connection model redesign — from directional types to symmetric roles.** Matt questioned whether connection types needed directionality, then whether types were needed at all, then landed on the two-role model. Each connection has `object_a_id`/`object_b_id` (no implied direction) and optional `role_a`/`role_b` describing what each object IS in the relationship (Employee/Employer, Rep/Client, etc.). The `connection_types` table was replaced by a `roles` vocabulary table. `connections` and `connections_overrides` updated throughout.
 
-**ObjectSearch component.** Reusable autocomplete that searches `user_objects` by name. Configurable: `targetClass` filter, `excludeIds`, `onSelect` callback, `onCreateNew` for creating from typed text, `onCancel` for Escape. Used for project name matching and the link-to search in both create and expanded views.
+**UUID IDs for types and roles.** Matt asked "what if two users create the same custom role?" — the TEXT slug PK would collide. Same latent bug existed in the `types` table. Migrated both to UUID PKs. Views (`objects_with_types`, `user_objects`) now join through to `display_name`. TagInput works with display_names throughout, resolving to UUIDs when writing to `objects_types_overrides`. Seed data uses `SELECT id FROM types WHERE display_name = '...'` subqueries.
 
-**Hard delete for user tables.** Matt questioned whether soft delete (`is_active`) is always worth it. Concluded: canonical tables keep soft delete (admin editorial control), user tables (overrides) use hard delete (no zombies, simpler queries). Removed `is_active` from `objects_overrides` and `connections_overrides`. Added `deactivated BOOLEAN` on `connections_overrides` specifically for overriding canonical connections. Updated `user_objects` view to drop the `ov.is_active` filter.
+**Removed `valid_classes` from roles.** Matt: "Let people have control... a person could have a deal with a company, or another person." All roles available for all classes.
 
-**Orphan cleanup on delete.** When removing a connection: hard-delete user-created connections, deactivate canonical ones. Then check remaining connections — if none left, hard-delete the `objects_overrides` row (removes from view/autocomplete). If the user created the object and it's not canonical, hard-delete the `objects` row too. True cleanup, no zombies.
+**Visual connection creation.** Drag handle-to-handle fires `onConnect` → ConnectionRoleForm appears at midpoint between nodes. Two rows: object name + role autocomplete input (filtered to canonical + user's custom roles). Roles optional — hit Connect for a bare line. Custom roles auto-created in the `roles` table with UUID PK. Canvas `refreshData` now loads both canonical connections and user-created connections from `connections_overrides`, filtering out deactivated.
 
-**`coteries_reviews` simplified.** Accepted dissonances don't need a row — the data change IS the record. Table now stores dismissals only (may be removed entirely if dismissals prove rare). Renamed from `coterie_reviews` to `coteries_reviews` for consistency (also renamed `coterie_members` → `coteries_members`).
+**Connection editing.** Double-click an edge → ConnectionRoleForm opens pre-populated with current roles + Delete button. Save updates roles (user-created: direct update, canonical: creates/updates override). Delete removes connection (user-created: hard-delete, canonical: deactivates via override).
 
-**Landscape deletion design decided.** Option #3: cascade with confirmation. Show the user what they'll lose (X connections, Y events, Z projects), one click to proceed. Not built yet — next session.
+**Custom RoleEdge component.** Role labels positioned at 20%/80% along the edge (near each respective node) instead of a single label in the middle. Dark background pills for readability. Labels only visible when edge is highlighted (click or multi-select). Edges changed from bezier curves to straight lines (Matt prefers it).
 
-**Canvas refresh bug fixed.** `refreshData` was replacing all nodes without preserving `selected` state, causing React Flow to fire spurious selection changes and blank the screen. Fixed with `selectedItemsRef` to preserve selection through the refresh cycle.
+**Stale closure bugs.** `handleEdgeClick` and `handleConnect` referenced `nodes` state captured at creation time (empty array). Crashes on `.find()`. Fixed with `nodesRef` pattern — `const nodesRef = useRef<Node[]>([]); nodesRef.current = nodes` — so callbacks always read current state.
 
-**Escape key layering.** Escape from create forms closes the form. Escape from the panel (no edit active) closes the panel. `onCancel` prop added to both TagInput and ObjectSearch.
+**Autocomplete dropdown persistence bug.** ConnectionRoleForm's `useEffect` on `value` re-triggered fetch + reopened dropdown after Enter selection (value changes → fetch → show suggestions). Fixed with `isTyping` flag — only fetch when user is actively typing, not on programmatic value changes.
 
-**TagInput auto-highlight.** First suggestion is now pre-highlighted (index 0), so typing "me" + Enter selects "meeting" instead of creating a "me" type. Matt's muscle memory was expecting autocomplete behavior.
+**Minor styling.** Muted text color unified to `var(--color-text-muted)` (was hardcoded `#777` on node types). Brightened from `#888` to `#999`. Type tag placeholders updated: person = "Tags (eg jobs, roles, etc.)", company = "Organization Type(s)".
+
+**Company → Organization rename explored.** Matt felt "company" was too narrow — doesn't cover unions, government agencies, departments. Explored "Organization" but felt it was "a little sweaty." Sleeping on it.
 
 ### Files Modified
-- `supabase/migrations/20260203000000_pro_schema.sql` — Dropped contact columns, JSONB contacts CHECK constraint, Option B (nullable name), `event_date` on overrides, `is_active` removed from override tables, `deactivated` on connections_overrides, `coteries_members`/`coteries_reviews` renames, simplified coteries_reviews
-- `supabase/seed.sql` — Event skeleton rows, company contacts in `data.contacts` JSONB
-- `src/components/DetailPanel.tsx` — Complete rewrite: tabbed layout, per-section editing, JSONB contacts UI, Projects/Events tabs with create/edit/delete/search/link, ObjectSearch component, TagInput enhancements (onCancel, autoFocus prop, auto-highlight), Escape key layering
-- `src/components/DetailPanel.module.css` — New styles for header/tabs/contact rows/item list/create form/linked objects/search input
-- `src/components/ObjectNode.tsx` — ContactEntry interface, ObjectNodeData updated (dropped contact columns, added data field)
-- `src/components/Canvas.tsx` — Selection preservation in refreshData (selectedItemsRef), data mapping updated for new ObjectNodeData shape
-- `CLAUDE.md` — Option B storage, JSONB contacts, deletion strategy, landscape deletion design, updated status
+- `supabase/migrations/20260203000000_pro_schema.sql` — `connection_types` → `roles` table (UUID PK), `connections` direction-agnostic (`object_a_id`/`object_b_id`/`role_a`/`role_b`), `connections_overrides` same, `types` migrated to UUID PK, views join to `display_name`, removed `valid_classes` from roles
+- `supabase/seed.sql` — Connections use role pairs via display_name subqueries, type assignments via display_name subqueries
+- `src/components/Canvas.tsx` — Double-click create, `onConnect` + ConnectionRoleForm, edge double-click edit, `nodesRef` pattern, loads canonical + user-created connections, `isLassoRef` for drag fix, `zoomOnDoubleClick={false}`, custom `edgeTypes`
+- `src/components/CreateObjectForm.tsx` — New: Person/Company toggle + name input
+- `src/components/CreateObjectForm.module.css` — New: class-colored toggle buttons
+- `src/components/ConnectionRoleForm.tsx` — New: two-slot role editor with autocomplete, edit mode, delete button
+- `src/components/ConnectionRoleForm.module.css` — New: role input, suggestions dropdown, delete/connect buttons
+- `src/components/RoleEdge.tsx` — New: custom edge with role labels near endpoints
+- `src/components/DetailPanel.tsx` — Delete with cascade confirmation, `connectionConfig`/`projectConnectionTypes`/`eventConnectionTypes` removed, all queries updated `source_id`→`object_a_id` / `target_id`→`object_b_id`, TagInput uses display_names with UUID resolution on save, type creation uses UUID
+- `src/components/DetailPanel.module.css` — Delete confirmation overlay styles
+- `src/components/ObjectNode.tsx` — `is_canon` + `created_by` added to `ObjectNodeData`
+- `src/components/ObjectNode.module.css` — Type color uses `var(--color-text-muted)`
+- `src/styles/global.css` — `--color-text-muted` brightened to `#999`
 
 ### Open Items / Next Steps
-1. **Search → zoom** — the core UX loop, highest-impact next feature
-2. **Add new objects to the Landscape** (people, companies)
-3. **Landscape object deletion** with cascade confirmation (design decided, not built)
-4. **Visual connection creation** via drag handles (both landscape and detail panel)
-5. **RLS policies** — before multi-user
+1. **Company → Organization rename** — Matt sleeping on the exact word
+2. **RLS policies** — before multi-user
+3. **Search → zoom** — the core UX loop
+4. **Map packages** (store) with stamp placement
+5. **User maps** (filtered views of the Landscape)

@@ -31,14 +31,14 @@ const tabs: { id: TabId; Icon: typeof Phone; label: string; heading: string }[] 
 ]
 
 const classPlaceholders: Record<string, { name: string; title: string }> = {
-  company: { name: 'Company Name', title: 'Description' },
+  org: { name: 'Name', title: 'Description' },
   person:  { name: 'Name (First Last)', title: 'Title' },
   project: { name: 'Project Name', title: 'Description' },
   event:   { name: 'Event Name', title: 'Description' },
 }
 
 const typeTagPlaceholders: Record<string, string> = {
-  company: 'Organization Type(s)',
+  org: 'Org Type(s)',
   person:  'Tags (eg jobs, roles, etc.)',
   project: 'e.g. feature, tv series, documentary...',
   event:   'e.g. meeting, call, pitch...',
@@ -267,7 +267,7 @@ function ObjectSearch({ userId, targetClass, excludeIds = [], placeholder, onSel
       q = q.eq('class', targetClass)
     } else {
       // For link search, show landscape objects + projects
-      q = q.in('class', ['company', 'person', 'project'])
+      q = q.in('class', ['org', 'person', 'project'])
     }
 
     q.then(({ data }) => {
@@ -454,7 +454,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     check()
   }, [peerObject, object.id, user])
 
-  const placeholders = classPlaceholders[object.class] || classPlaceholders.company
+  const placeholders = classPlaceholders[object.class] || classPlaceholders.org
 
   // Load connected projects/events when tab activates
   const loadConnectedItems = useCallback(async (objectId: string, targetClass: 'project' | 'event') => {
@@ -1438,7 +1438,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             <ObjectSearch
               userId={user!.id}
               excludeIds={[...connectedIds, ...newItemLinks.map(l => l.id)]}
-              placeholder="Link to another person, company, or project..."
+              placeholder="Link to another person, org, or project..."
               onSelect={obj => setNewItemLinks(prev => [...prev, obj])}
               autoFocus={false}
             />
@@ -1540,7 +1540,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                     <ObjectSearch
                       userId={user!.id}
                       excludeIds={[object.id, item.id, ...linkedObjects.map(lo => lo.id)]}
-                      placeholder="Link to person, company, or project..."
+                      placeholder="Link to person, org, or project..."
                       onSelect={obj => linkObjectToItem(item.id, obj, targetClass)}
                       autoFocus
                     />

@@ -27,7 +27,7 @@ export interface ObjectNodeData {
 }
 
 const classStyles: Record<string, string> = {
-  company: styles.company,
+  org: styles.org,
   person: styles.person,
   project: styles.project,
 }

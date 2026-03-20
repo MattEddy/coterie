@@ -23,10 +23,10 @@
   box-shadow: var(--shadow);
 }
 
-/* Company: rounded rectangle */
-.company {
+/* Org: rounded rectangle */
+.org {
   border-radius: var(--radius);
-  background: var(--color-company-dim);
+  background: var(--color-org-dim);
 }
 
 /* Person: pill (flat top/bottom, round sides) */

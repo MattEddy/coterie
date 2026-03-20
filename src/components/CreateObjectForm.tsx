@@ -8,7 +8,7 @@ interface CreateObjectFormProps {
 }
 
 export default function CreateObjectForm({ screenPosition, onSubmit, onCancel }: CreateObjectFormProps) {
-  const [selectedClass, setSelectedClass] = useState<'person' | 'company'>('person')
+  const [selectedClass, setSelectedClass] = useState<'person' | 'org'>('person')
   const [name, setName] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -26,13 +26,13 @@ export default function CreateObjectForm({ screenPosition, onSubmit, onCancel }:
       onSubmit(selectedClass, name.trim())
     } else if (e.key === 'Tab') {
       e.preventDefault()
-      setSelectedClass(prev => prev === 'person' ? 'company' : 'person')
+      setSelectedClass(prev => prev === 'person' ? 'org' : 'person')
     }
   }, [name, selectedClass, onSubmit, onCancel])
 
   // Clamp position so the form doesn't overflow the viewport
   const formWidth = 220
-  const formHeight = 90
+  const formHeight = 115
   const x = Math.min(screenPosition.x, window.innerWidth - formWidth - 12)
   const y = Math.min(screenPosition.y, window.innerHeight - formHeight - 12)
 
@@ -44,6 +44,10 @@ export default function CreateObjectForm({ screenPosition, onSubmit, onCancel }:
       onKeyDown={handleKeyDown}
       onMouseDown={e => e.stopPropagation()}
     >
+      <div className={styles.header}>
+        <span className={styles.heading}>Create a new:</span>
+        <button className={styles.cancelBtn} onClick={onCancel} type="button">&times;</button>
+      </div>
       <div className={styles.classToggle}>
         <button
           className={`${styles.classBtn} ${selectedClass === 'person' ? styles.personActive : ''}`}
@@ -53,18 +57,18 @@ export default function CreateObjectForm({ screenPosition, onSubmit, onCancel }:
           Person
         </button>
         <button
-          className={`${styles.classBtn} ${selectedClass === 'company' ? styles.companyActive : ''}`}
-          onClick={() => setSelectedClass('company')}
+          className={`${styles.classBtn} ${selectedClass === 'org' ? styles.orgActive : ''}`}
+          onClick={() => setSelectedClass('org')}
           type="button"
         >
-          Company
+          Org
         </button>
       </div>
       <input
         ref={inputRef}
         className={styles.nameInput}
         type="text"
-        placeholder={selectedClass === 'person' ? 'Name (First Last)' : 'Company Name'}
+        placeholder={selectedClass === 'person' ? 'Name (First Last)' : 'Name'}
         value={name}
         onChange={e => setName(e.target.value)}
         autoComplete="off"

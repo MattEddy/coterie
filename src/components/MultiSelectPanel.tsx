@@ -14,11 +14,11 @@ interface MultiSelectPanelProps {
 
 export default function MultiSelectPanel({ items, position, onClose }: MultiSelectPanelProps) {
   const counts: { label: string; count: number }[] = []
-  const companies = items.filter(i => i.data.class === 'company').length
+  const orgs = items.filter(i => i.data.class === 'org').length
   const people = items.filter(i => i.data.class === 'person').length
   const projects = items.filter(i => i.data.class === 'project').length
 
-  if (companies > 0) counts.push({ label: companies === 1 ? 'company' : 'companies', count: companies })
+  if (orgs > 0) counts.push({ label: orgs === 1 ? 'org' : 'orgs', count: orgs })
   if (people > 0) counts.push({ label: people === 1 ? 'person' : 'people', count: people })
   if (projects > 0) counts.push({ label: projects === 1 ? 'project' : 'projects', count: projects })
 

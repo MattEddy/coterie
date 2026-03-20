@@ -75,7 +75,7 @@ INSERT INTO sectors (id, display_name, icon, color) VALUES
     ('media', 'Media & Journalism', 'newspaper', '#7C3AED');
 
 -- =============================================================================
--- CLASSES (fixed: company, person, project)
+-- CLASSES (fixed: org, person, project, event)
 -- =============================================================================
 
 CREATE TABLE classes (
@@ -88,7 +88,7 @@ CREATE TABLE classes (
 );
 
 INSERT INTO classes (id, display_name, icon, color, landscape_visible) VALUES
-    ('company', 'Company', 'building.2', '#3B82F6', TRUE),
+    ('org', 'Org', 'building.2', '#3B82F6', TRUE),
     ('person', 'Person', 'person.fill', '#10B981', TRUE),
     ('project', 'Project', 'film', '#F59E0B', FALSE),
     ('event', 'Event', 'calendar', '#DC2626', FALSE);
@@ -108,18 +108,18 @@ CREATE TABLE types (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Company types (canonical)
+-- Org types (canonical)
 INSERT INTO types (display_name, class, icon, color, is_canon) VALUES
-    ('Studio', 'company', 'building.2.fill', '#3B82F6', TRUE),
-    ('Parent Company', 'company', 'building.columns', '#1E40AF', TRUE),
-    ('Network', 'company', 'tv', '#7C3AED', TRUE),
-    ('Streamer', 'company', 'play.tv', '#DC2626', TRUE),
-    ('Production Company', 'company', 'film.stack', '#059669', TRUE),
-    ('Agency', 'company', 'person.3', '#EA580C', TRUE),
-    ('Management', 'company', 'person.2', '#DB2777', TRUE),
-    ('Financier', 'company', 'dollarsign.circle', '#CA8A04', TRUE),
-    ('Distributor', 'company', 'shippingbox', '#0891B2', TRUE),
-    ('Guild/Union', 'company', 'person.badge.shield.checkmark', '#6B7280', TRUE);
+    ('Studio', 'org', 'building.2.fill', '#3B82F6', TRUE),
+    ('Parent Company', 'org', 'building.columns', '#1E40AF', TRUE),
+    ('Network', 'org', 'tv', '#7C3AED', TRUE),
+    ('Streamer', 'org', 'play.tv', '#DC2626', TRUE),
+    ('Production Company', 'org', 'film.stack', '#059669', TRUE),
+    ('Agency', 'org', 'person.3', '#EA580C', TRUE),
+    ('Management', 'org', 'person.2', '#DB2777', TRUE),
+    ('Financier', 'org', 'dollarsign.circle', '#CA8A04', TRUE),
+    ('Distributor', 'org', 'shippingbox', '#0891B2', TRUE),
+    ('Guild/Union', 'org', 'person.badge.shield.checkmark', '#6B7280', TRUE);
 
 -- Person types (canonical)
 INSERT INTO types (display_name, class, icon, color, is_canon) VALUES

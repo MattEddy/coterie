@@ -137,7 +137,7 @@ function CanvasInner() {
       .from('user_objects')
       .select('*')
       .eq('user_id', user.id)
-      .in('class', ['company', 'person'])
+      .in('class', ['org', 'person'])
 
     if (!objects) return
 

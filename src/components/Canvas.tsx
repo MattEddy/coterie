@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
   Background,
-  Controls,
   useNodesState,
   useEdgesState,
   useReactFlow,
@@ -58,9 +57,13 @@ function getNearestHandles(
   return { sourceHandle, targetHandle }
 }
 
-function CanvasInner() {
+export interface CanvasRef {
+  zoomToNode: (nodeId: string) => void
+}
+
+const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
   const { user } = useAuth()
-  const { flowToScreenPosition, screenToFlowPosition } = useReactFlow()
+  const { flowToScreenPosition, screenToFlowPosition, setCenter } = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
@@ -70,6 +73,21 @@ function CanvasInner() {
   nodesRef.current = nodes
   const connectionsRef = useRef<{ id: string; object_a_id: string; object_b_id: string; role_a: string | null; role_b: string | null; isUserCreated: boolean }[]>([])
   const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+
+  useImperativeHandle(ref, () => ({
+    zoomToNode(nodeId: string) {
+      const node = nodesRef.current.find(n => n.id === nodeId)
+      if (!node) return
+      setCenter(
+        node.position.x + NODE_WIDTH / 2,
+        node.position.y + NODE_HEIGHT / 2,
+        { zoom: 1.2, duration: 800 }
+      )
+      const data = node.data as unknown as ObjectNodeData
+      setSelectedItems([{ nodeId: node.id, data }])
+    }
+  }), [setCenter])
+
   const [createForm, setCreateForm] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
   const [connectForm, setConnectForm] = useState<{
     objectA: { id: string; name: string; class: string }
@@ -742,7 +760,6 @@ function CanvasInner() {
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#222" />
-        <Controls showInteractive={false} />
       </ReactFlow>
 
       {/* Level 1: Single selection */}
@@ -813,12 +830,14 @@ function CanvasInner() {
       )}
     </div>
   )
-}
+})
 
-export default function Canvas() {
+const Canvas = forwardRef<CanvasRef>(function Canvas(_, ref) {
   return (
     <ReactFlowProvider>
-      <CanvasInner />
+      <CanvasInner ref={ref} />
     </ReactFlowProvider>
   )
-}
+})
+
+export default Canvas

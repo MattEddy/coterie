@@ -113,7 +113,7 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
         sourceHandle,
         targetHandle,
         data: { role_a: conn.role_a, role_b: conn.role_b, highlighted: false },
-        style: { stroke: '#3a3232', strokeWidth: 1.5 },
+        style: { stroke: '#2e2e30', strokeWidth: 1.5 },
       }
     })
     setEdges(flowEdges)
@@ -418,7 +418,7 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
           return {
             ...e,
             data: { ...e.data, highlighted: false },
-            style: { stroke: '#3a3232', strokeWidth: 1.5 },
+            style: { stroke: '#2e2e30', strokeWidth: 1.5 },
           }
         })
       )
@@ -454,7 +454,7 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
       current.map(e => ({
         ...e,
         data: { ...e.data, highlighted: false },
-        style: { stroke: '#3a3232', strokeWidth: 1.5 },
+        style: { stroke: '#2e2e30', strokeWidth: 1.5 },
       }))
     )
   }, [setEdges, screenToFlowPosition])

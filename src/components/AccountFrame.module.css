@@ -32,6 +32,6 @@
 }
 
 .signOut:hover {
-  border-color: #dc2626;
-  color: #dc2626;
+  border-color: var(--color-danger);
+  color: var(--color-danger);
 }

@@ -15,10 +15,50 @@
   --color-person-dim: #203038;
   --color-project-dim: #382e22;
   --color-event-dim: #382830;
+  --color-org-border: #5a4250;
+  --color-person-border: #344e5a;
+  --color-org-type: #b88898;
+  --color-person-type: #5aacc0;
+  --color-edge: #2e2e30;
+  --color-edge-highlight: #e0dcd8;
+  --color-dots: #1e1a1a;
+  --color-placeholder: #5a5252;
+  --color-danger: #dc2626;
+  --color-scheme: dark;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   --font-sans: 'Urbanist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', monospace;
   --radius: 8px;
-  --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] {
+  --color-bg: #f5f3f0;
+  --color-surface: #ffffff;
+  --color-surface-2: #f0ece8;
+  --color-border: #d8d4d0;
+  --color-text: #1a1816;
+  --color-text-muted: #8a8280;
+  --color-accent: #b89840;
+  --color-accent-hover: #a68830;
+  --color-org: #8a5068;
+  --color-person: #2a88a0;
+  --color-project: #a08030;
+  --color-event: #8a5068;
+  --color-org-dim: #f4e8ec;
+  --color-person-dim: #e4f0f4;
+  --color-project-dim: #f4ece0;
+  --color-event-dim: #f4e8ec;
+  --color-org-border: #c0a0b0;
+  --color-person-border: #90b8c8;
+  --color-org-type: #8a5068;
+  --color-person-type: #2a88a0;
+  --color-edge: #c8c4c0;
+  --color-edge-highlight: #1a1816;
+  --color-dots: #e8e4e0;
+  --color-placeholder: #b0a8a0;
+  --color-danger: #dc2626;
+  --color-scheme: light;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 * {

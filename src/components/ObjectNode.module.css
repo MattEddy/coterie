@@ -27,14 +27,14 @@
 .org {
   border-radius: var(--radius);
   background: var(--color-org-dim);
-  border-color: #5a4250;
+  border-color: var(--color-org-border);
 }
 
 /* Person: pill (flat top/bottom, round sides) */
 .person {
   border-radius: 30px;
   background: var(--color-person-dim);
-  border-color: #344e5a;
+  border-color: var(--color-person-border);
 }
 
 /* Project: squashed octagon (diamond with cut corners) */
@@ -75,8 +75,8 @@
   color: var(--color-text-muted);
 }
 
-.org .type { color: #b88898; }
-.person .type { color: #5aacc0; }
+.org .type { color: var(--color-org-type); }
+.person .type { color: var(--color-person-type); }
 
 .handle {
   width: 6px;

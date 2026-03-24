@@ -54,7 +54,7 @@
 
 .error {
   font-size: 13px;
-  color: #ef4444;
+  color: var(--color-danger);
   text-align: center;
 }
 

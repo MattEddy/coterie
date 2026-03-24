@@ -113,7 +113,7 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
         sourceHandle,
         targetHandle,
         data: { role_a: conn.role_a, role_b: conn.role_b, highlighted: false },
-        style: { stroke: '#2e2e30', strokeWidth: 1.5 },
+        style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 },
       }
     })
     setEdges(flowEdges)
@@ -137,7 +137,7 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
               return {
                 ...e,
                 data: { ...e.data, highlighted: true },
-                style: { stroke: '#e0dcd8', strokeWidth: 2.5 },
+                style: { stroke: 'var(--color-edge-highlight)', strokeWidth: 2.5 },
               }
             }
             return e
@@ -412,13 +412,13 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
             return {
               ...e,
               data: { ...e.data, highlighted: true },
-              style: { stroke: '#e0dcd8', strokeWidth: 2 },
+              style: { stroke: 'var(--color-edge-highlight)', strokeWidth: 2 },
             }
           }
           return {
             ...e,
             data: { ...e.data, highlighted: false },
-            style: { stroke: '#2e2e30', strokeWidth: 1.5 },
+            style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 },
           }
         })
       )
@@ -454,7 +454,7 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
       current.map(e => ({
         ...e,
         data: { ...e.data, highlighted: false },
-        style: { stroke: '#2e2e30', strokeWidth: 1.5 },
+        style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 },
       }))
     )
   }, [setEdges, screenToFlowPosition])
@@ -631,7 +631,7 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
           (e.source === objectAId && e.target === objectBId) ||
           (e.source === objectBId && e.target === objectAId)
         if (isMatch) {
-          return { ...e, data: { ...e.data, highlighted: true }, style: { stroke: '#e0dcd8', strokeWidth: 2 } }
+          return { ...e, data: { ...e.data, highlighted: true }, style: { stroke: 'var(--color-edge-highlight)', strokeWidth: 2 } }
         }
         return e
       })
@@ -759,7 +759,7 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
         multiSelectionKeyCode="Meta"
         proOptions={{ hideAttribution: true }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1e1a1a" />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--color-dots)" />
       </ReactFlow>
 
       {/* Level 1: Single selection */}

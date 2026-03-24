@@ -5,73 +5,51 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-03-19
+**Date:** 2026-03-23
 **Branch:** main
 
 ### Narrative
 
-Major session covering three big areas: Company → Org rename, the Frame/NavBar/Menu system (with search-to-zoom), and the color scheme redesign.
+Extended session focused on color refinement and light mode implementation. This session was a continuation of the previous session's color work, iterating on the palette and then building a full theming system.
 
-**Company → Org rename.** Matt explored alternatives to "company" (too narrow for unions, agencies, departments) — considered "organization" (too much of a mouthful), "group" (too generic), "outfit" (too colloquial). Landed on **"Org"** — short, universal, no baggage. Renamed across 9 files: schema class ID `'company'` → `'org'`, all 10 org types, seed data, CSS variables (`--color-company` → `--color-org`), all components. Type display names like "Production Company" and "Parent Company" stay as-is (they describe what kind of org, not the class). Database reset clean.
+**Color tuning — card visibility.** Cards were blending into the background. Iteratively bumped org-dim and person-dim backgrounds up three notches (from `#221a1e`/`#241e14` to `#382830`/`#203038`). Brightened class-specific node borders and type label colors to match.
 
-**CreateObjectForm polish.** Added "Create a new:" heading at top + × cancel button. Org placeholder simplified to just "Name" (not "Org Name").
+**Person amber → teal.** Matt noticed the person amber (`#b89060`) was too close to the gold accent (`#d4b468`). Swapped to teal (`#4a9ab0`) from color scheme sample 13 (Violet + Teal). This gives cool/warm contrast between person (teal) and org (rose) nodes, with gold as the warm accent bridging them.
 
-**Frame system + NavBar + Menu — the navigation skeleton.** Matt pitched a UI concept: fixed nav bar in top-right (Account icon, Menu hamburger, Coterie logo), with each menu item opening a draggable Frame. Discussion refined it:
-- Copyright removed from nav (noise → moved to Settings > About)
-- Menu is a popover, not a frame (it's a launcher, not a destination)
-- Shared Frame component for all panels (drag, close, z-index)
-- Nav bar stays fixed, not moveable
+**Cool-tinted panel surfaces.** Panel surface colors were pure neutral gray (`#1a1a1a`). Tried slight cool tint (`#191a1c`) — "muddy." Went more (`#181a1e`) — Matt liked it. Gives panels visual separation from the warm-tinted canvas background.
 
-Built: `Frame.tsx` (shared draggable, z-index-on-click), `NavBar.tsx` (fixed top-right with popover menu), `SearchFrame.tsx` (working search → zoom), `AccountFrame.tsx` (email + sign out), stubs for Maps/Coteries/Settings. Canvas exposes `zoomToNode(nodeId)` via `forwardRef`. Old top bar removed, canvas fills full viewport, React Flow Controls removed.
+**Brighter borders.** Global border color bumped from `#2a2626` to `#333538` with slight cool tint to match panel surfaces.
 
-**Chrome positioning nightmare.** `position: fixed` elements slid off the right edge of the viewport in Chrome, proportional to window width. Safari worked fine. All dimension reports (offsetWidth, innerWidth, etc.) were correct. Tried: portals to body, absolute positioning, JS-computed left from window.innerWidth, viewport units — nothing worked. Researched: likely caused by Dark Reader extension injecting `filter` on html/body (creates containing block for fixed elements). Actual fix: **hard reload** (Shift+Cmd+R) — Vite's HMR wasn't fully flushing structural CSS changes from all the layout experiments. Added `darkreader-lock` meta tag but confirmed it wasn't needed (removed). Lesson: always hard reload after major layout CSS changes.
+**Brighter accent gold.** `--color-accent` bumped from `#bfa058` to `#d4b468` for better visibility on frame headers and the Coterie wordmark.
 
-**Search frame polish.** Arrow keys navigate results list, Enter selects highlighted result, mouse hover syncs with keyboard highlight. Escape clears search input, second Escape closes frame.
+**Light mode implementation.** Matt asked for Light/Dark/Auto theme toggle. Built the full system:
+- **CSS architecture**: `data-theme` attribute on `<html>`, dark as default `:root`, light overrides in `[data-theme="light"]`
+- **ThemeContext** (`src/contexts/ThemeContext.tsx`): manages preference, localStorage persistence (`"coterie-theme"` key), system preference listener for Auto mode
+- **Flash prevention**: inline `<script>` in `index.html` reads localStorage and sets `data-theme` before React mounts
+- **All hardcoded colors extracted to CSS variables**: org/person borders, type colors, edge strokes, background dots, placeholders, danger colors, `color-scheme` on date inputs — everything now theme-aware
+- **SettingsFrame**: Light/Dark/Auto segmented control (replaces stub), copyright info at bottom
+- **Light palette**: warm off-white background (`#f5f3f0`), white panels, deeper gold/rose/teal for contrast on light backgrounds
 
-**Event date "today" button.** CalendarCheck icon positioned inside the date input, just left of the native calendar picker. Both icons styled in accent blue. UTC bug: `new Date().toISOString().split('T')[0]` returns UTC date — after 5pm Pacific, it's tomorrow. Fixed with local `getFullYear/getMonth/getDate`.
-
-**Color scheme redesign.** Built `color-schemes.html` with mockup panels showing different palettes in context. Three rounds of iteration:
-1. Six gold-focused schemes (Gold & Charcoal, Gold & Midnight, Burnished Gold, Gold & Slate, Gold & Espresso, Gold & Obsidian)
-2. Eight schemes adding purple/mauve (Gold Accent + Mauve Orgs, Warm Gold + Plum, Pale Gold + Lavender, Amber & Amethyst, Honey & Smoke, Antique Gold & Dusty Rose, Electric Gold & Violet, Champagne & Charcoal)
-3. Variants of favorites: #6 with steel blue / warm amber people, #7 with teal blue / copper people, then #11 (Violet + Teal) with different golds
-
-Matt kept returning to **#10 (Dusty Rose + Warm Amber)** — antique gold accent, dusty rose orgs, warm amber people, warm charcoal base. Implemented it. Tweaked surface colors from warm-tinted `#1a1818` to pure neutral `#1a1a1a` (warm brown was too close to amber person nodes). Node type labels colored by class (rose for orgs, amber for people). Class-specific node borders.
-
-**Two-font system.** Tried Inter as secondary font for all body text — "looks worse." Rolled back. Then tried Inter for JUST type labels on object cards — worked well. Extended to DetailPanel data fields (title, types, contact values, notes, item names/dates, inputs) at 2px smaller. Urbanist stays for everything else (headings, names, labels, buttons).
+**Hardcoded color sweep**: extracted `#dc2626` danger colors from DetailPanel, ConnectionRoleForm, AccountFrame, and Login to `var(--color-danger)`. Extracted `#5a5252` placeholder colors to `var(--color-placeholder)`. Extracted edge colors, dot colors, node borders, and type colors to new CSS variables.
 
 ### Files Modified
-- `supabase/migrations/20260203000000_pro_schema.sql` — `'company'` → `'org'` class ID and type references
-- `supabase/seed.sql` — `'company'` → `'org'` class values
-- `src/styles/global.css` — Full color scheme redesign (scheme 10), `--font-sans` stays Urbanist
-- `src/components/Canvas.tsx` — `forwardRef` + `useImperativeHandle` for `zoomToNode`, edge colors warmed, Controls removed, Panel import removed, background dots color adjusted
-- `src/components/ObjectNode.tsx` — `company` → `org` in classStyles
-- `src/components/ObjectNode.module.css` — `.company` → `.org`, class-specific borders, Inter font for types at 9px, type labels colored by class
-- `src/components/CreateObjectForm.tsx` — `'company'` → `'org'`, "Create a new:" heading, cancel button
-- `src/components/CreateObjectForm.module.css` — `.companyActive` → `.orgActive`, header/cancel styles
-- `src/components/DetailPanel.tsx` — `company` → `org` in placeholders/queries, CalendarCheck today button, UTC date fix
-- `src/components/DetailPanel.module.css` — Inter font + 2px smaller for data fields, today button styles, placeholder colors warmed
-- `src/components/MultiSelectPanel.tsx` — `company` → `org`
-- `src/components/RoleEdge.tsx` — Edge label fill color warmed
-- `src/components/Frame.tsx` — New: shared draggable frame component
-- `src/components/Frame.module.css` — New: frame styles, gold title
-- `src/components/NavBar.tsx` — New: fixed nav bar with menu popover
-- `src/components/NavBar.module.css` — New: nav bar styles, gold logo
-- `src/components/SearchFrame.tsx` — New: search with keyboard nav, zoom-to-node
-- `src/components/SearchFrame.module.css` — New: search input, results, class dots
-- `src/components/AccountFrame.tsx` — New: account details + sign out
-- `src/components/AccountFrame.module.css` — New: account frame styles
-- `src/components/MapsFrame.tsx` — New: stub
-- `src/components/CoteriesFrame.tsx` — New: stub
-- `src/components/SettingsFrame.tsx` — New: stub with © info
-- `src/pages/Landscape.tsx` — Overhauled: removed top bar, added NavBar + frame management
-- `src/pages/Landscape.module.css` — Simplified to just height: 100%
-- `src/pages/Login.module.css` — Urbanist for title (was briefly changed, reverted)
-- `index.html` — Added Inter font import
-- `color-schemes.html` — New: color scheme mockup explorer (16 schemes, not committed)
+- `src/styles/global.css` — Full rewrite: added new CSS variables (org-border, person-border, org-type, person-type, edge, edge-highlight, dots, placeholder, danger, color-scheme), added complete `[data-theme="light"]` block, updated surface colors (cool-tinted), border color, accent gold, person color (amber→teal), card dim backgrounds
+- `src/contexts/ThemeContext.tsx` — New: ThemeProvider with localStorage, system preference listener, DOM attribute sync
+- `src/main.tsx` — Wrapped App in ThemeProvider
+- `index.html` — Added flash-prevention script, Inter font import
+- `src/components/SettingsFrame.tsx` — Rebuilt: Light/Dark/Auto segmented control + copyright
+- `src/components/SettingsFrame.module.css` — New: segmented control styles, section layout
+- `src/components/ObjectNode.module.css` — Borders and type colors use CSS variables
+- `src/components/Canvas.tsx` — Edge strokes and background dots use CSS variables
+- `src/components/RoleEdge.tsx` — Label fills use CSS variable
+- `src/components/DetailPanel.module.css` — Placeholder colors, danger colors, color-scheme use CSS variables
+- `src/components/ConnectionRoleForm.module.css` — Danger colors use CSS variable
+- `src/components/AccountFrame.module.css` — Danger color uses CSS variable
+- `src/pages/Login.module.css` — Error color uses CSS variable
 
 ### Open Items / Next Steps
-1. **Maps frame** — list user maps, create/edit, browse store packages
-2. **Coteries frame** — list coteries, create/invite, share maps
-3. **Settings frame** — real settings content
-4. **DetailPanel → Frame migration** — make detail panels draggable (detach from node on drag)
+1. **Light mode polish** — may need tuning after real-world use (contrast, readability)
+2. **Maps frame** — list user maps, create/edit, browse store packages
+3. **Coteries frame** — list coteries, create/invite, share maps
+4. **DetailPanel → Frame migration** — make detail panels draggable
 5. **RLS policies** — deferred until features are complete, before deploy

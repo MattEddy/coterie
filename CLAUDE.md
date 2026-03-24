@@ -410,25 +410,47 @@ The app uses a **Frame system** for all UI panels outside the canvas:
 
 DetailPanel, MultiSelectPanel, CreateObjectForm, and ConnectionRoleForm still use their own positioning (inside the Canvas component). Future: migrate DetailPanel to use Frame (draggable, detach from node on drag).
 
-## Color Scheme: Dusty Rose + Warm Amber
+## Theming: Light + Dark Mode
 
-Palette chosen from iterative mockup exploration (`color-schemes.html` in project root).
+`data-theme` attribute on `<html>` controls the active theme. Dark is the default (`:root`), light overrides via `[data-theme="light"]`.
 
+**ThemeContext** (`src/contexts/ThemeContext.tsx`): manages preference (`light`/`dark`/`auto`), persists to `localStorage` key `"coterie-theme"`, listens for system `prefers-color-scheme` changes when set to `auto`. Sets `document.documentElement.dataset.theme`.
+
+**Flash prevention**: inline `<script>` in `index.html` reads localStorage and sets `data-theme` synchronously before React mounts.
+
+**Settings toggle**: SettingsFrame has a Light/Dark/Auto segmented control.
+
+All colors are CSS variables. No hardcoded colors in components — everything references `var(--color-*)`. This includes edge strokes in Canvas.tsx (inline styles use `'var(--color-edge)'`), SVG fills in RoleEdge.tsx, and `color-scheme` on date inputs.
+
+## Color Scheme: Dusty Rose + Teal
+
+Palette chosen from iterative mockup exploration (`color-schemes.html` in project root). Person class changed from amber to teal to avoid confusion with gold accent.
+
+### Dark Mode (default)
 | Role | Hex | CSS Variable |
 |------|-----|-------------|
 | Background | `#0f0e0e` | `--color-bg` |
-| Surface | `#1a1a1a` | `--color-surface` |
-| Surface 2 | `#252525` | `--color-surface-2` |
-| Border | `#2a2626` | `--color-border` |
+| Surface | `#181a1e` | `--color-surface` (cool-tinted) |
+| Surface 2 | `#22252a` | `--color-surface-2` |
+| Border | `#333538` | `--color-border` |
 | Text | `#e0dcd8` | `--color-text` |
 | Muted text | `#7a7070` | `--color-text-muted` |
-| Accent (gold) | `#bfa058` | `--color-accent` |
+| Accent (gold) | `#d4b468` | `--color-accent` |
 | Org | `#8a6070` | `--color-org` (dusty rose) |
-| Org dim | `#221a1e` | `--color-org-dim` |
-| Person | `#b89060` | `--color-person` (warm amber) |
-| Person dim | `#241e14` | `--color-person-dim` |
+| Org dim | `#382830` | `--color-org-dim` |
+| Person | `#4a9ab0` | `--color-person` (teal) |
+| Person dim | `#203038` | `--color-person-dim` |
 
-Node borders are class-specific: `#3a2830` (org), `#3e3220` (person). Edge colors: `#3a3232` (default), `#e0dcd8` (highlighted).
+### Light Mode
+| Role | Hex |
+|------|-----|
+| Background | `#f5f3f0` |
+| Surface | `#ffffff` |
+| Accent (gold) | `#b89840` (deeper for white-bg legibility) |
+| Org | `#8a5068` |
+| Org dim | `#f4e8ec` |
+| Person | `#2a88a0` |
+| Person dim | `#e4f0f4` |
 
 ## Typography
 
@@ -566,10 +588,17 @@ When ready to deploy:
 - [x] Old top bar removed — canvas fills full viewport, React Flow Controls removed
 - [x] Event date "today" button (CalendarCheck icon inside date input, accent blue)
 - [x] UTC date bug fix: `toISOString()` → local `getFullYear/getMonth/getDate`
-- [x] Color scheme redesign: "Dusty Rose + Warm Amber" palette (scheme 10)
+- [x] Color scheme redesign: "Dusty Rose + Teal" palette (evolved from scheme 10)
 - [x] Two-font system: Urbanist (display) + Inter (data fields on cards and detail panel)
-- [x] Node type labels colored by class (org=rose, person=amber) instead of muted gray
-- [x] Class-specific node border colors (rose for orgs, amber for people)
+- [x] Node type labels colored by class (org=rose, person=teal) instead of muted gray
+- [x] Class-specific node border colors and dim backgrounds
+- [x] Cool-tinted panel surfaces for contrast against warm canvas background
+- [x] Person class changed from amber to teal (amber too close to gold accent)
+- [x] Gold accent brightened to `#d4b468`
+- [x] Light + Dark + Auto theme system (ThemeContext, `data-theme` attribute, localStorage persistence)
+- [x] All hardcoded colors extracted to CSS variables for theme support
+- [x] SettingsFrame: Light/Dark/Auto segmented control, © Buckethead info
+- [x] Flash-prevention script in index.html (reads localStorage before React mounts)
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -582,8 +611,8 @@ When ready to deploy:
 ### Next Up
 - [ ] Maps frame: list user maps, create/edit, browse store packages
 - [ ] Coteries frame: list coteries, create/invite, share maps
-- [ ] Settings frame: real settings content
 - [ ] DetailPanel migration to Frame component (draggable, detach from node on drag)
+- [ ] Light mode polish (may need tuning after real-world use)
 
 ### Planned
 - [ ] Map packages (store) with relative coordinates + stamp placement

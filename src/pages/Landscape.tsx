@@ -13,6 +13,7 @@ import styles from './Landscape.module.css'
 export default function Landscape() {
   const canvasRef = useRef<CanvasRef>(null)
   const [openFrames, setOpenFrames] = useState<Set<FrameType>>(new Set())
+  const [activeMapId, setActiveMapId] = useState<string | null>(null)
 
   const openFrame = (type: FrameType) => {
     setOpenFrames(prev => new Set(prev).add(type))
@@ -32,7 +33,7 @@ export default function Landscape() {
 
   return (
     <div className={styles.container}>
-      <Canvas ref={canvasRef} />
+      <Canvas ref={canvasRef} activeMapId={activeMapId} />
       <NavBar onOpenFrame={openFrame} />
 
       {openFrames.has('account') && (
@@ -45,7 +46,11 @@ export default function Landscape() {
         />
       )}
       {openFrames.has('maps') && (
-        <MapsFrame onClose={() => closeFrame('maps')} />
+        <MapsFrame
+          onClose={() => closeFrame('maps')}
+          activeMapId={activeMapId}
+          onActivateMap={setActiveMapId}
+        />
       )}
       {openFrames.has('coteries') && (
         <CoteriesFrame onClose={() => closeFrame('coteries')} />

@@ -61,7 +61,11 @@ export interface CanvasRef {
   zoomToNode: (nodeId: string) => void
 }
 
-const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
+interface CanvasInnerProps {
+  activeMapId?: string | null
+}
+
+const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner({ activeMapId }, ref) {
   const { user } = useAuth()
   const { flowToScreenPosition, screenToFlowPosition, setCenter } = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
@@ -151,6 +155,18 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
   const refreshData = useCallback(async () => {
     if (!user) return
 
+    // If a map is active, get the set of object IDs in that map
+    let mapObjectIds: Set<string> | null = null
+    if (activeMapId) {
+      const { data: mapObjs } = await supabase
+        .from('maps_objects')
+        .select('object_ref_id')
+        .eq('map_id', activeMapId)
+      if (mapObjs) {
+        mapObjectIds = new Set(mapObjs.map(o => o.object_ref_id))
+      }
+    }
+
     const { data: objects } = await supabase
       .from('user_objects')
       .select('*')
@@ -159,10 +175,15 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
 
     if (!objects) return
 
+    // Filter to map objects if a map is active
+    const filteredObjects = mapObjectIds
+      ? objects.filter(o => mapObjectIds!.has(o.id))
+      : objects
+
     // Preserve selected state so React Flow doesn't fire spurious selection changes
     const currentSelectedIds = new Set(selectedItemsRef.current.map(i => i.nodeId))
 
-    const flowNodes: Node[] = objects.map((obj, i) => ({
+    const flowNodes: Node[] = filteredObjects.map((obj, i) => ({
       id: obj.id,
       type: 'object',
       position: {
@@ -193,16 +214,18 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
 
     setNodes(flowNodes)
 
-    // Update selected items with fresh data
+    // Update selected items with fresh data (drop items no longer visible)
     setSelectedItems(prev =>
-      prev.map(item => {
-        const freshNode = flowNodes.find(n => n.id === item.nodeId)
-        if (freshNode) return { nodeId: item.nodeId, data: freshNode.data as unknown as ObjectNodeData }
-        return item
-      })
+      prev
+        .map(item => {
+          const freshNode = flowNodes.find(n => n.id === item.nodeId)
+          if (freshNode) return { nodeId: item.nodeId, data: freshNode.data as unknown as ObjectNodeData }
+          return null
+        })
+        .filter((item): item is SelectedItem => item !== null)
     )
 
-    const objectIds = objects.map(o => o.id)
+    const objectIds = filteredObjects.map(o => o.id)
 
     // Load canonical connections
     const { data: canonConns } = await supabase
@@ -265,7 +288,7 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
       isUserCreated: userConnIds.has(c.id),
     }))
     rebuildEdges()
-  }, [user, setNodes, rebuildEdges])
+  }, [user, activeMapId, setNodes, rebuildEdges])
 
   useEffect(() => {
     refreshData()
@@ -832,10 +855,14 @@ const CanvasInner = forwardRef<CanvasRef>(function CanvasInner(_, ref) {
   )
 })
 
-const Canvas = forwardRef<CanvasRef>(function Canvas(_, ref) {
+interface CanvasProps {
+  activeMapId?: string | null
+}
+
+const Canvas = forwardRef<CanvasRef, CanvasProps>(function Canvas({ activeMapId }, ref) {
   return (
     <ReactFlowProvider>
-      <CanvasInner ref={ref} />
+      <CanvasInner ref={ref} activeMapId={activeMapId} />
     </ReactFlowProvider>
   )
 })

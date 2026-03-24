@@ -1,3 +1,7 @@
+import { useState, useEffect, useRef } from 'react'
+import { Check } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import type { ObjectNodeData } from './ObjectNode'
 import styles from './MultiSelectPanel.module.css'
 
@@ -12,7 +16,19 @@ interface MultiSelectPanelProps {
   onClose: () => void
 }
 
+interface MapOption {
+  id: string
+  name: string
+}
+
 export default function MultiSelectPanel({ items, position, onClose }: MultiSelectPanelProps) {
+  const { user } = useAuth()
+  const [mode, setMode] = useState<'default' | 'newMap' | 'addToMap'>('default')
+  const [newMapName, setNewMapName] = useState('')
+  const [maps, setMaps] = useState<MapOption[]>([])
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+
   const counts: { label: string; count: number }[] = []
   const orgs = items.filter(i => i.data.class === 'org').length
   const people = items.filter(i => i.data.class === 'person').length
@@ -21,6 +37,68 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
   if (orgs > 0) counts.push({ label: orgs === 1 ? 'org' : 'orgs', count: orgs })
   if (people > 0) counts.push({ label: people === 1 ? 'person' : 'people', count: people })
   if (projects > 0) counts.push({ label: projects === 1 ? 'project' : 'projects', count: projects })
+
+  // Load existing maps for "Add to Map" mode
+  useEffect(() => {
+    if (mode !== 'addToMap' || !user) return
+    supabase
+      .from('maps')
+      .select('id, name')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => {
+        if (data) setMaps(data)
+      })
+  }, [mode, user])
+
+  useEffect(() => {
+    if (mode === 'newMap') {
+      setTimeout(() => nameInputRef.current?.focus(), 0)
+    }
+  }, [mode])
+
+  // Clear feedback after a delay
+  useEffect(() => {
+    if (!feedback) return
+    const t = setTimeout(() => setFeedback(null), 2000)
+    return () => clearTimeout(t)
+  }, [feedback])
+
+  const objectIds = items.map(i => i.nodeId)
+
+  const handleCreateMap = async () => {
+    if (!user || !newMapName.trim()) return
+    const { data: map } = await supabase
+      .from('maps')
+      .insert({ name: newMapName.trim(), user_id: user.id })
+      .select('id')
+      .single()
+
+    if (!map) return
+
+    // Add all selected objects
+    await supabase
+      .from('maps_objects')
+      .insert(objectIds.map(id => ({ map_id: map.id, object_ref_id: id })))
+
+    setNewMapName('')
+    setMode('default')
+    setFeedback(`Created "${newMapName.trim()}"`)
+  }
+
+  const handleAddToMap = async (mapId: string, mapName: string) => {
+    // Upsert to avoid duplicate key errors if some are already in the map
+    await supabase
+      .from('maps_objects')
+      .upsert(
+        objectIds.map(id => ({ map_id: mapId, object_ref_id: id })),
+        { onConflict: 'map_id,object_ref_id' }
+      )
+
+    setMode('default')
+    setFeedback(`Added to "${mapName}"`)
+  }
 
   return (
     <div
@@ -38,11 +116,58 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
         ))}
       </div>
 
-      <div className={styles.actions}>
-        <button className={styles.action}>New Map</button>
-        <button className={styles.action}>Add to Map</button>
-        {/* Future: Group on Canvas, Tag All, Compare */}
-      </div>
+      {/* Feedback message */}
+      {feedback && (
+        <div className={styles.feedback}>
+          <Check size={12} />
+          {feedback}
+        </div>
+      )}
+
+      {/* Default actions */}
+      {mode === 'default' && !feedback && (
+        <div className={styles.actions}>
+          <button className={styles.action} onClick={() => setMode('newMap')}>New Map</button>
+          <button className={styles.action} onClick={() => setMode('addToMap')}>Add to Map</button>
+        </div>
+      )}
+
+      {/* New Map mode — name input */}
+      {mode === 'newMap' && (
+        <div className={styles.inlineForm}>
+          <input
+            ref={nameInputRef}
+            className={styles.inlineInput}
+            placeholder="Map name..."
+            value={newMapName}
+            onChange={e => setNewMapName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleCreateMap()
+              if (e.key === 'Escape') { setMode('default'); setNewMapName('') }
+            }}
+          />
+          <div className={styles.inlineActions}>
+            <button className={styles.inlineCancel} onClick={() => { setMode('default'); setNewMapName('') }}>Cancel</button>
+            <button className={styles.inlineConfirm} onClick={handleCreateMap} disabled={!newMapName.trim()}>Create</button>
+          </div>
+        </div>
+      )}
+
+      {/* Add to Map mode — pick existing map */}
+      {mode === 'addToMap' && (
+        <div className={styles.mapPicker}>
+          {maps.length > 0 ? (
+            maps.map(m => (
+              <button key={m.id} className={styles.mapPickerItem} onClick={() => handleAddToMap(m.id, m.name)}>
+                {m.name}
+              </button>
+            ))
+          ) : (
+            <span className={styles.mapPickerEmpty}>No maps yet</span>
+          )}
+          <button className={styles.inlineCancel} onClick={() => setMode('default')}>Cancel</button>
+        </div>
+      )}
     </div>
   )
 }

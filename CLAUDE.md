@@ -100,7 +100,8 @@ coterie/
 │   │   ├── SearchFrame.module.css
 │   │   ├── AccountFrame.tsx      # Account details + sign out
 │   │   ├── AccountFrame.module.css
-│   │   ├── MapsFrame.tsx         # Maps management (stub)
+│   │   ├── MapsFrame.tsx         # Maps CRUD + detail view + canvas filter toggle
+│   │   ├── MapsFrame.module.css
 │   │   ├── CoteriesFrame.tsx     # Coteries management (stub)
 │   │   └── SettingsFrame.tsx     # Settings (stub, has © info)
 │   ├── types.ts                # Shared types (NodeRect)
@@ -398,6 +399,9 @@ Edge/connection handlers registered with `useCallback` capture `nodes` at creati
 ### Chrome Extensions and `position: fixed`
 Chrome extensions like Dark Reader (Filter mode) inject `filter` on `<html>` or `<body>`, which creates a new containing block for `position: fixed` elements — they position relative to the ancestor instead of the viewport. Symptoms: fixed elements slide off the right edge proportionally to window width. Safari unaffected. Fix: use `<meta name="darkreader-lock" />` in index.html, or ensure hard reload after CSS changes (Vite HMR doesn't always flush structural CSS changes, which can look identical to this bug).
 
+### Lucide `Map` Icon Shadows Native `Map`
+Importing `{ Map }` from `lucide-react` shadows JavaScript's native `Map` constructor. `new Map()` in the same file will try to instantiate a React component and throw. Fix: `import { Map as MapIcon }`.
+
 ## UI Architecture: Frames
 
 The app uses a **Frame system** for all UI panels outside the canvas:
@@ -599,6 +603,11 @@ When ready to deploy:
 - [x] All hardcoded colors extracted to CSS variables for theme support
 - [x] SettingsFrame: Light/Dark/Auto segmented control, © Buckethead info
 - [x] Flash-prevention script in index.html (reads localStorage before React mounts)
+- [x] MapsFrame: full CRUD (list with object counts, create, edit name/description, delete with confirmation)
+- [x] Map detail view: object list with remove, search-to-add objects (writes to `maps_objects`)
+- [x] Map as canvas filter: `activeMapId` state in Landscape → Canvas filters nodes to map's objects
+- [x] MultiSelectPanel: "New Map" (inline name input → create + add selected) and "Add to Map" (picker of existing maps)
+- [x] Canvas `refreshData` accepts `activeMapId`, queries `maps_objects` for filter set, connections filter naturally
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -609,10 +618,10 @@ When ready to deploy:
 - [x] Local SQLite database
 
 ### Next Up
-- [ ] Maps frame: list user maps, create/edit, browse store packages
 - [ ] Coteries frame: list coteries, create/invite, share maps
 - [ ] DetailPanel migration to Frame component (draggable, detach from node on drag)
 - [ ] Light mode polish (may need tuning after real-world use)
+- [ ] Map packages (store) — browse + "stamp" placement onto Landscape
 
 ### Planned
 - [ ] Map packages (store) with relative coordinates + stamp placement

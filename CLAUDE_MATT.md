@@ -5,51 +5,36 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-03-23
+**Date:** 2026-03-24
 **Branch:** main
 
 ### Narrative
 
-Extended session focused on color refinement and light mode implementation. This session was a continuation of the previous session's color work, iterating on the palette and then building a full theming system.
+Built the full Maps feature — CRUD, object management, multi-select integration, and canvas filtering.
 
-**Color tuning — card visibility.** Cards were blending into the background. Iteratively bumped org-dim and person-dim backgrounds up three notches (from `#221a1e`/`#241e14` to `#382830`/`#203038`). Brightened class-specific node borders and type label colors to match.
+**MapsFrame CRUD.** Replaced the stub MapsFrame with a full implementation. List view shows maps with name + object count on the same line (Matt preferred single-line density over stacked), gold dot indicator for active map. Create form appears inline at the bottom of the list (replaces the "+ New Map" button in place — Matt requested this over the original top-of-frame position). Edit mode for name/description. Delete with confirmation ("removes the map, not the objects"). Empty state: just "Create a map to organize your landscape into filtered views." (Matt cut "No maps yet." — the hint is enough).
 
-**Person amber → teal.** Matt noticed the person amber (`#b89060`) was too close to the gold accent (`#d4b468`). Swapped to teal (`#4a9ab0`) from color scheme sample 13 (Violet + Teal). This gives cool/warm contrast between person (teal) and org (rose) nodes, with gold as the warm accent bridging them.
+**Map detail view.** Click a map to see its objects with class-colored dots and hover-to-reveal remove buttons. Search input at the bottom for adding landscape objects (debounced, keyboard nav, filters already-added objects). "Show on Canvas" toggle button (gold when active) to activate the map as a canvas filter.
 
-**Cool-tinted panel surfaces.** Panel surface colors were pure neutral gray (`#1a1a1a`). Tried slight cool tint (`#191a1c`) — "muddy." Went more (`#181a1e`) — Matt liked it. Gives panels visual separation from the warm-tinted canvas background.
+**Canvas filtering.** `activeMapId` state lives in Landscape.tsx, passed to both MapsFrame and Canvas. When active, Canvas queries `maps_objects` for the map's object IDs, then filters the `user_objects` results. Connections filter naturally since they're already scoped to visible nodes. Selected items that leave the filtered set get dropped from selection.
 
-**Brighter borders.** Global border color bumped from `#2a2626` to `#333538` with slight cool tint to match panel surfaces.
+**MultiSelectPanel integration.** Wired up the existing "New Map" and "Add to Map" stub buttons. "New Map" shows an inline name input, creates the map, adds all selected nodes, shows gold checkmark feedback. "Add to Map" loads existing maps as a picker, upserts to avoid duplicate key errors. Both reset to default actions after completion.
 
-**Brighter accent gold.** `--color-accent` bumped from `#bfa058` to `#d4b468` for better visibility on frame headers and the Coterie wordmark.
+**Lucide `Map` icon bug.** Maps were being created in the DB but never appeared in the UI. Root cause: `import { Map } from 'lucide-react'` shadowed JavaScript's native `Map` constructor. `new Map()` inside `loadMaps` tried to instantiate a React component instead of a JS Map, threw silently, and killed the entire create flow after the form had already dismissed. Fix: renamed to `import { Map as MapIcon }`.
 
-**Light mode implementation.** Matt asked for Light/Dark/Auto theme toggle. Built the full system:
-- **CSS architecture**: `data-theme` attribute on `<html>`, dark as default `:root`, light overrides in `[data-theme="light"]`
-- **ThemeContext** (`src/contexts/ThemeContext.tsx`): manages preference, localStorage persistence (`"coterie-theme"` key), system preference listener for Auto mode
-- **Flash prevention**: inline `<script>` in `index.html` reads localStorage and sets `data-theme` before React mounts
-- **All hardcoded colors extracted to CSS variables**: org/person borders, type colors, edge strokes, background dots, placeholders, danger colors, `color-scheme` on date inputs — everything now theme-aware
-- **SettingsFrame**: Light/Dark/Auto segmented control (replaces stub), copyright info at bottom
-- **Light palette**: warm off-white background (`#f5f3f0`), white panels, deeper gold/rose/teal for contrast on light backgrounds
-
-**Hardcoded color sweep**: extracted `#dc2626` danger colors from DetailPanel, ConnectionRoleForm, AccountFrame, and Login to `var(--color-danger)`. Extracted `#5a5252` placeholder colors to `var(--color-placeholder)`. Extracted edge colors, dot colors, node borders, and type colors to new CSS variables.
+**UI polish.** Map name and object count on same line with `align-items: baseline` and 8px gap. Create form slides in at bottom of list (same position as the New Map button it replaces) rather than appearing above the list.
 
 ### Files Modified
-- `src/styles/global.css` — Full rewrite: added new CSS variables (org-border, person-border, org-type, person-type, edge, edge-highlight, dots, placeholder, danger, color-scheme), added complete `[data-theme="light"]` block, updated surface colors (cool-tinted), border color, accent gold, person color (amber→teal), card dim backgrounds
-- `src/contexts/ThemeContext.tsx` — New: ThemeProvider with localStorage, system preference listener, DOM attribute sync
-- `src/main.tsx` — Wrapped App in ThemeProvider
-- `index.html` — Added flash-prevention script, Inter font import
-- `src/components/SettingsFrame.tsx` — Rebuilt: Light/Dark/Auto segmented control + copyright
-- `src/components/SettingsFrame.module.css` — New: segmented control styles, section layout
-- `src/components/ObjectNode.module.css` — Borders and type colors use CSS variables
-- `src/components/Canvas.tsx` — Edge strokes and background dots use CSS variables
-- `src/components/RoleEdge.tsx` — Label fills use CSS variable
-- `src/components/DetailPanel.module.css` — Placeholder colors, danger colors, color-scheme use CSS variables
-- `src/components/ConnectionRoleForm.module.css` — Danger colors use CSS variable
-- `src/components/AccountFrame.module.css` — Danger color uses CSS variable
-- `src/pages/Login.module.css` — Error color uses CSS variable
+- `src/components/MapsFrame.tsx` — New: full CRUD, detail view with object management, search-to-add, canvas filter toggle, `MapIcon` alias for Lucide Map
+- `src/components/MapsFrame.module.css` — New: list items, create form, detail view, object list, search, delete confirmation, map picker styles
+- `src/components/MultiSelectPanel.tsx` — Rebuilt: "New Map" inline form, "Add to Map" picker, feedback messages, Supabase integration
+- `src/components/MultiSelectPanel.module.css` — Added: inline form, map picker, feedback styles
+- `src/components/Canvas.tsx` — Added `activeMapId` prop, map-based node filtering in `refreshData`, drops filtered-out items from selection
+- `src/pages/Landscape.tsx` — Added `activeMapId` state, passes to Canvas and MapsFrame
 
 ### Open Items / Next Steps
-1. **Light mode polish** — may need tuning after real-world use (contrast, readability)
-2. **Maps frame** — list user maps, create/edit, browse store packages
-3. **Coteries frame** — list coteries, create/invite, share maps
-4. **DetailPanel → Frame migration** — make detail panels draggable
+1. **Coteries frame** — list coteries, create/invite, share maps
+2. **DetailPanel → Frame migration** — make detail panels draggable
+3. **Light mode polish** — may need tuning after real-world use
+4. **Map packages (store)** — browse + "stamp" placement onto Landscape
 5. **RLS policies** — deferred until features are complete, before deploy

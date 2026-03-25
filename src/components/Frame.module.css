@@ -19,15 +19,30 @@
   user-select: none;
 }
 
+.headerCollapsed {
+  border-bottom: none;
+}
+
 .header:active {
   cursor: grabbing;
 }
 
 .title {
-
   font-size: 13px;
   font-weight: 600;
   color: var(--color-accent);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .close {

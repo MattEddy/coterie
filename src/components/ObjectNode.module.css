@@ -18,11 +18,6 @@
   cursor: grab;
 }
 
-.selected {
-  border-color: var(--color-text);
-  box-shadow: var(--shadow);
-}
-
 /* Org: rounded rectangle */
 .org {
   border-radius: var(--radius);
@@ -35,6 +30,15 @@
   border-radius: 30px;
   background: var(--color-person-dim);
   border-color: var(--color-person-border);
+}
+
+.mapHighlighted {
+  border-color: var(--color-accent);
+}
+
+.selected {
+  border-color: var(--color-text);
+  box-shadow: var(--shadow);
 }
 
 /* Project: squashed octagon (diamond with cut corners) */

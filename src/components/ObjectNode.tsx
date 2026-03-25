@@ -23,6 +23,8 @@ export interface ObjectNodeData {
   tags: string[] | null
   is_canon: boolean
   created_by: string | null
+  mapHighlighted?: boolean
+  mapEditMode?: boolean
   [key: string]: unknown
 }
 
@@ -43,7 +45,7 @@ function ObjectNode({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Top} id="top" className={styles.handle} />
       <Handle type="source" position={Position.Left} id="left" className={styles.handle} />
       <div
-        className={`${styles.card} ${shapeClass} ${selected ? styles.selected : ''}`}
+        className={`${styles.card} ${shapeClass} ${nodeData.mapHighlighted ? styles.mapHighlighted : ''} ${selected && !nodeData.mapHighlighted && !nodeData.mapEditMode ? styles.selected : ''}`}
       >
         <span className={styles.name}>{nodeData.name}</span>
         {nodeData.types.length > 0 && (

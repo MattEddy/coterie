@@ -59,13 +59,17 @@ function getNearestHandles(
 
 export interface CanvasRef {
   zoomToNode: (nodeId: string) => void
+  clearSelection: () => void
 }
 
 interface CanvasInnerProps {
   activeMapId?: string | null
+  highlightedObjectIds?: string[] | null
+  mapEditMode?: boolean
+  onMapEditClick?: (objectId: string) => void
 }
 
-const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner({ activeMapId }, ref) {
+const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner({ activeMapId, highlightedObjectIds, mapEditMode, onMapEditClick }, ref) {
   const { user } = useAuth()
   const { flowToScreenPosition, screenToFlowPosition, setCenter } = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
@@ -77,6 +81,12 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   nodesRef.current = nodes
   const connectionsRef = useRef<{ id: string; object_a_id: string; object_b_id: string; role_a: string | null; role_b: string | null; isUserCreated: boolean }[]>([])
   const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+  const mapEditModeRef = useRef(false)
+  mapEditModeRef.current = !!mapEditMode
+  const onMapEditClickRef = useRef<((objectId: string) => void) | null>(null)
+  onMapEditClickRef.current = onMapEditClick || null
+  const highlightedIdsRef = useRef<string[] | null>(null)
+  highlightedIdsRef.current = highlightedObjectIds ?? null
 
   useImperativeHandle(ref, () => ({
     zoomToNode(nodeId: string) {
@@ -89,6 +99,9 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       )
       const data = node.data as unknown as ObjectNodeData
       setSelectedItems([{ nodeId: node.id, data }])
+    },
+    clearSelection() {
+      setSelectedItems([])
     }
   }), [setCenter])
 
@@ -182,6 +195,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
 
     // Preserve selected state so React Flow doesn't fire spurious selection changes
     const currentSelectedIds = new Set(selectedItemsRef.current.map(i => i.nodeId))
+    const highlightSet = highlightedIdsRef.current ? new Set(highlightedIdsRef.current) : null
 
     const flowNodes: Node[] = filteredObjects.map((obj, i) => ({
       id: obj.id,
@@ -204,6 +218,8 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         private_notes: obj.private_notes,
         tags: obj.tags,
         is_canon: obj.is_canon,
+        mapHighlighted: highlightSet?.has(obj.id) ?? false,
+        mapEditMode: mapEditModeRef.current,
         created_by: obj.created_by,
       } satisfies ObjectNodeData,
     }))
@@ -330,6 +346,15 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   // Click-based selection: normal click replaces, Cmd/Shift-click toggles
   const handleNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
+      // Map edit mode: toggle object membership instead of selecting
+      if (mapEditModeRef.current && onMapEditClickRef.current) {
+        onMapEditClickRef.current(node.id)
+        return
+      }
+
+      // Signal non-drag node click (for map deselection)
+      document.dispatchEvent(new Event('coterie:node-click'))
+
       clickHandledRef.current = true
       setTimeout(() => { clickHandledRef.current = false }, 50)
 
@@ -387,6 +412,41 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       return changed ? next : current
     })
   }, [selectedItems, setNodes])
+
+  // Sync map-highlight state to node data
+  useEffect(() => {
+    const highlightSet = highlightedObjectIds ? new Set(highlightedObjectIds) : null
+    setNodes(current => {
+      let changed = false
+      const next = current.map(n => {
+        const shouldHighlight = highlightSet ? highlightSet.has(n.id) : false
+        const data = n.data as unknown as ObjectNodeData
+        if (data.mapHighlighted !== shouldHighlight) {
+          changed = true
+          return { ...n, data: { ...n.data, mapHighlighted: shouldHighlight } }
+        }
+        return n
+      })
+      return changed ? next : current
+    })
+  }, [highlightedObjectIds, setNodes])
+
+  // Clear selection and sync edit mode flag to nodes
+  useEffect(() => {
+    if (mapEditMode) setSelectedItems([])
+    setNodes(current => {
+      let changed = false
+      const next = current.map(n => {
+        const data = n.data as unknown as ObjectNodeData
+        if (data.mapEditMode !== !!mapEditMode) {
+          changed = true
+          return { ...n, data: { ...n.data, mapEditMode: !!mapEditMode } }
+        }
+        return n
+      })
+      return changed ? next : current
+    })
+  }, [mapEditMode, setNodes])
 
   // Double-click detection for edges
   const lastEdgeClickRef = useRef<{ time: number; edgeId: string }>({ time: 0, edgeId: '' })
@@ -777,8 +837,9 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         panActivationKeyCode="Space"
         zoomOnScroll
         zoomOnPinch
-        selectionOnDrag
+        selectionOnDrag={!mapEditMode}
         selectionMode={SelectionMode.Partial}
+        nodesSelectable={!mapEditMode}
         multiSelectionKeyCode="Meta"
         proOptions={{ hideAttribution: true }}
       >
@@ -857,12 +918,15 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
 
 interface CanvasProps {
   activeMapId?: string | null
+  highlightedObjectIds?: string[] | null
+  mapEditMode?: boolean
+  onMapEditClick?: (objectId: string) => void
 }
 
-const Canvas = forwardRef<CanvasRef, CanvasProps>(function Canvas({ activeMapId }, ref) {
+const Canvas = forwardRef<CanvasRef, CanvasProps>(function Canvas({ activeMapId, highlightedObjectIds, mapEditMode, onMapEditClick }, ref) {
   return (
     <ReactFlowProvider>
-      <CanvasInner ref={ref} activeMapId={activeMapId} />
+      <CanvasInner ref={ref} activeMapId={activeMapId} highlightedObjectIds={highlightedObjectIds} mapEditMode={mapEditMode} onMapEditClick={onMapEditClick} />
     </ReactFlowProvider>
   )
 })

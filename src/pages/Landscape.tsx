@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import Canvas from '../components/Canvas'
 import type { CanvasRef } from '../components/Canvas'
 import NavBar from '../components/NavBar'
@@ -14,6 +14,18 @@ export default function Landscape() {
   const canvasRef = useRef<CanvasRef>(null)
   const [openFrames, setOpenFrames] = useState<Set<FrameType>>(new Set())
   const [activeMapId, setActiveMapId] = useState<string | null>(null)
+  const [highlightedObjectIds, setHighlightedObjectIds] = useState<string[] | null>(null)
+  const [mapEditMode, setMapEditMode] = useState(false)
+  const mapEditClickRef = useRef<((objectId: string) => void) | null>(null)
+
+  const handleMapEditModeChange = useCallback((active: boolean, handler: ((objectId: string) => void) | null) => {
+    setMapEditMode(active)
+    mapEditClickRef.current = handler
+  }, [])
+
+  const handleMapEditClick = useCallback((objectId: string) => {
+    mapEditClickRef.current?.(objectId)
+  }, [])
 
   const openFrame = (type: FrameType) => {
     setOpenFrames(prev => new Set(prev).add(type))
@@ -33,7 +45,7 @@ export default function Landscape() {
 
   return (
     <div className={styles.container}>
-      <Canvas ref={canvasRef} activeMapId={activeMapId} />
+      <Canvas ref={canvasRef} activeMapId={activeMapId} highlightedObjectIds={highlightedObjectIds} mapEditMode={mapEditMode} onMapEditClick={handleMapEditClick} />
       <NavBar onOpenFrame={openFrame} />
 
       {openFrames.has('account') && (
@@ -50,6 +62,9 @@ export default function Landscape() {
           onClose={() => closeFrame('maps')}
           activeMapId={activeMapId}
           onActivateMap={setActiveMapId}
+          onHighlightObjects={setHighlightedObjectIds}
+          onMapEditModeChange={handleMapEditModeChange}
+          onMapSelected={() => canvasRef.current?.clearSelection()}
         />
       )}
       {openFrames.has('coteries') && (

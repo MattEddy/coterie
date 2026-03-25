@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { WorkspaceProvider } from './contexts/WorkspaceContext'
 import Login from './pages/Login'
 import Landscape from './pages/Landscape'
 
@@ -18,7 +19,9 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={
             <ProtectedRoute>
-              <Landscape />
+              <WorkspaceProvider>
+                <Landscape />
+              </WorkspaceProvider>
             </ProtectedRoute>
           } />
         </Routes>

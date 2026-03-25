@@ -18,7 +18,7 @@ export default function SettingsFrame({ onClose }: SettingsFrameProps) {
   const { theme, setTheme } = useTheme()
 
   return (
-    <Frame title="Settings" onClose={onClose} initialPosition={{ x: 60, y: 240 }} width={320}>
+    <Frame title="Settings" onClose={onClose} initialPosition={{ x: 60, y: 240 }} width={320} persistKey="settings">
       <div className={styles.section}>
         <span className={styles.label}>Appearance</span>
         <div className={styles.segmented}>

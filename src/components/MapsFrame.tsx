@@ -176,6 +176,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
       width={320}
       actions={headerActions}
       titleClassName={styles.entityName}
+      resizable
       headerContent={
         editing ? (
           <div className={styles.detailMeta}>
@@ -521,7 +522,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
 
   return (
     <>
-      <Frame ref={listFrameRef} title="Maps" onClose={onClose} initialPosition={{ x: 60, y: 120 }} width={280}>
+      <Frame ref={listFrameRef} title="Maps" onClose={onClose} initialPosition={{ x: 60, y: 120 }} width={280} resizable persistKey="maps">
         {maps.length > 0 ? (
           <div className={styles.mapsList} onClick={() => { if (!mapEditMode) setSelectedMapId(null) }}>
             {maps.map(m => (

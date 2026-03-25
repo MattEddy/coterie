@@ -251,13 +251,13 @@ connections            -- direction-agnostic (object_a, object_b, role_a, role_b
 
 **Maps:**
 ```
-maps                   -- unified: packages, user maps, shared maps
+maps                   -- unified: packages, user maps, shared maps (auto_add boolean for auto-membership)
 maps_objects           -- objects in each map + optional relative x/y (packages only)
 ```
 
 **User layer:**
 ```
-profiles               -- extends Supabase auth (user_id PK, display_name, sector)
+profiles               -- extends Supabase auth (user_id PK, display_name, sector, workspace_layout JSONB)
 objects_overrides       -- per-user: overrides + Landscape positions + shared/private notes
 objects_types_overrides -- per-user: type overrides (parallels objects_types, replaces canonical types when present)
 connections_overrides   -- per-user: overrides + user-created connections + shared/private notes
@@ -406,11 +406,42 @@ Importing `{ Map }` from `lucide-react` shadows JavaScript's native `Map` constr
 
 The app uses a **Frame system** for all UI panels outside the canvas:
 
-- **Frame** (`Frame.tsx`): shared draggable component with header, close button, z-index-on-click (click to bring to front). NavBar z-index 200, frames start at 100.
+- **Frame** (`Frame.tsx`): shared draggable/resizable component with header, close button, z-index-on-click. NavBar z-index 200, frames start at 100. Key props:
+  - `actions` — buttons rendered in the header (between title and close)
+  - `headerContent` — content rendered below the title row but inside the header (above the border-bottom line)
+  - `titleClassName` — override title color (e.g., white instead of gold for entity names)
+  - `resizable` — Mac-style edge/corner resize zones with appropriate cursors
+  - `persistKey` — saves position/size to workspace layout (localStorage + Supabase)
+  - Double-click title bar to collapse/expand
+  - `forwardRef` support so parents can read frame position (used by MapsFrame to position detail card)
 - **NavBar** (`NavBar.tsx`): fixed top-right — Account icon, hamburger menu, "Coterie" wordmark (gold). Not draggable.
 - **Menu**: popover from hamburger — Search, Maps, Coteries, Settings. Click opens a Frame, popover dismisses.
 - **Feature frames**: AccountFrame, SearchFrame, MapsFrame, CoteriesFrame, SettingsFrame — each wraps content in a `<Frame>`.
-- **Canvas** exposes `zoomToNode(nodeId)` via `forwardRef` — SearchFrame calls this to zoom + select.
+- **Canvas** exposes `zoomToNode(nodeId)` and `clearSelection()` via `forwardRef`.
+
+### Workspace Layout Persistence
+
+Frame positions and sizes persist across sessions and devices:
+- **localStorage** (`coterie-workspace-layout`): instant restore on load, no network wait
+- **Supabase** (`profiles.workspace_layout` JSONB): source of truth, hydrates in background on login
+- Saves on drag/resize end with 500ms debounce to Supabase
+- `WorkspaceProvider` context (`src/contexts/WorkspaceContext.tsx`) wraps Landscape
+- `useWorkspaceLayout` hook (`src/hooks/useWorkspaceLayout.ts`) manages in-memory cache + dual persistence
+- Frames with `persistKey`: maps, search, coteries, settings, account. Ephemeral frames (map detail) don't persist.
+
+### MapsFrame Architecture
+
+MapsFrame renders two independent Frame cards:
+- **List card** (280px, `persistKey="maps"`): always visible. Click selects (gold highlights on canvas), double-click opens detail. Finder-like deselection (click outside, click same item).
+- **Detail card** (320px, ephemeral): spawns to the right of the list card. Title = map name (white, not gold). Edit/delete actions in Frame header. `headerContent` for description + auto-add hint above the divider line.
+
+**Map selection highlights**: selecting a map in the list highlights its objects with gold borders on the canvas. Data flow: MapsFrame `mapObjectIds` → `onHighlightObjects` → Landscape `highlightedObjectIds` → Canvas syncs `mapHighlighted` flag into node data → ObjectNode renders `.mapHighlighted` CSS class.
+
+**Click-to-edit mode** (MousePointerClick icon): toggles objects in/out of the selected map by clicking them on canvas. Canvas intercepts clicks via `onMapEditClick` callback. Locks map selection (can't deselect until mode is toggled off). Suppresses white selection borders (`nodesSelectable={false}`, `mapEditMode` flag in node data). Auto-closes detail card to avoid stale state.
+
+**Map deselection**: global mousedown listener for non-canvas clicks + custom `coterie:node-click` DOM event dispatched from Canvas's `onNodeClick` (because React Flow uses pointer capture, preventing global mouse listeners from seeing node clicks). Drag-aware: dragging objects doesn't deselect (onNodeClick doesn't fire after drag).
+
+**Auto-add setting**: `maps.auto_add` boolean. When true, new objects created on canvas are automatically inserted into all auto-add maps. Gold hint text in detail card read mode. Checkbox in edit mode.
 
 DetailPanel, MultiSelectPanel, CreateObjectForm, and ConnectionRoleForm still use their own positioning (inside the Canvas component). Future: migrate DetailPanel to use Frame (draggable, detach from node on drag).
 
@@ -608,6 +639,22 @@ When ready to deploy:
 - [x] Map as canvas filter: `activeMapId` state in Landscape → Canvas filters nodes to map's objects
 - [x] MultiSelectPanel: "New Map" (inline name input → create + add selected) and "Add to Map" (picker of existing maps)
 - [x] Canvas `refreshData` accepts `activeMapId`, queries `maps_objects` for filter set, connections filter naturally
+- [x] Frame: double-click title bar collapse/expand, `actions` prop, `forwardRef`, `titleClassName`
+- [x] Frame: `headerContent` prop for content inside the header (above border-bottom line)
+- [x] Frame: Mac-style edge/corner resize with appropriate cursors
+- [x] Frame: `persistKey` + workspace layout persistence (localStorage + Supabase `profiles.workspace_layout`)
+- [x] WorkspaceProvider context + useWorkspaceLayout hook (dual persistence with in-memory cache)
+- [x] MapsFrame: Finder-like list (click selects, double-click opens detail card to the right)
+- [x] Map selection highlights objects with gold borders on canvas (`mapHighlighted` node data flag)
+- [x] Click-to-edit mode: toggle map membership by clicking canvas objects (MousePointerClick icon)
+- [x] Isolate button: Focus icon filters canvas to show only map's objects
+- [x] Map deselection: global listener + custom `coterie:node-click` event (pointer capture workaround)
+- [x] Drag-aware deselection: dragging objects doesn't deselect map (onNodeClick doesn't fire after drag)
+- [x] Gold border suppresses white selection border when map is highlighted or in edit mode
+- [x] Maps `auto_add` boolean: new objects auto-inserted into auto-add maps on creation
+- [x] Map detail: in-place editing (headerContent), auto-add checkbox + gold hint text
+- [x] Chevron icon on selected map items to open detail card (in addition to double-click)
+- [x] Canvas `clearSelection()` exposed via CanvasRef
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan

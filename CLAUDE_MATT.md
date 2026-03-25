@@ -10,27 +10,47 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 
 ### Narrative
 
-Built the full Maps feature — CRUD, object management, multi-select integration, and canvas filtering.
+Major Maps panel overhaul — Finder-like UX, gold map highlights, click-to-edit mode, resizable frames, and workspace persistence.
 
-**MapsFrame CRUD.** Replaced the stub MapsFrame with a full implementation. List view shows maps with name + object count on the same line (Matt preferred single-line density over stacked), gold dot indicator for active map. Create form appears inline at the bottom of the list (replaces the "+ New Map" button in place — Matt requested this over the original top-of-frame position). Edit mode for name/description. Delete with confirmation ("removes the map, not the objects"). Empty state: just "Create a map to organize your landscape into filtered views." (Matt cut "No maps yet." — the hint is enough).
+**Frame enhancements.** Started with double-click title bar to collapse/expand. Then added `actions` prop (buttons in the header between title and close), `forwardRef` (so MapsFrame can read list frame position to place detail card), and `titleClassName` (white titles for entity names vs gold for panel names). Later added `headerContent` prop — content rendered inside the header div below the title row, above the border-bottom line. This was needed because Matt wanted map description and auto-add hint to appear "above the line" with the title. Initial attempts to do this via content-area padding adjustments failed ("we're going in circles") — the fix was putting the content literally inside the header.
 
-**Map detail view.** Click a map to see its objects with class-colored dots and hover-to-reveal remove buttons. Search input at the bottom for adding landscape objects (debounced, keyboard nav, filters already-added objects). "Show on Canvas" toggle button (gold when active) to activate the map as a canvas filter.
+**Finder-like Maps list.** Restructured MapsFrame from a single-panel list/detail toggle into two independent Frame cards. List card (280px) always visible. Single click selects a map (gold outline on the list item). Double-click opens the detail card to the right (positioned via list frame's `getBoundingClientRect()`). Matt explicitly wanted Mac Finder behavior: click to select, double-click to open, click outside to deselect.
 
-**Canvas filtering.** `activeMapId` state lives in Landscape.tsx, passed to both MapsFrame and Canvas. When active, Canvas queries `maps_objects` for the map's object IDs, then filters the `user_objects` results. Connections filter naturally since they're already scoped to visible nodes. Selected items that leave the filtered set get dropped from selection.
+**Gold map highlights.** When a map is selected in the list, all its objects light up with gold borders on the canvas. Data flow: MapsFrame tracks `mapObjectIds` → passes IDs up via `onHighlightObjects` → Landscape → Canvas syncs `mapHighlighted` flag into node data → ObjectNode renders `.mapHighlighted` class. CSS specificity matters — `.mapHighlighted` must come after `.org`/`.person` to override their border colors.
 
-**MultiSelectPanel integration.** Wired up the existing "New Map" and "Add to Map" stub buttons. "New Map" shows an inline name input, creates the map, adds all selected nodes, shows gold checkmark feedback. "Add to Map" loads existing maps as a picker, upserts to avoid duplicate key errors. Both reset to default actions after completion.
+**Click-to-edit mode.** MousePointerClick icon button on selected map items. When active, clicking canvas objects toggles them in/out of the map. Optimistic updates with `mapObjectIdsRef` for rapid-click correctness. 400ms debounce prevents double-click from toggling twice. Edit mode locks map selection, auto-closes the detail card, replaces "+New Map" button with gold hint text: "Select objects to add/remove them from the {name} map." White selection borders are fully suppressed during edit mode (`nodesSelectable={false}` + `mapEditMode` flag in node data).
 
-**Lucide `Map` icon bug.** Maps were being created in the DB but never appeared in the UI. Root cause: `import { Map } from 'lucide-react'` shadowed JavaScript's native `Map` constructor. `new Map()` inside `loadMaps` tried to instantiate a React component instead of a JS Map, threw silently, and killed the entire create flow after the form had already dismissed. Fix: renamed to `import { Map as MapIcon }`.
+**Isolate button.** Focus icon on selected map items toggles `activeMapId` (same as the old "Show on Canvas" button, which was removed from the detail card).
 
-**UI polish.** Map name and object count on same line with `align-items: baseline` and 8px gap. Create form slides in at bottom of list (same position as the New Map button it replaces) rather than appearing above the list.
+**Deselection challenges.** Matt wanted true Finder-like deselection: clicking ANYWHERE outside the map tile deselects. Started with mousedown on document, but React Flow uses pointer capture for nodes, so global mouse listeners miss node clicks. Fix: dual mechanism — global mousedown for non-canvas clicks + custom `coterie:node-click` DOM event dispatched from Canvas's `onNodeClick`. Also needed drag awareness: mousedown fires before we know it's a drag, but `onNodeClick` doesn't fire after drags, so the custom event approach handles this naturally. Map selection clears canvas selection (`clearSelection()` on CanvasRef). Object clicks deselect the map.
+
+**Object selection interactions.** Matt requested: (1) selecting a map clears object selection, (2) clicking an object (not dragging) deselects the map, (3) dragging should NOT deselect. Also: gold borders must suppress white selection during highlight — both when dragging highlighted nodes and in edit mode. Fix: ObjectNode checks `mapHighlighted` and `mapEditMode` before applying `.selected` class.
+
+**Mac-style resize.** Matt asked if resize could work "like the Mac" — hover any edge/corner for resize cursor. Implemented with invisible hit zones on all 4 edges and 4 corners. Left/top edge resize moves position to keep opposite edge fixed. Cursor locked on `documentElement` during drag. Min 200×100.
+
+**Workspace persistence.** Matt wanted frame layouts to persist across devices ("an assistant logs in at his boss's desk"). Discussed localStorage vs schema — went with both: `profiles.workspace_layout` JSONB column as source of truth, localStorage as instant cache. `WorkspaceProvider` context wraps Landscape. `useWorkspaceLayout` hook manages in-memory cache + dual persistence with 500ms debounce to Supabase. All main frames get `persistKey`; ephemeral detail cards don't.
+
+**Auto-add maps setting.** Schema: `maps.auto_add BOOLEAN DEFAULT FALSE`. In Canvas's `handleCreateObject`, queries for auto-add maps and inserts new objects. Detail card shows gold hint "New objects will be automatically added" in read mode, checkbox in edit mode. Checkbox styled with `color-scheme: dark/light` to match theme.
+
+**Detail card chevron.** Added ChevronRight icon button on selected map items as an alternative to double-click for opening the detail card.
 
 ### Files Modified
-- `src/components/MapsFrame.tsx` — New: full CRUD, detail view with object management, search-to-add, canvas filter toggle, `MapIcon` alias for Lucide Map
-- `src/components/MapsFrame.module.css` — New: list items, create form, detail view, object list, search, delete confirmation, map picker styles
-- `src/components/MultiSelectPanel.tsx` — Rebuilt: "New Map" inline form, "Add to Map" picker, feedback messages, Supabase integration
-- `src/components/MultiSelectPanel.module.css` — Added: inline form, map picker, feedback styles
-- `src/components/Canvas.tsx` — Added `activeMapId` prop, map-based node filtering in `refreshData`, drops filtered-out items from selection
-- `src/pages/Landscape.tsx` — Added `activeMapId` state, passes to Canvas and MapsFrame
+- `src/components/Frame.tsx` — collapse, actions, forwardRef, titleClassName, headerContent, Mac-style resize, persistKey + workspace context
+- `src/components/Frame.module.css` — headerTop, headerContent, headerCollapsed, resizeEdge, resizeCorner
+- `src/components/MapsFrame.tsx` — complete restructure: list/detail split, MapDetailCard component (forwardRef), map selection, gold highlights, click-to-edit mode, isolate, deselection, auto-add, chevron open
+- `src/components/MapsFrame.module.css` — mapItemSelected, mapActions, mapActionBtn, detailMeta, inlineInput, editModeHint, autoAddHint, checkboxLabel, editForm
+- `src/components/Canvas.tsx` — highlightedObjectIds, mapEditMode, onMapEditClick, clearSelection, coterie:node-click event, nodesSelectable, auto-add on create
+- `src/components/ObjectNode.tsx` — mapHighlighted, mapEditMode flags, conditional .selected
+- `src/components/ObjectNode.module.css` — .mapHighlighted class, specificity ordering
+- `src/pages/Landscape.tsx` — highlightedObjectIds, mapEditMode coordination, handleMapEditModeChange, handleMapEditClick, onMapSelected
+- `src/App.tsx` — WorkspaceProvider wrapping Landscape
+- `src/hooks/useWorkspaceLayout.ts` — new: dual persistence hook
+- `src/contexts/WorkspaceContext.tsx` — new: workspace layout context
+- `src/components/CoteriesFrame.tsx` — resizable + persistKey
+- `src/components/SearchFrame.tsx` — persistKey
+- `src/components/SettingsFrame.tsx` — persistKey
+- `src/components/AccountFrame.tsx` — persistKey
+- `supabase/migrations/20260203000000_pro_schema.sql` — maps.auto_add, profiles.workspace_layout
 
 ### Open Items / Next Steps
 1. **Coteries frame** — list coteries, create/invite, share maps
@@ -38,3 +58,4 @@ Built the full Maps feature — CRUD, object management, multi-select integratio
 3. **Light mode polish** — may need tuning after real-world use
 4. **Map packages (store)** — browse + "stamp" placement onto Landscape
 5. **RLS policies** — deferred until features are complete, before deploy
+6. **Map detail object list sync** — currently detail card closes on edit mode to avoid stale state; could sync reactively instead

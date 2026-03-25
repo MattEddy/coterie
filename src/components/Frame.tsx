@@ -12,10 +12,11 @@ interface FrameProps {
   children: ReactNode
   actions?: ReactNode
   titleClassName?: string
+  headerContent?: ReactNode
 }
 
 const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
-  { title, onClose, initialPosition, width = 320, children, actions, titleClassName },
+  { title, onClose, initialPosition, width = 320, children, actions, titleClassName, headerContent },
   externalRef
 ) {
   const [position, setPosition] = useState(initialPosition)
@@ -33,8 +34,8 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
   }, [externalRef])
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
-    // Don't start drag or toggle collapse from buttons
-    if ((e.target as HTMLElement).closest('button')) return
+    // Don't start drag or toggle collapse from buttons or inputs
+    if ((e.target as HTMLElement).closest('button, input, textarea, label')) return
 
     const now = Date.now()
     if (now - lastClickTime.current < 300) {
@@ -84,11 +85,18 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
       onMouseDown={bringToFront}
     >
       <div className={`${styles.header} ${collapsed ? styles.headerCollapsed : ''}`} onMouseDown={handleHeaderMouseDown}>
-        <span className={`${styles.title} ${titleClassName ?? ''}`}>{title}</span>
-        <div className={styles.headerRight}>
-          {!collapsed && actions}
-          <button className={styles.close} onClick={onClose}>&times;</button>
+        <div className={styles.headerTop}>
+          <span className={`${styles.title} ${titleClassName ?? ''}`}>{title}</span>
+          <div className={styles.headerRight}>
+            {!collapsed && actions}
+            <button className={styles.close} onClick={onClose}>&times;</button>
+          </div>
         </div>
+        {!collapsed && headerContent && (
+          <div className={styles.headerContent}>
+            {headerContent}
+          </div>
+        )}
       </div>
       {!collapsed && (
         <div className={styles.content}>

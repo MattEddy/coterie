@@ -574,6 +574,19 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       return
     }
 
+    // 3. Auto-add to maps with auto_add enabled
+    const { data: autoMaps } = await supabase
+      .from('maps')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('auto_add', true)
+      .eq('is_active', true)
+    if (autoMaps && autoMaps.length > 0) {
+      await supabase
+        .from('maps_objects')
+        .insert(autoMaps.map(m => ({ map_id: m.id, object_ref_id: obj.id })))
+    }
+
     setCreateForm(null)
     await refreshData()
 

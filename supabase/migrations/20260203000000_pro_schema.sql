@@ -363,6 +363,7 @@ CREATE TABLE maps (
     sector_id TEXT REFERENCES sectors(id),
     source_map_id UUID REFERENCES maps(id),
     is_published BOOLEAN DEFAULT FALSE,
+    auto_add BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

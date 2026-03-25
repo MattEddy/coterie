@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
-import { Map as MapIcon, Plus, Check, Pencil, Trash2, X, Search, Focus, MousePointerClick } from 'lucide-react'
+import { Map as MapIcon, Plus, Check, Pencil, Trash2, X, Search, Focus, MousePointerClick, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
@@ -9,6 +9,7 @@ interface MapRow {
   id: string
   name: string
   description: string | null
+  auto_add: boolean
   object_count: number
 }
 
@@ -44,6 +45,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
+  const [editAutoAdd, setEditAutoAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const editInputRef = useRef<HTMLInputElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -77,6 +79,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   const startEdit = () => {
     setEditName(map.name)
     setEditDesc(map.description ?? '')
+    setEditAutoAdd(map.auto_add)
     setEditing(true)
     setTimeout(() => editInputRef.current?.focus(), 0)
   }
@@ -85,9 +88,9 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     if (!editName.trim()) return
     await supabase
       .from('maps')
-      .update({ name: editName.trim(), description: editDesc.trim() || null })
+      .update({ name: editName.trim(), description: editDesc.trim() || null, auto_add: editAutoAdd })
       .eq('id', map.id)
-    onMapUpdated({ ...map, name: editName.trim(), description: editDesc.trim() || null })
+    onMapUpdated({ ...map, name: editName.trim(), description: editDesc.trim() || null, auto_add: editAutoAdd })
     setEditing(false)
   }
 
@@ -165,37 +168,53 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   )
 
   return (
-    <Frame ref={ref} title={map.name} onClose={onClose} initialPosition={initialPosition} width={320} actions={headerActions} titleClassName={styles.entityName}>
-      {/* Edit form */}
-      {editing && (
-        <div className={styles.editForm}>
-          <input
-            ref={editInputRef}
-            className={styles.input}
-            value={editName}
-            onChange={e => setEditName(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') saveEdit()
-              if (e.key === 'Escape') setEditing(false)
-            }}
-            placeholder="Map name"
-          />
-          <textarea
-            className={styles.input}
-            value={editDesc}
-            onChange={e => setEditDesc(e.target.value)}
-            placeholder="Description (optional)"
-            rows={2}
-            style={{ resize: 'vertical', fontFamily: 'var(--font-sans)' }}
-          />
-        </div>
-      )}
-
-      {/* Description (read mode) */}
-      {!editing && map.description && (
-        <p className={styles.description}>{map.description}</p>
-      )}
-
+    <Frame
+      ref={ref}
+      title={map.name}
+      onClose={onClose}
+      initialPosition={initialPosition}
+      width={320}
+      actions={headerActions}
+      titleClassName={styles.entityName}
+      headerContent={
+        editing ? (
+          <div className={styles.detailMeta}>
+            <input
+              ref={editInputRef}
+              className={styles.inlineInput}
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') saveEdit()
+                if (e.key === 'Escape') setEditing(false)
+              }}
+              placeholder="Map name"
+            />
+            <textarea
+              className={styles.inlineInput}
+              value={editDesc}
+              onChange={e => setEditDesc(e.target.value)}
+              placeholder="Description (optional)"
+              rows={2}
+              style={{ resize: 'vertical' }}
+            />
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={editAutoAdd}
+                onChange={e => setEditAutoAdd(e.target.checked)}
+              />
+              Automatically add new objects to map
+            </label>
+          </div>
+        ) : (map.description || map.auto_add) ? (
+          <div className={styles.detailMeta}>
+            {map.description && <p className={styles.description}>{map.description}</p>}
+            {map.auto_add && <p className={styles.autoAddHint}>New objects will be automatically added</p>}
+          </div>
+        ) : undefined
+      }
+    >
       {/* Delete confirmation */}
       {confirmDelete && (
         <div className={styles.deleteConfirm}>
@@ -317,7 +336,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     if (!user) return
     const { data } = await supabase
       .from('maps')
-      .select('id, name, description')
+      .select('id, name, description, auto_add')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .order('name')
@@ -444,6 +463,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
   const toggleEditMode = () => {
     const newMode = !mapEditMode
     setMapEditMode(newMode)
+    if (newMode) setOpenedMap(null)
     onMapEditModeChange?.(newMode, newMode ? stableToggle : null)
   }
 
@@ -472,7 +492,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     const { data, error } = await supabase
       .from('maps')
       .insert({ name: createName.trim(), description: createDesc.trim() || null, user_id: user.id })
-      .select('id, name, description')
+      .select('id, name, description, auto_add')
       .single()
     if (error) { console.error('Map create error:', error); return }
     if (data) {
@@ -535,6 +555,14 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
                       onClick={e => { e.stopPropagation(); onActivateMap(activeMapId === m.id ? null : m.id) }}
                     >
                       <Focus size={13} />
+                    </span>
+                    <span
+                      role="button"
+                      className={styles.mapActionBtn}
+                      title="Open"
+                      onClick={e => { e.stopPropagation(); handleMapDoubleClick(m) }}
+                    >
+                      <ChevronRight size={13} />
                     </span>
                   </div>
                 ) : (

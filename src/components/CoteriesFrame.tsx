@@ -1,15 +1,768 @@
+import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
+import { Users, Plus, ChevronRight, Trash2, X, Map as MapIcon, UserPlus } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
+import styles from './CoteriesFrame.module.css'
+
+// --- Types ---
+
+interface CoterieRow {
+  id: string
+  name: string
+  owner_id: string
+  member_count: number
+  map_count: number
+}
+
+interface CoterieMember {
+  user_id: string
+  display_name: string | null
+  role: string
+}
+
+interface CoterieMap {
+  map_id: string
+  name: string
+  object_count: number
+}
+
+interface PendingInvite {
+  id: string
+  coterie_id: string
+  coterie_name: string
+  invited_by_name: string | null
+  created_at: string
+}
+
+interface MapOption {
+  id: string
+  name: string
+  object_count: number
+}
+
+interface PendingMember {
+  email: string
+}
+
+// --- Coterie Detail Card ---
+
+interface CoterieDetailCardProps {
+  coterie: CoterieRow
+  onClose: () => void
+  onCoterieUpdated: (updated: CoterieRow) => void
+  onCoterieDeleted: (coterieId: string) => void
+  initialPosition: { x: number; y: number }
+}
+
+const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(function CoterieDetailCard(
+  { coterie, onClose, onCoterieUpdated, onCoterieDeleted, initialPosition },
+  ref
+) {
+  const { user } = useAuth()
+  const [members, setMembers] = useState<CoterieMember[]>([])
+  const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([])
+  const [maps, setMaps] = useState<CoterieMap[]>([])
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const isOwner = coterie.owner_id === user?.id
+
+  const loadDetail = useCallback(async () => {
+    // Load members
+    const { data: memberData } = await supabase
+      .from('coteries_members')
+      .select('user_id, role, profiles(display_name)')
+      .eq('coterie_id', coterie.id)
+    if (memberData) {
+      setMembers(memberData.map((m: any) => ({
+        user_id: m.user_id,
+        display_name: m.profiles?.display_name ?? m.user_id,
+        role: m.role,
+      })))
+    }
+
+    // Load pending invitations for this coterie
+    const { data: inviteData } = await supabase
+      .from('coterie_invitations')
+      .select('email')
+      .eq('coterie_id', coterie.id)
+      .eq('status', 'pending')
+    if (inviteData) {
+      setPendingMembers(inviteData.map((i: any) => ({ email: i.email })))
+    }
+
+    // Load linked maps
+    const { data: mapData } = await supabase
+      .from('coteries_maps')
+      .select('map_id, maps(name)')
+      .eq('coterie_id', coterie.id)
+    if (mapData) {
+      const mapRows: CoterieMap[] = []
+      for (const m of mapData as any[]) {
+        const { count } = await supabase
+          .from('maps_objects')
+          .select('*', { count: 'exact', head: true })
+          .eq('map_id', m.map_id)
+        mapRows.push({
+          map_id: m.map_id,
+          name: m.maps?.name ?? 'Unknown',
+          object_count: count ?? 0,
+        })
+      }
+      setMaps(mapRows)
+    }
+  }, [coterie.id])
+
+  useEffect(() => {
+    setConfirmDelete(false)
+    setInviteEmail('')
+    loadDetail()
+  }, [coterie.id, loadDetail])
+
+  const handleDelete = async () => {
+    await supabase.from('coteries').update({ is_active: false }).eq('id', coterie.id)
+    onCoterieDeleted(coterie.id)
+  }
+
+  const handleInvite = async () => {
+    const email = inviteEmail.trim().toLowerCase()
+    if (!email || !user) return
+
+    // Check if already a member or already invited
+    const existingPending = pendingMembers.find(p => p.email === email)
+    if (existingPending) return
+
+    // Create the invitation (user_id resolved on acceptance)
+    const { error } = await supabase.from('coterie_invitations').insert({
+      coterie_id: coterie.id,
+      invited_by: user.id,
+      email,
+    })
+    if (error) { console.error('Invite error:', error); return }
+
+    setPendingMembers(prev => [...prev, { email }])
+    setInviteEmail('')
+    onCoterieUpdated({ ...coterie, member_count: coterie.member_count + 1 })
+  }
+
+  const headerActions = isOwner ? (
+    <button className={styles.iconBtn} onClick={() => setConfirmDelete(true)} title="Delete coterie">
+      <Trash2 size={14} className={styles.iconBtnDanger} />
+    </button>
+  ) : null
+
+  return (
+    <Frame
+      ref={ref}
+      title={coterie.name}
+      onClose={onClose}
+      initialPosition={initialPosition}
+      width={320}
+      actions={headerActions}
+      titleClassName={styles.entityName}
+      resizable
+    >
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <div className={styles.deleteConfirm}>
+          <span className={styles.deleteConfirmText}>
+            Delete &ldquo;{coterie.name}&rdquo;? Members will keep their objects but lose the shared intel connection.
+          </span>
+          <div className={styles.deleteConfirmActions}>
+            <button className={styles.formBtn} onClick={() => setConfirmDelete(false)}>Cancel</button>
+            <button className={styles.deleteBtnConfirm} onClick={handleDelete}>Delete</button>
+          </div>
+        </div>
+      )}
+
+      {/* Members */}
+      <div className={styles.detailSection}>
+        <span className={styles.sectionLabel}>Members ({members.length})</span>
+        <div className={styles.memberList}>
+          {members.map(m => (
+            <div key={m.user_id} className={styles.memberItem}>
+              <span className={styles.memberName}>
+                {m.display_name}
+                {m.user_id === user?.id && ' (you)'}
+              </span>
+              <span className={styles.memberRole}>{m.role}</span>
+            </div>
+          ))}
+          {pendingMembers.map(p => (
+            <div key={p.email} className={styles.memberItem}>
+              <span className={styles.memberName}>{p.email}</span>
+              <span className={styles.pendingBadge}>pending</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Invite member */}
+      {isOwner && (
+        <div className={styles.detailSection}>
+          <div className={styles.emailTags} onClick={() => document.getElementById(`invite-${coterie.id}`)?.focus()}>
+            <input
+              id={`invite-${coterie.id}`}
+              className={styles.emailInput}
+              type="email"
+              placeholder="Invite by email..."
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); handleInvite() }
+              }}
+            />
+            {inviteEmail.trim() && (
+              <button className={styles.acceptBtn} onClick={handleInvite}>
+                <UserPlus size={12} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Linked maps */}
+      <div className={styles.detailSection}>
+        <span className={styles.sectionLabel}>Maps ({maps.length})</span>
+        <div className={styles.mapList}>
+          {maps.map(m => (
+            <div key={m.map_id} className={styles.mapItem}>
+              <MapIcon size={14} className={styles.mapItemIcon} />
+              <span className={styles.mapItemName}>{m.name}</span>
+              <span className={styles.coterieMeta}>{m.object_count}</span>
+            </div>
+          ))}
+          {maps.length === 0 && (
+            <span className={styles.coterieMeta} style={{ padding: '4px 8px' }}>No maps shared yet</span>
+          )}
+        </div>
+      </div>
+    </Frame>
+  )
+})
+
+// --- Create Coterie Form ---
+
+interface CreateCoterieFormProps {
+  onCreated: () => void
+  onCancel: () => void
+}
+
+function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
+  const { user } = useAuth()
+  const [name, setName] = useState('')
+  const [emails, setEmails] = useState<string[]>([])
+  const [emailInput, setEmailInput] = useState('')
+  const [maps, setMaps] = useState<MapOption[]>([])
+  const [selectedMapIds, setSelectedMapIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!user) return
+    const load = async () => {
+      const { data } = await supabase
+        .from('maps')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .is('source_coterie_id', null)
+        .order('name')
+      if (!data) return
+      const withCounts: MapOption[] = []
+      for (const m of data) {
+        const { count } = await supabase
+          .from('maps_objects')
+          .select('*', { count: 'exact', head: true })
+          .eq('map_id', m.id)
+        withCounts.push({ id: m.id, name: m.name, object_count: count ?? 0 })
+      }
+      setMaps(withCounts)
+    }
+    load()
+  }, [user])
+
+  const addEmail = () => {
+    const email = emailInput.trim().toLowerCase()
+    if (!email || emails.includes(email)) return
+    setEmails(prev => [...prev, email])
+    setEmailInput('')
+  }
+
+  const removeEmail = (email: string) => {
+    setEmails(prev => prev.filter(e => e !== email))
+  }
+
+  const toggleMap = (mapId: string) => {
+    setSelectedMapIds(prev => {
+      const next = new Set(prev)
+      if (next.has(mapId)) next.delete(mapId)
+      else next.add(mapId)
+      return next
+    })
+    // Auto-populate name from first selected map
+    if (!selectedMapIds.has(mapId) && !name) {
+      const map = maps.find(m => m.id === mapId)
+      if (map) setName(`${map.name} Coterie`)
+    }
+  }
+
+  const handleCreate = async () => {
+    if (!user || !name.trim() || selectedMapIds.size === 0) return
+
+    // Create the coterie
+    const { data: coterie, error } = await supabase
+      .from('coteries')
+      .insert({ name: name.trim(), owner_id: user.id })
+      .select('id')
+      .single()
+    if (error || !coterie) { console.error('Coterie create error:', error); return }
+
+    // Add owner as member
+    await supabase.from('coteries_members').insert({
+      coterie_id: coterie.id,
+      user_id: user.id,
+      role: 'owner',
+    })
+
+    // Link selected maps
+    const mapInserts = Array.from(selectedMapIds).map(mapId => ({
+      coterie_id: coterie.id,
+      map_id: mapId,
+    }))
+    await supabase.from('coteries_maps').insert(mapInserts)
+
+    // Create invitations
+    for (const email of emails) {
+      // Try to find existing user by checking auth (for local dev, match against profiles)
+      // In production this would use a server function
+      await supabase.from('coterie_invitations').insert({
+        coterie_id: coterie.id,
+        invited_by: user.id,
+        email,
+      })
+    }
+
+    onCreated()
+  }
+
+  return (
+    <div className={styles.createForm}>
+      <div>
+        <div className={styles.fieldLabel}>Name</div>
+        <input
+          className={styles.input}
+          placeholder="e.g. Literary Agents Coterie"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          autoFocus
+        />
+      </div>
+
+      <div>
+        <div className={styles.fieldLabel}>Maps</div>
+        {maps.length > 0 ? (
+          <div className={styles.mapPicker}>
+            {maps.map(m => (
+              <button
+                key={m.id}
+                className={`${styles.mapPickerItem} ${selectedMapIds.has(m.id) ? styles.mapPickerItemSelected : ''}`}
+                onClick={() => toggleMap(m.id)}
+              >
+                <MapIcon size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+                <span className={styles.mapPickerName}>{m.name}</span>
+                <span className={styles.mapPickerCount}>{m.object_count}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className={styles.coterieMeta} style={{ fontSize: 12 }}>No maps yet. Create a map first.</span>
+        )}
+      </div>
+
+      <div>
+        <div className={styles.fieldLabel}>Invite members</div>
+        <div className={styles.emailTags} onClick={() => document.getElementById('create-email-input')?.focus()}>
+          {emails.map(e => (
+            <span key={e} className={styles.emailTag}>
+              {e}
+              <button className={styles.emailTagRemove} onClick={() => removeEmail(e)}><X size={10} /></button>
+            </span>
+          ))}
+          <input
+            id="create-email-input"
+            className={styles.emailInput}
+            type="email"
+            placeholder={emails.length ? '' : 'Enter email, press Enter'}
+            value={emailInput}
+            onChange={e => setEmailInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); addEmail() }
+              if (e.key === 'Backspace' && !emailInput && emails.length) {
+                removeEmail(emails[emails.length - 1])
+              }
+            }}
+            onBlur={() => { if (emailInput.trim()) addEmail() }}
+          />
+        </div>
+      </div>
+
+      <div className={styles.formActions}>
+        <button className={styles.formBtn} onClick={onCancel}>Cancel</button>
+        <button
+          className={`${styles.formBtn} ${styles.formBtnPrimary}`}
+          onClick={handleCreate}
+          disabled={!name.trim() || selectedMapIds.size === 0}
+        >
+          Create
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// --- Main Coteries Frame ---
 
 interface CoteriesFrameProps {
   onClose: () => void
 }
 
 export default function CoteriesFrame({ onClose }: CoteriesFrameProps) {
+  const { user } = useAuth()
+  const [coteries, setCoteries] = useState<CoterieRow[]>([])
+  const [invitations, setInvitations] = useState<PendingInvite[]>([])
+  const [selectedCoterieId, setSelectedCoterieId] = useState<string | null>(null)
+  const [openedCoterie, setOpenedCoterie] = useState<CoterieRow | null>(null)
+  const [creating, setCreating] = useState(false)
+  const listFrameRef = useRef<HTMLDivElement>(null)
+  const detailFrameRef = useRef<HTMLDivElement>(null)
+  const [detailPosition, setDetailPosition] = useState({ x: 388, y: 180 })
+
+  const loadCoteries = useCallback(async () => {
+    if (!user) return
+
+    // Get coteries the user is a member of
+    const { data: memberRows } = await supabase
+      .from('coteries_members')
+      .select('coterie_id')
+      .eq('user_id', user.id)
+    if (!memberRows) return
+
+    const coterieIds = memberRows.map(r => r.coterie_id)
+    if (coterieIds.length === 0) { setCoteries([]); return }
+
+    const { data: coterieData } = await supabase
+      .from('coteries')
+      .select('id, name, owner_id')
+      .in('id', coterieIds)
+      .eq('is_active', true)
+      .order('name')
+    if (!coterieData) return
+
+    const rows: CoterieRow[] = []
+    for (const c of coterieData) {
+      const { count: memberCount } = await supabase
+        .from('coteries_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('coterie_id', c.id)
+      const { count: mapCount } = await supabase
+        .from('coteries_maps')
+        .select('*', { count: 'exact', head: true })
+        .eq('coterie_id', c.id)
+      rows.push({
+        ...c,
+        member_count: memberCount ?? 0,
+        map_count: mapCount ?? 0,
+      })
+    }
+    setCoteries(rows)
+  }, [user])
+
+  const loadInvitations = useCallback(async () => {
+    if (!user) return
+
+    // Find invitations by email (look up user's email from auth)
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (!authUser?.email) return
+
+    const { data: inviteData } = await supabase
+      .from('coterie_invitations')
+      .select('id, coterie_id, created_at, invited_by, coteries(name)')
+      .eq('email', authUser.email)
+      .eq('status', 'pending')
+    if (!inviteData) return
+
+    // Look up inviter names
+    const inviterIds = [...new Set((inviteData as any[]).map(i => i.invited_by))]
+    const { data: inviterProfiles } = inviterIds.length > 0
+      ? await supabase.from('profiles').select('user_id, display_name').in('user_id', inviterIds)
+      : { data: [] }
+    const inviterNames = new Map((inviterProfiles ?? []).map(p => [p.user_id, p.display_name]))
+
+    setInvitations(inviteData.map((i: any) => ({
+      id: i.id,
+      coterie_id: i.coterie_id,
+      coterie_name: i.coteries?.name ?? 'Unknown',
+      invited_by_name: inviterNames.get(i.invited_by) ?? 'Someone',
+      created_at: i.created_at,
+    })))
+  }, [user])
+
+  useEffect(() => { loadCoteries(); loadInvitations() }, [loadCoteries, loadInvitations])
+
+  // Click anywhere outside coteries UI to deselect
+  useEffect(() => {
+    if (!selectedCoterieId) return
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (listFrameRef.current?.contains(e.target as Node)) return
+      if (detailFrameRef.current?.contains(e.target as Node)) return
+      setSelectedCoterieId(null)
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [selectedCoterieId])
+
+  const handleAcceptInvite = async (invite: PendingInvite) => {
+    if (!user) return
+
+    // Mark invitation as accepted
+    await supabase
+      .from('coterie_invitations')
+      .update({ status: 'accepted', user_id: user.id })
+      .eq('id', invite.id)
+
+    // Add user as member
+    await supabase.from('coteries_members').insert({
+      coterie_id: invite.coterie_id,
+      user_id: user.id,
+      role: 'member',
+    })
+
+    // Collect all objects from all maps linked to this coterie
+    const { data: coterieMaps } = await supabase
+      .from('coteries_maps')
+      .select('map_id')
+      .eq('coterie_id', invite.coterie_id)
+
+    const allObjectIds = new Set<string>()
+    if (coterieMaps) {
+      for (const cm of coterieMaps) {
+        const { data: mapObjs } = await supabase
+          .from('maps_objects')
+          .select('object_ref_id')
+          .eq('map_id', cm.map_id)
+        if (mapObjs) mapObjs.forEach(o => allObjectIds.add(o.object_ref_id))
+      }
+    }
+
+    // Get the coterie name for the recipient map
+    const coterie = coteries.find(c => c.id === invite.coterie_id)
+    const mapName = coterie?.name ?? invite.coterie_name
+
+    // Create the aggregated recipient map
+    const { data: newMap } = await supabase
+      .from('maps')
+      .insert({
+        name: mapName,
+        user_id: user.id,
+        source_coterie_id: invite.coterie_id,
+      })
+      .select('id')
+      .single()
+
+    if (newMap && allObjectIds.size > 0) {
+      // Add all objects to the recipient map
+      const mapObjInserts = Array.from(allObjectIds).map(objId => ({
+        map_id: newMap.id,
+        object_ref_id: objId,
+      }))
+      await supabase.from('maps_objects').insert(mapObjInserts)
+
+      // Create objects_overrides for objects the user doesn't already have
+      const { data: existingOverrides } = await supabase
+        .from('objects_overrides')
+        .select('object_id')
+        .eq('user_id', user.id)
+      const existingIds = new Set(existingOverrides?.map(o => o.object_id) ?? [])
+
+      // Get positions from the coterie owner to derive relative layout
+      const { data: coterieRow } = await supabase
+        .from('coteries')
+        .select('owner_id')
+        .eq('id', invite.coterie_id)
+        .single()
+
+      let ownerPositions = new Map<string, { x: number; y: number }>()
+      if (coterieRow) {
+        const { data: ownerOverrides } = await supabase
+          .from('objects_overrides')
+          .select('object_id, map_x, map_y')
+          .eq('user_id', coterieRow.owner_id)
+          .in('object_id', Array.from(allObjectIds))
+        if (ownerOverrides) {
+          for (const ov of ownerOverrides) {
+            if (ov.map_x != null && ov.map_y != null) {
+              ownerPositions.set(ov.object_id, { x: ov.map_x, y: ov.map_y })
+            }
+          }
+        }
+      }
+
+      // Compute centroid of owner positions for relative placement
+      const positions = Array.from(ownerPositions.values())
+      const centroid = positions.length > 0
+        ? { x: positions.reduce((s, p) => s + p.x, 0) / positions.length, y: positions.reduce((s, p) => s + p.y, 0) / positions.length }
+        : { x: 0, y: 0 }
+
+      // Place new objects relative to centroid, anchored at (0, 0) for now
+      // TODO: "accept and place" UX — let user click to set anchor point
+      const newOverrides = Array.from(allObjectIds)
+        .filter(id => !existingIds.has(id))
+        .map(id => {
+          const ownerPos = ownerPositions.get(id)
+          return {
+            user_id: user.id,
+            object_id: id,
+            map_x: ownerPos ? ownerPos.x - centroid.x : 0,
+            map_y: ownerPos ? ownerPos.y - centroid.y : 0,
+          }
+        })
+
+      if (newOverrides.length > 0) {
+        await supabase.from('objects_overrides').insert(newOverrides)
+      }
+    }
+
+    // Refresh
+    await loadCoteries()
+    await loadInvitations()
+    document.dispatchEvent(new Event('coterie:refresh-canvas'))
+  }
+
+  const handleDeclineInvite = async (invite: PendingInvite) => {
+    await supabase
+      .from('coterie_invitations')
+      .update({ status: 'declined' })
+      .eq('id', invite.id)
+    await loadInvitations()
+  }
+
+  const computeDetailPosition = () => {
+    const rect = listFrameRef.current?.getBoundingClientRect()
+    if (rect) {
+      setDetailPosition({ x: rect.right + 8, y: rect.top })
+    }
+  }
+
+  const handleCoterieClick = (coterie: CoterieRow) => {
+    setSelectedCoterieId(selectedCoterieId === coterie.id ? null : coterie.id)
+  }
+
+  const handleCoterieDoubleClick = (coterie: CoterieRow) => {
+    computeDetailPosition()
+    setOpenedCoterie(coterie)
+    setSelectedCoterieId(coterie.id)
+  }
+
+  const handleCoterieUpdated = (updated: CoterieRow) => {
+    setOpenedCoterie(updated)
+    setCoteries(prev => prev.map(c => c.id === updated.id ? updated : c))
+  }
+
+  const handleCoterieDeleted = (coterieId: string) => {
+    setOpenedCoterie(null)
+    setSelectedCoterieId(null)
+    loadCoteries()
+  }
+
   return (
-    <Frame title="Coteries" onClose={onClose} initialPosition={{ x: 60, y: 180 }} width={320} resizable persistKey="coteries">
-      <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>
-        Manage your coteries — share maps and see intel from your trusted network.
-      </p>
-    </Frame>
+    <>
+      <Frame ref={listFrameRef} title="Coteries" onClose={onClose} initialPosition={{ x: 60, y: 180 }} width={280} resizable persistKey="coteries">
+        {/* Pending invitations */}
+        {invitations.length > 0 && (
+          <div className={styles.invitationsSection}>
+            <span className={styles.sectionLabel}>Invitations</span>
+            {invitations.map(inv => (
+              <div key={inv.id} className={styles.inviteItem}>
+                <div className={styles.inviteInfo}>
+                  <span className={styles.inviteName}>{inv.coterie_name}</span>
+                  <span className={styles.inviteFrom}>from {inv.invited_by_name}</span>
+                </div>
+                <div className={styles.inviteActions}>
+                  <button className={styles.acceptBtn} onClick={() => handleAcceptInvite(inv)}>
+                    Accept
+                  </button>
+                  <button className={styles.declineBtn} onClick={() => handleDeclineInvite(inv)}>
+                    <X size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Coteries list */}
+        {coteries.length > 0 ? (
+          <div className={styles.coteriesList}>
+            {coteries.map(c => (
+              <button
+                key={c.id}
+                className={`${styles.coterieItem} ${selectedCoterieId === c.id ? styles.coterieItemSelected : ''}`}
+                onClick={() => handleCoterieClick(c)}
+                onDoubleClick={() => handleCoterieDoubleClick(c)}
+              >
+                <Users size={14} className={styles.coterieIcon} />
+                <div className={styles.coterieInfo}>
+                  <span className={styles.coterieName}>{c.name}</span>
+                  <span className={styles.coterieMeta}>
+                    {c.member_count} {c.member_count === 1 ? 'member' : 'members'} · {c.map_count} {c.map_count === 1 ? 'map' : 'maps'}
+                  </span>
+                </div>
+                {selectedCoterieId === c.id && (
+                  <div className={styles.coterieActions}>
+                    <span
+                      role="button"
+                      className={styles.coterieActionBtn}
+                      title="Open"
+                      onClick={e => { e.stopPropagation(); handleCoterieDoubleClick(c) }}
+                    >
+                      <ChevronRight size={13} />
+                    </span>
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        ) : !creating && invitations.length === 0 ? (
+          <div className={styles.empty}>
+            Create a coterie to share maps and intel with your trusted circle.
+          </div>
+        ) : null}
+
+        {/* Create form or button */}
+        {creating ? (
+          <CreateCoterieForm
+            onCreated={() => { setCreating(false); loadCoteries() }}
+            onCancel={() => setCreating(false)}
+          />
+        ) : (
+          <button className={styles.newCoterieBtn} onClick={() => setCreating(true)}>
+            <Plus size={14} />
+            Create Coterie
+          </button>
+        )}
+      </Frame>
+
+      {openedCoterie && (
+        <CoterieDetailCard
+          ref={detailFrameRef}
+          coterie={openedCoterie}
+          onClose={() => setOpenedCoterie(null)}
+          onCoterieUpdated={handleCoterieUpdated}
+          onCoterieDeleted={handleCoterieDeleted}
+          initialPosition={detailPosition}
+        />
+      )}
+    </>
   )
 }

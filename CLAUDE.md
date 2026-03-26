@@ -178,9 +178,27 @@ User maps are the primary organizational unit for coterie sharing — "here's my
 
 ### Coterie Sharing Model
 
-#### Map Sharing
+#### Coterie Creation & Map Sharing (decided 2026-03-25)
 
-Sharing a map to a coterie writes one row to `coteries_maps`. Recipients see a pending shared map (like receiving a package). They **accept and place** it — same installation mechanic as store packages. Objects they already have stay untouched; new objects land at the placed position. A personal copy of the map is created (`source_map_id` links to the original).
+A **coterie** is a named trust circle — Hollywood "tracking group" model. Coteries require maps (no empty containers). Two creation paths:
+
+1. **From map detail card** (primary): Share icon → coterie name pre-filled as "[Map Name] Coterie" (editable) → email invites. Born from a concrete sharing action.
+2. **From CoteriesFrame**: Create Coterie → name + pick maps + email invites.
+
+**The aggregated recipient map**: Regardless of how many maps the sender links to a coterie, the recipient gets **ONE map** named after the coterie. `maps.source_coterie_id` links it to the coterie. This solves:
+- Sender sees their original N maps linked; recipient sees one clean package
+- No organizational style imposition (Mr. Micro's 17 maps → 1 map for recipient)
+- Uniform experience for both new and existing user invitations
+
+**Sender view**: Maps A, B, C linked via `coteries_maps`. **Recipient view**: Map Z with `source_coterie_id = coterie_M`, populated with the union of all objects from A + B + C.
+
+**Invitation flow**:
+- **Existing user**: Email + in-app notification → CoteriesFrame shows pending invite → Accept → objects placed on Landscape (relative to owner's layout, centroid-anchored)
+- **New user** (viral path): Email → landing page with interactive demo Landscape → signup (credit-card-free trial) → auto-placed objects → minimal welcome modal establishing autonomy ("This is your Landscape. Your changes are yours.")
+
+**New objects after initial share**: When sender adds objects to linked maps, they surface as dissonances to recipients (diff-based, not events). Recipient accepts → added to Landscape + their aggregated map Z.
+
+**`source_coterie_id` column jobs**: initial map creation, dissonance acceptance (knows which map to add to), UI treatment (coterie badge in MapsFrame), leaving a coterie (null out → becomes regular map), duplicate prevention.
 
 Once objects overlap between coterie members (through shared maps), the two sharing channels activate.
 
@@ -268,7 +286,13 @@ connections_overrides   -- per-user: overrides + user-created connections + shar
 coteries               -- sharing groups
 coteries_members        -- who's in which coterie (owner/member roles)
 coteries_maps          -- maps shared with coteries
+coterie_invitations    -- pending email invites (email, status, token for invite links)
 coteries_reviews        -- per-user review state for coterie dissonances
+```
+
+**Maps additions:**
+```
+maps.source_coterie_id -- recipient's aggregated view of a coterie (NULL for personal maps/packages)
 ```
 
 **Note:** `log_entries` table was removed — events are now first-class objects (class=`event`).
@@ -655,6 +679,15 @@ When ready to deploy:
 - [x] Map detail: in-place editing (headerContent), auto-add checkbox + gold hint text
 - [x] Chevron icon on selected map items to open detail card (in addition to double-click)
 - [x] Canvas `clearSelection()` exposed via CanvasRef
+- [x] CoteriesFrame: full UI — list coteries, pending invitations, create coterie (name + map picker + email tags), detail card (members, maps, invite, delete)
+- [x] Coterie creation from map detail card (Share2 icon → name pre-filled as "[Map Name] Coterie" + email invites)
+- [x] Coterie creation from CoteriesFrame (Create Coterie button → name + map picker + email tags)
+- [x] `coterie_invitations` table + `maps.source_coterie_id` schema additions
+- [x] Invitation acceptance: aggregated recipient map (source_coterie_id), object placement from owner's layout (centroid-relative)
+- [x] Canvas refresh via `coterie:refresh-canvas` DOM event (triggered after invite acceptance)
+- [x] Edge unhighlighting on selection clear (was missing — edges stayed highlighted)
+- [x] MultiSelectPanel: creating a map dispatches `coterie:map-created` event → MapsFrame refreshes + selects new map, panel closes
+- [x] Finder-like deselection on CoteriesFrame (click outside to deselect)
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -665,16 +698,16 @@ When ready to deploy:
 - [x] Local SQLite database
 
 ### Next Up
-- [ ] Coteries frame: list coteries, create/invite, share maps
+- [ ] Dissonance detection queries (diff engine comparing overrides across coterie members)
+- [ ] Coterie intel display (shared notes/tags visible on overlapping objects)
 - [ ] DetailPanel migration to Frame component (draggable, detach from node on drag)
 - [ ] Light mode polish (may need tuning after real-world use)
 - [ ] Map packages (store) — browse + "stamp" placement onto Landscape
 
 ### Planned
+- [ ] Dissonance View UI (dedicated panel showing all coterie diffs)
 - [ ] Map packages (store) with relative coordinates + stamp placement
 - [ ] User maps (filtered views of the Landscape)
-- [ ] Coterie sharing implementation (intel queries, diff-based updates, coteries_reviews table)
-- [ ] Dissonance View UI
 - [ ] Operator dedup tooling (merge duplicate community objects)
 - [ ] Canon check / diff-merge UI
 - [ ] RLS policies (before deploy — deferred until features are complete)

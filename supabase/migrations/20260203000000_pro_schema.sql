@@ -16,6 +16,7 @@
 
 DROP VIEW IF EXISTS user_objects CASCADE;
 DROP VIEW IF EXISTS objects_with_types CASCADE;
+DROP TABLE IF EXISTS coterie_invitations CASCADE;
 DROP TABLE IF EXISTS coteries_reviews CASCADE;
 DROP TABLE IF EXISTS coteries_maps CASCADE;
 DROP TABLE IF EXISTS coteries_members CASCADE;
@@ -363,6 +364,7 @@ CREATE TABLE maps (
     user_id UUID REFERENCES profiles(user_id) ON DELETE CASCADE,
     sector_id TEXT REFERENCES sectors(id),
     source_map_id UUID REFERENCES maps(id),
+    source_coterie_id UUID,              -- recipient's aggregated view of a coterie (FK added after coteries table)
     is_published BOOLEAN DEFAULT FALSE,
     auto_add BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
@@ -527,6 +529,26 @@ CREATE TABLE coteries_maps (
     PRIMARY KEY (coterie_id, map_id)
 );
 
+-- Coterie invitations (pending invites, including non-users)
+CREATE TABLE coterie_invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    coterie_id UUID NOT NULL REFERENCES coteries(id) ON DELETE CASCADE,
+    invited_by UUID NOT NULL REFERENCES profiles(user_id),
+    email TEXT NOT NULL,
+    user_id UUID REFERENCES profiles(user_id),  -- set if email matches an existing user
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
+    token UUID DEFAULT gen_random_uuid(),         -- for invite links (non-users)
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- One pending invite per email per coterie
+    UNIQUE(coterie_id, email)
+);
+
+CREATE INDEX idx_coterie_invitations_email ON coterie_invitations(email);
+CREATE INDEX idx_coterie_invitations_user ON coterie_invitations(user_id);
+CREATE INDEX idx_coterie_invitations_coterie ON coterie_invitations(coterie_id);
+
 -- Coterie dissonance review states (diff-based updates channel)
 -- Tracks how a user has responded to each structural dissonance.
 -- Dissonances are detected via diff queries, not stored events.
@@ -558,6 +580,10 @@ CREATE INDEX idx_coteries_reviews_source ON coteries_reviews(source_user_id);
 -- objects.created_by references profiles, but objects is created before profiles.
 ALTER TABLE objects ADD CONSTRAINT fk_objects_created_by
     FOREIGN KEY (created_by) REFERENCES profiles(user_id);
+
+-- maps.source_coterie_id references coteries, but maps is created before coteries.
+ALTER TABLE maps ADD CONSTRAINT fk_maps_source_coterie
+    FOREIGN KEY (source_coterie_id) REFERENCES coteries(id);
 
 -- =============================================================================
 -- HELPER VIEWS
@@ -652,6 +678,10 @@ CREATE TRIGGER profiles_updated_at
 
 CREATE TRIGGER coteries_updated_at
     BEFORE UPDATE ON coteries
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER coterie_invitations_updated_at
+    BEFORE UPDATE ON coterie_invitations
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 

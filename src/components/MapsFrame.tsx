@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
-import { Map as MapIcon, Plus, Check, Pencil, Trash2, X, Search, Focus, MousePointerClick, ChevronRight } from 'lucide-react'
+import { Map as MapIcon, Plus, Check, Pencil, Trash2, X, Search, Focus, MousePointerClick, ChevronRight, Share2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
@@ -53,6 +53,12 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   const [highlightIndex, setHighlightIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
+  // Share (create coterie) state
+  const [sharing, setSharing] = useState(false)
+  const [shareName, setShareName] = useState('')
+  const [shareEmails, setShareEmails] = useState<string[]>([])
+  const [shareEmailInput, setShareEmailInput] = useState('')
+
   const loadMapObjects = useCallback(async (mapId: string) => {
     const { data } = await supabase
       .from('maps_objects')
@@ -71,10 +77,63 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   useEffect(() => {
     setEditing(false)
     setConfirmDelete(false)
+    setSharing(false)
+    setShareEmails([])
+    setShareEmailInput('')
     setSearchQuery('')
     setSearchResults([])
     loadMapObjects(map.id)
   }, [map.id, loadMapObjects])
+
+  const startShare = () => {
+    setSharing(true)
+    setShareName(`${map.name} Coterie`)
+    setShareEmails([])
+    setShareEmailInput('')
+  }
+
+  const addShareEmail = () => {
+    const email = shareEmailInput.trim().toLowerCase()
+    if (!email || shareEmails.includes(email)) return
+    setShareEmails(prev => [...prev, email])
+    setShareEmailInput('')
+  }
+
+  const handleShare = async () => {
+    if (!user || !shareName.trim() || shareEmails.length === 0) return
+
+    // Create the coterie
+    const { data: coterie, error } = await supabase
+      .from('coteries')
+      .insert({ name: shareName.trim(), owner_id: user.id })
+      .select('id')
+      .single()
+    if (error || !coterie) { console.error('Coterie create error:', error); return }
+
+    // Add owner as member
+    await supabase.from('coteries_members').insert({
+      coterie_id: coterie.id,
+      user_id: user.id,
+      role: 'owner',
+    })
+
+    // Link this map
+    await supabase.from('coteries_maps').insert({
+      coterie_id: coterie.id,
+      map_id: map.id,
+    })
+
+    // Create invitations
+    for (const email of shareEmails) {
+      await supabase.from('coterie_invitations').insert({
+        coterie_id: coterie.id,
+        invited_by: user.id,
+        email,
+      })
+    }
+
+    setSharing(false)
+  }
 
   const startEdit = () => {
     setEditName(map.name)
@@ -162,6 +221,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     </>
   ) : (
     <>
+      <button className={styles.iconBtn} onClick={startShare} title="Share as Coterie"><Share2 size={14} /></button>
       <button className={styles.iconBtn} onClick={startEdit} title="Edit"><Pencil size={14} /></button>
       <button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmDelete(true)} title="Delete"><Trash2 size={14} /></button>
     </>
@@ -225,6 +285,53 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
           <div className={styles.deleteConfirmActions}>
             <button className={styles.formBtn} onClick={() => setConfirmDelete(false)}>Cancel</button>
             <button className={styles.deleteBtnConfirm} onClick={handleDelete}>Delete</button>
+          </div>
+        </div>
+      )}
+
+      {/* Share as coterie form */}
+      {sharing && (
+        <div className={styles.deleteConfirm}>
+          <input
+            className={styles.input}
+            placeholder="Coterie name"
+            value={shareName}
+            onChange={e => setShareName(e.target.value)}
+            autoFocus
+          />
+          <div className={styles.emailTags}>
+            {shareEmails.map(e => (
+              <span key={e} className={styles.emailTag}>
+                {e}
+                <button className={styles.emailTagRemove} onClick={() => setShareEmails(prev => prev.filter(x => x !== e))}>
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+            <input
+              className={styles.emailInput}
+              type="email"
+              placeholder={shareEmails.length ? '' : 'Invite by email...'}
+              value={shareEmailInput}
+              onChange={e => setShareEmailInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); addShareEmail() }
+                if (e.key === 'Backspace' && !shareEmailInput && shareEmails.length) {
+                  setShareEmails(prev => prev.slice(0, -1))
+                }
+              }}
+              onBlur={() => { if (shareEmailInput.trim()) addShareEmail() }}
+            />
+          </div>
+          <div className={styles.deleteConfirmActions}>
+            <button className={styles.formBtn} onClick={() => setSharing(false)}>Cancel</button>
+            <button
+              className={`${styles.formBtn} ${styles.formBtnPrimary}`}
+              onClick={handleShare}
+              disabled={!shareName.trim() || shareEmails.length === 0}
+            >
+              Share
+            </button>
           </div>
         </div>
       )}
@@ -357,6 +464,18 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
   }, [user])
 
   useEffect(() => { loadMaps() }, [loadMaps])
+
+  // Listen for map creation from MultiSelectPanel
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const mapId = (e as CustomEvent).detail?.mapId
+      loadMaps().then(() => {
+        if (mapId) setSelectedMapId(mapId)
+      })
+    }
+    document.addEventListener('coterie:map-created', handler)
+    return () => document.removeEventListener('coterie:map-created', handler)
+  }, [loadMaps])
 
   // Load map object IDs when selection changes
   useEffect(() => {

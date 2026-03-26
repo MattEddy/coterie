@@ -102,7 +102,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
     },
     clearSelection() {
       setSelectedItems([])
-    }
+    },
   }), [setCenter])
 
   const [createForm, setCreateForm] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
@@ -136,7 +136,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
     setEdges(flowEdges)
   }, [setEdges])
 
-  // Highlight all edges between selected nodes
+  // Highlight all edges between selected nodes (and unhighlight when selection clears)
   useEffect(() => {
     if (selectedItems.length >= 2) {
       const selectedIds = new Set(selectedItems.map(i => i.nodeId))
@@ -161,6 +161,15 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
           })
         )
       }
+    } else {
+      // Clear any highlighted edges
+      setEdges(current =>
+        current.map(e =>
+          e.data?.highlighted
+            ? { ...e, data: { ...e.data, highlighted: false }, style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 } }
+            : e
+        )
+      )
     }
   }, [selectedItems, setEdges])
 
@@ -308,6 +317,13 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
 
   useEffect(() => {
     refreshData()
+  }, [refreshData])
+
+  // Listen for external refresh requests (e.g. coterie invite accepted)
+  useEffect(() => {
+    const handler = () => { refreshData() }
+    document.addEventListener('coterie:refresh-canvas', handler)
+    return () => document.removeEventListener('coterie:refresh-canvas', handler)
   }, [refreshData])
 
   // Save position on drag end + recalculate edge handles

@@ -163,6 +163,15 @@
   color: var(--color-bg);
 }
 
+.formBtnPrimary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.formBtnPrimary:disabled:hover {
+  opacity: 0.35;
+}
+
 /* New map button */
 .newMapBtn {
   display: flex;
@@ -541,4 +550,65 @@
 .deleteBtnConfirm:hover {
   background: var(--color-danger);
   color: white;
+}
+
+/* Email tags input (share form) */
+.emailTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  min-height: 32px;
+  align-items: center;
+  cursor: text;
+}
+
+.emailTags:focus-within {
+  border-color: var(--color-accent);
+}
+
+.emailTag {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.emailTagRemove {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.emailTagRemove:hover {
+  color: var(--color-danger);
+}
+
+.emailInput {
+  flex: 1;
+  min-width: 120px;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+  padding: 2px 0;
+}
+
+.emailInput::placeholder {
+  color: var(--color-text-muted);
 }

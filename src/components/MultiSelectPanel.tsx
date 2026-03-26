@@ -83,8 +83,9 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
       .insert(objectIds.map(id => ({ map_id: map.id, object_ref_id: id })))
 
     setNewMapName('')
-    setMode('default')
-    setFeedback(`Created "${newMapName.trim()}"`)
+    // Notify MapsFrame to refresh and select the new map, then clear selection
+    document.dispatchEvent(new CustomEvent('coterie:map-created', { detail: { mapId: map.id } }))
+    onClose()
   }
 
   const handleAddToMap = async (mapId: string, mapName: string) => {

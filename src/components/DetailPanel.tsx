@@ -401,6 +401,9 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     private_notes: object.private_notes || '',
   })
 
+  // Coterie Intel (shared notes + contacts from coterie members)
+  const [coterieIntel, setCoterieIntel] = useState<{ user_id: string; display_name: string; shared_notes: string | null; contacts: ContactEntry[] }[]>([])
+
   // Connected items (projects/events)
   const [connectedProjects, setConnectedProjects] = useState<ConnectedItem[]>([])
   const [connectedEvents, setConnectedEvents] = useState<ConnectedItem[]>([])
@@ -557,6 +560,55 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (activeTab === 'projects') loadConnectedItems(object.id, 'project')
     if (activeTab === 'events') loadConnectedItems(object.id, 'event')
   }, [activeTab, object.id, loadConnectedItems])
+
+  // Load coterie intel (shared notes + contacts from coterie members)
+  useEffect(() => {
+    async function loadCoterieIntel() {
+      if (!user) return
+
+      // Get coterie peer user IDs
+      const { data: myMemberships } = await supabase
+        .from('coteries_members')
+        .select('coterie_id')
+        .eq('user_id', user.id)
+      if (!myMemberships?.length) return
+
+      const { data: peers } = await supabase
+        .from('coteries_members')
+        .select('user_id')
+        .in('coterie_id', myMemberships.map(m => m.coterie_id))
+        .neq('user_id', user.id)
+      if (!peers?.length) return
+
+      const peerIds = [...new Set(peers.map(p => p.user_id))]
+
+      // Get their overrides for this object (shared_notes + contacts only, never private_notes)
+      const { data: overrides } = await supabase
+        .from('objects_overrides')
+        .select('user_id, shared_notes, data')
+        .eq('object_id', object.id)
+        .in('user_id', peerIds)
+      if (!overrides?.length) { setCoterieIntel([]); return }
+
+      // Get display names
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('user_id, display_name')
+        .in('user_id', overrides.map(o => o.user_id))
+      const nameMap = new Map((profiles ?? []).map(p => [p.user_id, p.display_name || 'Unknown']))
+
+      setCoterieIntel(overrides
+        .filter(o => o.shared_notes || (o.data as any)?.contacts?.length > 0)
+        .map(o => ({
+          user_id: o.user_id,
+          display_name: nameMap.get(o.user_id) || 'Unknown',
+          shared_notes: o.shared_notes,
+          contacts: ((o.data as any)?.contacts ?? []) as ContactEntry[],
+        }))
+      )
+    }
+    loadCoterieIntel()
+  }, [object.id, user])
 
   // Load all objects linked to a specific event/project (for expanded view)
   const loadLinkedObjects = useCallback(async (itemId: string) => {
@@ -781,13 +833,32 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   async function saveContact() {
     if (!user) return
     const cleaned = editContacts.filter(c => c.value.trim())
-    const data = { ...(object.data || {}), contacts: cleaned.length > 0 ? cleaned : undefined }
+    const existingData = object.data || {}
+    const data = { ...existingData, contacts: cleaned.length > 0 ? cleaned : undefined }
     await supabase
       .from('objects_overrides')
       .update({ data: Object.keys(data).length > 0 ? data : null })
       .eq('object_id', object.id)
       .eq('user_id', user.id)
     setContactEditing(false)
+    onObjectUpdated?.()
+  }
+
+  function intelContactFingerprint(userId: string, c: ContactEntry) {
+    return `${userId}:${c.type}:${c.value}`
+  }
+
+  async function adoptIntelContact(sourceUserId: string, contact: ContactEntry) {
+    if (!user) return
+    const existingData = object.data || {}
+    const contacts: ContactEntry[] = [...(existingData.contacts ?? []), { ...contact }]
+    const adopted: string[] = [...((existingData as any).adopted_intel ?? []), intelContactFingerprint(sourceUserId, contact)]
+    const data = { ...existingData, contacts, adopted_intel: adopted }
+    await supabase
+      .from('objects_overrides')
+      .update({ data })
+      .eq('object_id', object.id)
+      .eq('user_id', user.id)
     onObjectUpdated?.()
   }
 
@@ -1862,9 +1933,44 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                     <span className={styles.value}>{c.value}</span>
                   </div>
                 ))}
-                {!(object.data?.contacts?.length) && (
+                {!(object.data?.contacts?.length) && !coterieIntel.some(ci => ci.contacts.length > 0) && (
                   <span className={styles.emptyState}>No contact info</span>
                 )}
+                {/* Note: the coterie intel contacts section with adopt buttons is rendered via the IIFE below */}
+                {(() => {
+                  const adopted = new Set<string>(((object.data as any)?.adopted_intel ?? []) as string[])
+                  const intelWithUnadopted = coterieIntel
+                    .map(ci => ({
+                      ...ci,
+                      unadoptedContacts: ci.contacts.filter(c => !adopted.has(intelContactFingerprint(ci.user_id, c))),
+                    }))
+                    .filter(ci => ci.unadoptedContacts.length > 0)
+                  return intelWithUnadopted.length > 0 && (
+                    <div className={styles.coterieIntelSection}>
+                      <span className={styles.coterieIntelLabel}>Coterie Intel</span>
+                      {intelWithUnadopted.map(ci => (
+                        <div key={ci.user_id} className={styles.coterieIntelEntry}>
+                          <span className={styles.coterieIntelAuthor}>{ci.display_name}</span>
+                          {ci.unadoptedContacts.map((c, i) => (
+                            <div key={i} className={styles.intelContactRow}>
+                              <div className={styles.field} style={{ flex: 1 }}>
+                                <span className={styles.label}>{c.label || c.type}</span>
+                                <span className={styles.value}>{c.value}</span>
+                              </div>
+                              <button
+                                className={styles.intelAdoptBtn}
+                                onClick={() => adoptIntelContact(ci.user_id, c)}
+                                title="Add to my contacts"
+                              >
+                                <Plus size={11} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </div>
@@ -1926,8 +2032,19 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                     <p className={styles.noteText}>{object.private_notes}</p>
                   </div>
                 )}
-                {!object.shared_notes && !object.private_notes && (
+                {!object.shared_notes && !object.private_notes && !coterieIntel.some(ci => ci.shared_notes) && (
                   <span className={styles.emptyState}>No notes</span>
+                )}
+                {coterieIntel.some(ci => ci.shared_notes) && (
+                  <div className={styles.coterieIntelSection}>
+                    <span className={styles.coterieIntelLabel}>Coterie Intel</span>
+                    {coterieIntel.filter(ci => ci.shared_notes).map(ci => (
+                      <div key={ci.user_id} className={styles.coterieIntelEntry}>
+                        <span className={styles.coterieIntelAuthor}>{ci.display_name}</span>
+                        <p className={styles.noteText}>{ci.shared_notes}</p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}

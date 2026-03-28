@@ -745,6 +745,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       .eq('object_id', object.id)
       .eq('user_id', user.id)
     setHeaderEditing(false)
+    setShowTagInput(false)
     onObjectUpdated?.()
   }
 
@@ -1714,14 +1715,16 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                 </span>
               ))}
             </div>
-            {showTagInput ? (
-              <button className={styles.iconButtonSm} onClick={saveTypes} title="Save types">
-                <Check size={12} />
-              </button>
-            ) : (
-              <button className={styles.iconButtonSm} onClick={() => { setEditTypes(object.types || []); setShowTagInput(true) }} title="Edit types">
-                <Plus size={12} />
-              </button>
+            {headerEditing && (
+              showTagInput ? (
+                <button className={styles.iconButtonSm} onClick={saveTypes} title="Save types">
+                  <Check size={12} />
+                </button>
+              ) : (
+                <button className={styles.iconButtonSm} onClick={() => { setEditTypes(object.types || []); setShowTagInput(true) }} title="Edit types">
+                  <Plus size={12} />
+                </button>
+              )
             )}
           </div>
           {showTagInput && (
@@ -1740,7 +1743,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
               <button className={styles.iconButton} onClick={saveHeader} title="Save">
                 <Check size={14} />
               </button>
-              <button className={styles.iconButton} onClick={() => { setHeaderValues({ name: object.name || '', title: object.title || '' }); setHeaderEditing(false) }} title="Cancel">
+              <button className={styles.iconButton} onClick={() => { setHeaderValues({ name: object.name || '', title: object.title || '' }); setHeaderEditing(false); setShowTagInput(false) }} title="Cancel">
                 <X size={14} />
               </button>
             </>

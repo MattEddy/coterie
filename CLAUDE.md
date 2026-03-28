@@ -102,7 +102,12 @@ coterie/
 │   │   ├── AccountFrame.module.css
 │   │   ├── MapsFrame.tsx         # Maps CRUD + detail view + canvas filter toggle
 │   │   ├── MapsFrame.module.css
-│   │   ├── CoteriesFrame.tsx     # Coteries management (stub)
+│   │   ├── CoteriesFrame.tsx     # Coteries management (list, create, invitations, detail card)
+│   │   ├── CoteriesFrame.module.css
+│   │   ├── CoterieUpdatesFrame.tsx  # Dissonance view (5 types, accept/ignore, hover-reveal actions)
+│   │   ├── CoterieUpdatesFrame.module.css
+│   │   ├── NotificationBoxes.tsx    # Floating notification boxes below NavBar (invites + updates)
+│   │   ├── NotificationBoxes.module.css
 │   │   └── SettingsFrame.tsx     # Settings (stub, has © info)
 │   ├── types.ts                # Shared types (NodeRect)
 │   └── styles/
@@ -206,11 +211,13 @@ Once objects overlap between coterie members (through shared maps), the two shar
 
 Notes, tags, and factual data on shared objects are always visible to coterie members, attributed to the author. Read-only. No action needed — it just appears alongside your own data.
 
-**Implementation:** Pure query pattern, no extra tables. When viewing an object, join against coterie members' `objects_overrides` for that `object_id`. Return their `shared_notes`, `tags`, and factual fields (title, status, phone, etc.), each attributed via `user_id` → `profiles.display_name`. The `private_notes` column is **never selected** in coterie queries.
+**Implementation:** Pure query pattern, no extra tables. When viewing an object in DetailPanel, query coterie members' `objects_overrides` for that `object_id`. Return their `shared_notes` and `data.contacts`, attributed via `profiles.display_name`. The `private_notes` column is **never selected** in coterie queries. Tags are Channel 2 (type_change dissonance), not Channel 1.
+
+**Contact adopt:** Coterie intel contacts have a `+` button (hover-reveal). Clicking copies the contact to the user's `data.contacts` and stores a fingerprint in `data.adopted_intel` (format: `"userId:type:value"`). Adopted contacts are filtered out of the intel display. This avoids unreliable automatic deduplication (phone formats, address variations, personal labels).
 
 #### Channel 2: Coterie Updates (diff-based)
 
-Structural changes — new objects, new/changed connections, deactivated connections, career moves — surface as dissonances between coterie members' data. Detected via **diff queries** (comparing overrides across coterie members on shared objects), not stored events.
+Structural changes — new objects, new/changed connections, deactivated connections, career moves, type changes — surface as dissonances between coterie members' data. Detected via **diff queries** (comparing overrides across coterie members on shared objects), not stored events.
 
 **Why diff-based:** Self-correcting. If Matt says Joe left Netflix, then realizes he was wrong and re-activates the connection, the dissonance evaporates automatically. No stale events to reconcile.
 
@@ -220,10 +227,19 @@ Structural changes — new objects, new/changed connections, deactivated connect
 
 Accepted dissonances don't need a review row — the data change IS the record. Once the user's data matches, the diff query finds nothing and the dissonance evaporates.
 
+**Five dissonance types:**
+- **new_object**: member has an object (on shared maps) that I don't have on my Landscape
+- **new_connection**: member created a connection between objects I both have
+- **deactivated_connection**: member deactivated a canonical connection I still see
+- **career_move**: member's effective name/title/status differs from mine
+- **type_change**: member's effective types differ from mine (compares sorted type arrays)
+
 **What "accept" does for each change type:**
-- **New object**: Create an `objects_overrides` row pointing to the same `objects.id`, place on Landscape
+- **New object**: Create an `objects_overrides` row pointing to the same `objects.id`, place on Landscape, add to aggregated map
+- **New connection**: Create a `connections_overrides` row with the same source/target/roles
 - **Deactivated connection**: Create a `connections_overrides` row marking it inactive in your view
-- **New connection**: Create a `connections_overrides` row with the same source/target/type
+- **Career move**: Update `objects_overrides` with member's effective name/title/status (only differing fields)
+- **Type change**: Replace `objects_types_overrides` with member's type set
 
 **The `coteries_reviews` table** tracks dismissals only (may be removed if dismissals prove rare in practice — unresolved dissonances could simply persist):
 ```
@@ -380,6 +396,9 @@ Both `types` and `roles` tables use **UUID primary keys** (not slugs). This prev
 13. Eventually: users can check their Landscape against canonical for updates (diff/merge UI)
 
 ## Known Gotchas
+
+### Supabase Realtime postgres_changes (Local Dev)
+postgres_changes subscriptions don't work reliably in local Supabase dev — the Realtime container has issues with JWT validation and RLS policy enforcement (GitHub #21624). RLS must be enabled on tables for Realtime to fire at all, but even with permissive policies, events may not reach the client. **Current workaround:** polling every 3s in NotificationBoxes and CoterieUpdatesFrame. For production (Supabase Cloud), swap to Broadcast or postgres_changes where the pipeline works properly.
 
 ### Supabase Auth Seeding (Local Dev)
 When inserting test users directly into `auth.users`:
@@ -688,6 +707,18 @@ When ready to deploy:
 - [x] Edge unhighlighting on selection clear (was missing — edges stayed highlighted)
 - [x] MultiSelectPanel: creating a map dispatches `coterie:map-created` event → MapsFrame refreshes + selects new map, panel closes
 - [x] Finder-like deselection on CoteriesFrame (click outside to deselect)
+- [x] Dissonance detection: `get_dissonances()` SQL function — 5 types (new_object, new_connection, deactivated_connection, career_move, type_change)
+- [x] CoterieUpdatesFrame: standalone frame for dissonances with hover-reveal Accept/Ignore actions
+- [x] NotificationBoxes: floating boxes below NavBar — invitations → CoteriesFrame, updates → CoterieUpdatesFrame
+- [x] Per-coterie "updates" badge in CoteriesFrame list (gold pill with count, opens CoterieUpdatesFrame)
+- [x] Cross-user polling (3s interval) for notification counts + dissonance list (Realtime postgres_changes unreliable in local dev)
+- [x] Coterie Intel (Channel 1): shared_notes + contacts from coterie members displayed in DetailPanel Notes + Contact tabs, attributed
+- [x] Contact adopt: "+" button on coterie intel contacts, copies to user's `data.contacts`, fingerprint tracking in `data.adopted_intel` hides adopted entries
+- [x] `type_change` dissonance: compares effective type arrays, accept copies member's types to `objects_types_overrides`
+- [x] RLS enabled (permissive) on `objects_overrides`, `connections_overrides`, `coterie_invitations` for future Realtime
+- [x] Frame: only persist height on explicit resize (not drag) — fixes stale height locking
+- [x] DetailPanel: types `+` button hidden until header edit mode active
+- [x] MapsFrame: single close button during map detail edit (Frame × becomes cancel-edit)
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan
@@ -698,14 +729,12 @@ When ready to deploy:
 - [x] Local SQLite database
 
 ### Next Up
-- [ ] Dissonance detection queries (diff engine comparing overrides across coterie members)
-- [ ] Coterie intel display (shared notes/tags visible on overlapping objects)
+- [ ] "Accept and place" UX — click canvas to position accepted objects instead of auto-placing
 - [ ] DetailPanel migration to Frame component (draggable, detach from node on drag)
 - [ ] Light mode polish (may need tuning after real-world use)
 - [ ] Map packages (store) — browse + "stamp" placement onto Landscape
 
 ### Planned
-- [ ] Dissonance View UI (dedicated panel showing all coterie diffs)
 - [ ] Map packages (store) with relative coordinates + stamp placement
 - [ ] User maps (filtered views of the Landscape)
 - [ ] Operator dedup tooling (merge duplicate community objects)

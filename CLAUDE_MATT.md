@@ -5,57 +5,55 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-03-25
+**Date:** 2026-03-27
 **Branch:** main
 
 ### Narrative
 
-Major session: brainstormed and decided the coterie creation/sharing model, then built the entire coterie system end-to-end.
+Major session: built the complete coterie sharing pipeline — both channels (intel + updates) are now operational end-to-end. Also multiple UI polish fixes.
 
-**Brainstorm (coterie creation & invitation model).** Explored three models: V1 (group-first coteries), V2 (map-first implicit groups), V2-B (bilateral sharing). Killed V2-B immediately — no compound intel. Stress-tested every simplification: pure overlap sharing is too narrow, per-group scoping is irreducible. Matt slept on V1 vs V2, came back firmly on V1: "Keep coteries. They afford flexibility, mirror real life, and have a cool 'in-crowd' vibe that elevates the app."
+**Dissonance detection (`get_dissonances` SQL function).** Built a SQL function that computes all structural differences between a user's data and their coterie members' data, scoped to objects in shared maps. Originally 4 types (new_object, new_connection, deactivated_connection, career_move), later extended to 5 with `type_change`. The shared scope includes both `coteries_maps` (sender's shared maps) and `source_coterie_id` maps (recipient's aggregated maps). Each dissonance includes dismissal tracking via `coteries_reviews`. Seed data exercises all 5 types with Billy having divergent data from Matt.
 
-**Key design decisions from brainstorm:**
-- Coteries require maps — no empty containers. Primary creation path is from a map's detail card (share icon), so the coterie is born from a concrete sharing action.
-- Coterie name defaults to "[Map Name] Coterie", editable immediately.
-- Share button should be an icon (not text).
-- **The aggregated recipient map** — the breakthrough insight. Regardless of how many maps the sender links, the recipient gets ONE map named after the coterie. `maps.source_coterie_id` links it. Solves: Mr. Micro's 17 maps problem, non-user onboarding, CoteriesFrame creation uniformity. One column, five jobs (creation, dissonance acceptance, UI treatment, leaving, dedup prevention).
-- New user viral path: email invite → landing page with interactive mini-Landscape demo (real seed objects, draggable/clickable) → credit-card-free trial → auto-placed objects → minimal welcome modal: "This is your Landscape. Your changes are yours." Two sentences establishing autonomy.
-- Existing user path: email + in-app notification → accept in CoteriesFrame → "accept and place" with one click.
-- Ongoing sync via dissonance detection (diff-based, not stored events) — already designed in schema, queries not yet built.
+**CoterieUpdatesFrame (standalone dissonance view).** Matt wanted dissonances in their own frame, not inside CoteriesFrame. Built `CoterieUpdatesFrame.tsx` with hover-reveal Accept/Ignore buttons (not visible by default — "so we don't have a column of accepts"). Accept handlers differ by type: new_object creates override + adds to aggregated map, new_connection copies the connection, deactivated_connection mirrors the deactivation, career_move syncs differing fields only, type_change replaces `objects_types_overrides`.
 
-**Implementation — schema.** Added `source_coterie_id UUID REFERENCES coteries(id)` to `maps` table (deferred FK since maps is created before coteries). Created `coterie_invitations` table (coterie_id, invited_by, email, user_id, status, token). Updated DROP list, added updated_at trigger. `supabase db reset` verified clean.
+**NotificationBoxes.** Floating boxes below NavBar — one for coterie invitations (opens CoteriesFrame), one for coterie updates (opens CoterieUpdatesFrame). Only appear when there are notifications. Matt specifically asked for separate boxes per notification type, not a combined count.
 
-**Implementation — CoteriesFrame.** Replaced stub with full UI. List of user's coteries (name, member count, map count). Pending invitations section with Accept/Decline. Create Coterie form with name input, map picker (horizontal wrap pills with gold border on select), email tags input (Enter to add, Backspace to remove last). Detail card (Finder-like double-click to open): members list with pending indicators, invite-by-email input, linked maps, delete with confirmation. Finder-like click-outside deselection.
+**Per-coterie "updates" badge.** Gold pill badge next to coterie names in the CoteriesFrame list showing update count. Clicking opens CoterieUpdatesFrame. Matt asked for "a tiny bit more space" between name and badge (gap: 6px → 10px).
 
-**Implementation — map share icon.** Added Share2 icon to MapsFrame detail card header. Click opens inline form: coterie name (pre-filled), email tags. Creates coterie + member + map link + invitations.
+**Type changes as Channel 2 (5th dissonance type).** Matt proposed moving tag/type changes to Channel 2 (dissonances) instead of Channel 1 (intel). Reasoning: types are structural ("is this person an Executive or a Creative?"), not subjective commentary. The query compares sorted effective type arrays using the existing `objects_types_overrides` → `objects_types` fallback pattern. Accept copies the member's full type set. Render shows `+Added −Removed` format.
 
-**Implementation — invitation acceptance.** Full flow in `handleAcceptInvite`: marks invitation accepted, adds user as member, collects all objects from all coterie maps (union), creates aggregated recipient map with `source_coterie_id`, populates `maps_objects`, creates `objects_overrides` with positions derived from owner's layout (centroid-relative). Dispatches `coterie:refresh-canvas` DOM event so Canvas reloads.
+**Cross-user update mechanism.** Attempted Supabase Realtime postgres_changes — added tables to `supabase_realtime` publication and enabled RLS with permissive policies. Didn't work in local dev (known issue — Realtime container has JWT validation/RLS pipeline issues locally, GitHub #21624). Matt pushed for research before more fixes: "Can we do some research before we just keep trying fixes? This seems pretty fundamental." Research confirmed three options: postgres_changes (broken locally), Broadcast (requires manual send at every write point), polling (simple, works). Went with **3-second polling** as the pragmatic V1 solution, with a note to swap to Broadcast/postgres_changes on Supabase Cloud.
 
-**Bug: blank screen after adding refreshData to CanvasRef.** Adding `refreshData` to `useImperativeHandle`'s dependency array caused a render loop that killed both browser windows. Reverted the ref approach entirely. Replaced with DOM event pattern: `coterie:refresh-canvas` dispatched by CoteriesFrame, listened to by Canvas via `useEffect`. Same pattern as existing `coterie:node-click`. Much safer — no dependency array changes to `useImperativeHandle`.
+**Coterie Intel (Channel 1).** Built the passive intel display in DetailPanel. When viewing an object shared with coterie members, their `shared_notes` appear in the Notes tab and their `data.contacts` appear in the Contact tab — attributed to the author. `private_notes` is never selected. Query: find coterie peer user IDs via `coteries_members`, then query their `objects_overrides` for the same object.
 
-**Bug: edge highlights persisting after selection clear.** The edge highlight `useEffect` only ran for `selectedItems.length >= 2` — never had an `else` to unhighlight. Added else branch that resets any `highlighted: true` edges back to default style.
+**Contact adopt with fingerprint tracking.** Matt identified the dedup problem: automatic matching is unreliable (phone formats, address variations, personal labels). Proposed voluntary adoption: "give a way to add coterie data to MY data and remove it from the coterie list (for me)." Built a `+` button (hover-reveal) on each coterie intel contact. Clicking copies the contact to the user's `data.contacts` and stores a fingerprint (`"userId:type:value"`) in `data.adopted_intel`. Adopted contacts are filtered out of the intel display. Matt called the fingerprint approach "magic."
 
-**UX fixes:**
-- Disabled button styling (`.formBtnPrimary:disabled` with opacity 0.35 + not-allowed cursor) on both CoteriesFrame and MapsFrame. The Create button was silently unclickable when no map was selected.
-- Map picker pills: changed from vertical list to `flex-wrap` horizontal pills with `border-radius: 20px` and full `border-color` gold on selection (was `outline` which only showed corners).
-- MultiSelectPanel: creating a map now dispatches `coterie:map-created` CustomEvent → MapsFrame listens, reloads, selects new map. Panel calls `onClose()` to clear selection.
-- CoteriesFrame: click-outside deselection (same pattern as MapsFrame).
+**Frame height persistence fix.** The Coteries frame was rendering tiny because Frame.tsx saved height on every drag (not just resize), locking auto-sized frames to stale heights. Fixed: only persist `h` on explicit resize. Height no longer restored from persisted layout — frames auto-size to content.
+
+**DetailPanel types read-only.** Matt asked to hide the types `+` button until header edit mode is active. The `+` now only appears when the pencil icon is clicked. Cancelling or saving header edit also closes the tag picker.
+
+**MapsFrame edit close button.** Two × buttons were showing during map detail edit (one to cancel edit, one to close panel). Matt wanted just the cancel-edit button. Fixed: Frame's `onClose` becomes cancel-edit when editing, removing the duplicate.
 
 ### Files Modified
-- `supabase/migrations/20260203000000_pro_schema.sql` — `maps.source_coterie_id`, `coterie_invitations` table, deferred FK, updated_at trigger
-- `src/components/CoteriesFrame.tsx` — complete rewrite: list, invitations, create form, detail card, acceptance flow
-- `src/components/CoteriesFrame.module.css` — new: full styling for coteries UI
-- `src/components/MapsFrame.tsx` — Share2 icon, share form (coterie creation from map), email tags state/handlers
-- `src/components/MapsFrame.module.css` — disabled button, email tag styles
-- `src/components/Canvas.tsx` — `coterie:refresh-canvas` listener, edge unhighlight on selection clear
-- `src/components/MultiSelectPanel.tsx` — `coterie:map-created` event dispatch, `onClose()` after create
-- `src/pages/Landscape.tsx` — (briefly added/reverted onDataChanged prop)
+- `supabase/migrations/20260203000000_pro_schema.sql` — `get_dissonances()` function (5 types), Realtime publication + RLS policies
+- `supabase/seed.sql` — Billy's landscape, coterie scenario with all 5 dissonance types, coterie intel seed data
+- `src/components/CoterieUpdatesFrame.tsx` — NEW: standalone dissonance frame
+- `src/components/CoterieUpdatesFrame.module.css` — NEW: styling with hover-reveal actions
+- `src/components/NotificationBoxes.tsx` — NEW: floating notification boxes with polling
+- `src/components/NotificationBoxes.module.css` — NEW: positioning below NavBar
+- `src/components/CoteriesFrame.tsx` — stripped dissonances, added update counts + badge, `onOpenUpdates` prop
+- `src/components/CoteriesFrame.module.css` — updates badge styles, removed dissonance styles
+- `src/components/DetailPanel.tsx` — coterie intel loading + display (notes + contacts), contact adopt with fingerprints, types read-only until edit mode
+- `src/components/DetailPanel.module.css` — coterie intel section + adopt button styles
+- `src/components/Frame.tsx` — height persistence fix (only on resize), `userResized` ref
+- `src/components/MapsFrame.tsx` — single close button during edit
+- `src/components/NavBar.tsx` — `'coterie-updates'` added to FrameType
+- `src/pages/Landscape.tsx` — CoterieUpdatesFrame + NotificationBoxes wiring
 
 ### Open Items / Next Steps
-1. **Dissonance detection queries** — the diff engine comparing overrides across coterie members. Core of the ongoing intel sync. Next major build task.
-2. **Coterie intel display** — showing shared notes/tags from coterie members on overlapping objects (pure query pattern, no new tables)
-3. **Non-user invitation flow** — email sending, landing page with interactive demo, signup/payment. Needs deployment infrastructure (Vercel + Supabase Cloud + email service).
-4. **"Accept and place" UX for existing users** — currently auto-places at centroid-relative (0,0). Should let user click canvas to set anchor point.
-5. **DetailPanel → Frame migration** — make detail panels draggable
-6. **Light mode polish** — may need tuning
-7. **RLS policies** — before deploy
+1. **"Accept and place" UX** — click canvas to position accepted objects instead of auto-placing at member's coordinates
+2. **Non-user invitation flow** — email sending, landing page with interactive demo, signup/payment. Needs deployment infrastructure.
+3. **Swap polling for Broadcast/Realtime** — when deploying to Supabase Cloud where the Realtime pipeline works properly
+4. **DetailPanel → Frame migration** — make detail panels draggable
+5. **Light mode polish** — may need tuning
+6. **RLS policies** — real policies before deploy (permissive placeholders currently on 3 tables)

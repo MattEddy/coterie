@@ -123,3 +123,100 @@ UPDATE objects_overrides SET
     event_date = '2025-03-10'
 WHERE user_id = 'cccc1111-1111-1111-1111-111111111111'
   AND object_id = 'eeee2222-2222-2222-2222-222222222222';
+
+-- =============================================================================
+-- COTERIE SCENARIO (dissonance test data)
+-- =============================================================================
+-- Sets up a "Hollywood Tracking" coterie between Matt and Billy.
+-- Billy has divergent data that creates all four dissonance types:
+--   1. new_object:              Billy added Zack Van Amburg (Matt doesn't have him)
+--   2. new_connection:          Billy connected J.J. Abrams ↔ Netflix (Matt hasn't)
+--   3. deactivated_connection:  Billy says J.J. Abrams left Bad Robot
+--   4. career_move:             Billy updated Alan Bergman's title
+
+-- Billy's landscape (overlaps with Matt on most canonical objects)
+INSERT INTO objects_overrides (user_id, object_id, map_x, map_y) VALUES
+    ('cccc2222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 100, 50),   -- Disney
+    ('cccc2222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 400, 50),   -- Warner Bros
+    ('cccc2222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333', 700, 50),   -- Netflix
+    ('cccc2222-2222-2222-2222-222222222222', '44444444-4444-4444-4444-444444444444', 1000, 100), -- CAA
+    ('cccc2222-2222-2222-2222-222222222222', '55555555-5555-5555-5555-555555555555', 400, 250),  -- Bad Robot
+    ('cccc2222-2222-2222-2222-222222222222', 'aaaa1111-1111-1111-1111-111111111111', 150, 250),  -- Alan Bergman
+    ('cccc2222-2222-2222-2222-222222222222', 'aaaa2222-2222-2222-2222-222222222222', -50, 250),  -- Dana Walden
+    ('cccc2222-2222-2222-2222-222222222222', 'aaaa3333-3333-3333-3333-333333333333', 550, 400),  -- J.J. Abrams
+    ('cccc2222-2222-2222-2222-222222222222', 'aaaa4444-4444-4444-4444-444444444444', 950, 300);  -- Bryan Lourd
+
+-- Dissonance 4 (career_move): Billy says Alan Bergman got promoted
+UPDATE objects_overrides SET title = 'Chairman, Disney Entertainment'
+WHERE user_id = 'cccc2222-2222-2222-2222-222222222222'
+  AND object_id = 'aaaa1111-1111-1111-1111-111111111111';
+
+-- Dissonance 3 (deactivated_connection): Billy says J.J. Abrams left Bad Robot
+INSERT INTO connections_overrides (user_id, connection_id, deactivated)
+SELECT 'cccc2222-2222-2222-2222-222222222222', c.id, true
+FROM connections c
+WHERE c.object_a_id = 'aaaa3333-3333-3333-3333-333333333333'
+  AND c.object_b_id = '55555555-5555-5555-5555-555555555555';
+
+-- Dissonance 1 (new_object): Billy added Zack Van Amburg — Matt doesn't know him
+INSERT INTO objects (id, class, is_canon, created_by) VALUES
+    ('ff001111-1111-1111-1111-111111111111', 'person', false, 'cccc2222-2222-2222-2222-222222222222');
+INSERT INTO objects_overrides (user_id, object_id, name, title, status, map_x, map_y)
+VALUES ('cccc2222-2222-2222-2222-222222222222', 'ff001111-1111-1111-1111-111111111111',
+        'Zack Van Amburg', 'Head of Video, Apple TV+', 'active', 600, 100);
+INSERT INTO objects_types (object_id, type_id, is_primary)
+SELECT 'ff001111-1111-1111-1111-111111111111', id, true
+FROM types WHERE display_name = 'Executive' AND class = 'person';
+
+-- Dissonance 2 (new_connection): Billy connected J.J. Abrams ↔ Netflix as Deal Partners
+INSERT INTO connections_overrides (user_id, object_a_id, object_b_id, role_a, role_b)
+VALUES (
+    'cccc2222-2222-2222-2222-222222222222',
+    'aaaa3333-3333-3333-3333-333333333333',  -- J.J. Abrams
+    '33333333-3333-3333-3333-333333333333',  -- Netflix
+    (SELECT id FROM roles WHERE display_name = 'Deal Partner'),
+    (SELECT id FROM roles WHERE display_name = 'Deal Partner')
+);
+
+-- Matt's map shared via the coterie
+INSERT INTO maps (id, name, description, user_id) VALUES
+    ('aafe1111-1111-1111-1111-111111111111', 'Studio Landscape', 'Major studios and key people', 'cccc1111-1111-1111-1111-111111111111');
+
+INSERT INTO maps_objects (map_id, object_ref_id) VALUES
+    ('aafe1111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111'),  -- Disney
+    ('aafe1111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222'),  -- Warner Bros
+    ('aafe1111-1111-1111-1111-111111111111', '33333333-3333-3333-3333-333333333333'),  -- Netflix
+    ('aafe1111-1111-1111-1111-111111111111', '44444444-4444-4444-4444-444444444444'),  -- CAA
+    ('aafe1111-1111-1111-1111-111111111111', '55555555-5555-5555-5555-555555555555'),  -- Bad Robot
+    ('aafe1111-1111-1111-1111-111111111111', 'aaaa1111-1111-1111-1111-111111111111'),  -- Alan Bergman
+    ('aafe1111-1111-1111-1111-111111111111', 'aaaa2222-2222-2222-2222-222222222222'),  -- Dana Walden
+    ('aafe1111-1111-1111-1111-111111111111', 'aaaa3333-3333-3333-3333-333333333333'),  -- J.J. Abrams
+    ('aafe1111-1111-1111-1111-111111111111', 'aaaa4444-4444-4444-4444-444444444444');  -- Bryan Lourd
+
+-- The coterie
+INSERT INTO coteries (id, name, owner_id) VALUES
+    ('dddd1111-1111-1111-1111-111111111111', 'Hollywood Tracking', 'cccc1111-1111-1111-1111-111111111111');
+
+INSERT INTO coteries_members (coterie_id, user_id, role) VALUES
+    ('dddd1111-1111-1111-1111-111111111111', 'cccc1111-1111-1111-1111-111111111111', 'owner'),
+    ('dddd1111-1111-1111-1111-111111111111', 'cccc2222-2222-2222-2222-222222222222', 'member');
+
+-- Link Matt's map to the coterie
+INSERT INTO coteries_maps (coterie_id, map_id) VALUES
+    ('dddd1111-1111-1111-1111-111111111111', 'aafe1111-1111-1111-1111-111111111111');
+
+-- Billy's aggregated recipient map (created on invitation acceptance)
+INSERT INTO maps (id, name, user_id, source_coterie_id) VALUES
+    ('aafe2222-2222-2222-2222-222222222222', 'Hollywood Tracking', 'cccc2222-2222-2222-2222-222222222222', 'dddd1111-1111-1111-1111-111111111111');
+
+INSERT INTO maps_objects (map_id, object_ref_id) VALUES
+    ('aafe2222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111'),  -- Disney
+    ('aafe2222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222'),  -- Warner Bros
+    ('aafe2222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333'),  -- Netflix
+    ('aafe2222-2222-2222-2222-222222222222', '44444444-4444-4444-4444-444444444444'),  -- CAA
+    ('aafe2222-2222-2222-2222-222222222222', '55555555-5555-5555-5555-555555555555'),  -- Bad Robot
+    ('aafe2222-2222-2222-2222-222222222222', 'aaaa1111-1111-1111-1111-111111111111'),  -- Alan Bergman
+    ('aafe2222-2222-2222-2222-222222222222', 'aaaa2222-2222-2222-2222-222222222222'),  -- Dana Walden
+    ('aafe2222-2222-2222-2222-222222222222', 'aaaa3333-3333-3333-3333-333333333333'),  -- J.J. Abrams
+    ('aafe2222-2222-2222-2222-222222222222', 'aaaa4444-4444-4444-4444-444444444444'),  -- Bryan Lourd
+    ('aafe2222-2222-2222-2222-222222222222', 'ff001111-1111-1111-1111-111111111111');  -- Zack Van Amburg (Billy's addition)

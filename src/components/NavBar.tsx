@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { User, Menu, Search, Map, Users, Settings } from 'lucide-react'
 import styles from './NavBar.module.css'
 
-export type FrameType = 'account' | 'search' | 'maps' | 'coteries' | 'settings'
+export type FrameType = 'account' | 'search' | 'maps' | 'coteries' | 'coterie-updates' | 'settings'
 
 const menuItems: { type: FrameType; Icon: typeof Search; label: string }[] = [
   { type: 'search', Icon: Search, label: 'Search' },

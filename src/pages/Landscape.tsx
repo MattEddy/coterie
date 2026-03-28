@@ -8,6 +8,8 @@ import SearchFrame from '../components/SearchFrame'
 import MapsFrame from '../components/MapsFrame'
 import CoteriesFrame from '../components/CoteriesFrame'
 import SettingsFrame from '../components/SettingsFrame'
+import CoterieUpdatesFrame from '../components/CoterieUpdatesFrame'
+import NotificationBoxes from '../components/NotificationBoxes'
 import styles from './Landscape.module.css'
 
 export default function Landscape() {
@@ -47,6 +49,10 @@ export default function Landscape() {
     <div className={styles.container}>
       <Canvas ref={canvasRef} activeMapId={activeMapId} highlightedObjectIds={highlightedObjectIds} mapEditMode={mapEditMode} onMapEditClick={handleMapEditClick} />
       <NavBar onOpenFrame={openFrame} />
+      <NotificationBoxes
+        onOpenCoteries={() => openFrame('coteries')}
+        onOpenUpdates={() => openFrame('coterie-updates')}
+      />
 
       {openFrames.has('account') && (
         <AccountFrame onClose={() => closeFrame('account')} />
@@ -68,7 +74,10 @@ export default function Landscape() {
         />
       )}
       {openFrames.has('coteries') && (
-        <CoteriesFrame onClose={() => closeFrame('coteries')} />
+        <CoteriesFrame onClose={() => closeFrame('coteries')} onOpenUpdates={() => openFrame('coterie-updates')} />
+      )}
+      {openFrames.has('coterie-updates') && (
+        <CoterieUpdatesFrame onClose={() => closeFrame('coterie-updates')} />
       )}
       {openFrames.has('settings') && (
         <SettingsFrame onClose={() => closeFrame('settings')} />

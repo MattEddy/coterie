@@ -908,6 +908,25 @@ AS $$
 $$;
 
 -- =============================================================================
+-- REALTIME (live updates for coterie dissonances + invitations)
+-- =============================================================================
+
+ALTER PUBLICATION supabase_realtime ADD TABLE objects_overrides;
+ALTER PUBLICATION supabase_realtime ADD TABLE connections_overrides;
+ALTER PUBLICATION supabase_realtime ADD TABLE coterie_invitations;
+
+-- RLS must be enabled for Realtime postgres_changes to fire.
+-- Permissive policies for now — proper RLS deferred until deploy.
+ALTER TABLE objects_overrides ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "objects_overrides_all" ON objects_overrides FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE connections_overrides ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "connections_overrides_all" ON connections_overrides FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE coterie_invitations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "coterie_invitations_all" ON coterie_invitations FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- =============================================================================
 -- TODO: Row Level Security (RLS)
 -- =============================================================================
 -- Registry tables (objects, connections, taxonomy): readable by all authenticated users

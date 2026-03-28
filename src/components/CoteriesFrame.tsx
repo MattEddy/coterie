@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
-import { Users, Plus, ChevronRight, Trash2, X, Map as MapIcon, UserPlus, GitCompareArrows } from 'lucide-react'
+import { Users, Plus, ChevronRight, Trash2, X, Map as MapIcon, UserPlus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
@@ -43,32 +43,6 @@ interface MapOption {
 
 interface PendingMember {
   email: string
-}
-
-interface Dissonance {
-  dissonance_type: 'new_object' | 'new_connection' | 'deactivated_connection' | 'career_move'
-  coterie_id: string
-  coterie_name: string
-  source_user_id: string
-  source_user_name: string
-  object_id: string | null
-  object_name: string | null
-  object_class: string | null
-  object_a_id: string | null
-  object_a_name: string | null
-  object_b_id: string | null
-  object_b_name: string | null
-  role_a_name: string | null
-  role_b_name: string | null
-  their_name: string | null
-  your_name: string | null
-  their_title: string | null
-  your_title: string | null
-  their_status: string | null
-  your_status: string | null
-  ref_type: string
-  ref_id: string
-  is_dismissed: boolean
 }
 
 // --- Coterie Detail Card ---
@@ -449,13 +423,13 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
 
 interface CoteriesFrameProps {
   onClose: () => void
+  onOpenUpdates?: () => void
 }
 
-export default function CoteriesFrame({ onClose }: CoteriesFrameProps) {
+export default function CoteriesFrame({ onClose, onOpenUpdates }: CoteriesFrameProps) {
   const { user } = useAuth()
   const [coteries, setCoteries] = useState<CoterieRow[]>([])
   const [invitations, setInvitations] = useState<PendingInvite[]>([])
-  const [dissonances, setDissonances] = useState<Dissonance[]>([])
   const [selectedCoterieId, setSelectedCoterieId] = useState<string | null>(null)
   const [openedCoterie, setOpenedCoterie] = useState<CoterieRow | null>(null)
   const [creating, setCreating] = useState(false)
@@ -533,13 +507,21 @@ export default function CoteriesFrame({ onClose }: CoteriesFrameProps) {
     })))
   }, [user])
 
-  const loadDissonances = useCallback(async () => {
+  // Per-coterie dissonance counts for "Updates" badges
+  const [updateCounts, setUpdateCounts] = useState<Map<string, number>>(new Map())
+
+  const loadUpdateCounts = useCallback(async () => {
     if (!user) return
     const { data } = await supabase.rpc('get_dissonances', { p_user_id: user.id })
-    if (data) setDissonances((data as Dissonance[]).filter(d => !d.is_dismissed))
+    if (!data) return
+    const counts = new Map<string, number>()
+    for (const d of (data as any[]).filter(d => !d.is_dismissed)) {
+      counts.set(d.coterie_id, (counts.get(d.coterie_id) ?? 0) + 1)
+    }
+    setUpdateCounts(counts)
   }, [user])
 
-  useEffect(() => { loadCoteries(); loadInvitations(); loadDissonances() }, [loadCoteries, loadInvitations, loadDissonances])
+  useEffect(() => { loadCoteries(); loadInvitations(); loadUpdateCounts() }, [loadCoteries, loadInvitations, loadUpdateCounts])
 
   // Click anywhere outside coteries UI to deselect
   useEffect(() => {
@@ -680,137 +662,6 @@ export default function CoteriesFrame({ onClose }: CoteriesFrameProps) {
     await loadInvitations()
   }
 
-  const handleAcceptDissonance = async (d: Dissonance) => {
-    if (!user) return
-
-    switch (d.dissonance_type) {
-      case 'new_object': {
-        // Get member's override data for positioning and content
-        const { data: memberOv } = await supabase
-          .from('objects_overrides')
-          .select('name, title, status, map_x, map_y, event_date, data')
-          .eq('id', d.ref_id)
-          .single()
-        if (!memberOv) return
-
-        // Create override for user (places object on their landscape)
-        await supabase.from('objects_overrides').insert({
-          user_id: user.id,
-          object_id: d.object_id,
-          name: memberOv.name,
-          title: memberOv.title,
-          status: memberOv.status,
-          map_x: memberOv.map_x,
-          map_y: memberOv.map_y,
-          event_date: memberOv.event_date,
-          data: memberOv.data,
-        })
-
-        // Add to user's aggregated map for this coterie
-        const { data: aggMap } = await supabase
-          .from('maps')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('source_coterie_id', d.coterie_id)
-          .single()
-        if (aggMap && d.object_id) {
-          await supabase.from('maps_objects').upsert({
-            map_id: aggMap.id,
-            object_ref_id: d.object_id,
-          })
-        }
-        break
-      }
-
-      case 'new_connection': {
-        // Copy member's user-created connection
-        const { data: memberConn } = await supabase
-          .from('connections_overrides')
-          .select('object_a_id, object_b_id, role_a, role_b, data')
-          .eq('id', d.ref_id)
-          .single()
-        if (!memberConn) return
-
-        await supabase.from('connections_overrides').insert({
-          user_id: user.id,
-          object_a_id: memberConn.object_a_id,
-          object_b_id: memberConn.object_b_id,
-          role_a: memberConn.role_a,
-          role_b: memberConn.role_b,
-          data: memberConn.data,
-        })
-        break
-      }
-
-      case 'deactivated_connection': {
-        // Mirror the member's deactivation of a canonical connection
-        const { data: memberDeact } = await supabase
-          .from('connections_overrides')
-          .select('connection_id')
-          .eq('id', d.ref_id)
-          .single()
-        if (!memberDeact?.connection_id) return
-
-        // Check for existing override on this connection
-        const { data: existing } = await supabase
-          .from('connections_overrides')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('connection_id', memberDeact.connection_id)
-          .maybeSingle()
-
-        if (existing) {
-          await supabase.from('connections_overrides')
-            .update({ deactivated: true })
-            .eq('id', existing.id)
-        } else {
-          await supabase.from('connections_overrides').insert({
-            user_id: user.id,
-            connection_id: memberDeact.connection_id,
-            deactivated: true,
-          })
-        }
-        break
-      }
-
-      case 'career_move': {
-        // Sync differing fields from member's effective values
-        const updates: Record<string, string | null> = {}
-        if (d.their_name !== d.your_name) updates.name = d.their_name
-        if (d.their_title !== d.your_title) updates.title = d.their_title
-        if (d.their_status !== d.your_status) updates.status = d.their_status
-
-        if (Object.keys(updates).length > 0) {
-          await supabase
-            .from('objects_overrides')
-            .update(updates)
-            .eq('user_id', user.id)
-            .eq('object_id', d.object_id)
-        }
-        break
-      }
-    }
-
-    // Remove from local state + refresh canvas
-    setDissonances(prev => prev.filter(x =>
-      !(x.ref_id === d.ref_id && x.source_user_id === d.source_user_id && x.dissonance_type === d.dissonance_type)
-    ))
-    document.dispatchEvent(new Event('coterie:refresh-canvas'))
-  }
-
-  const handleDismissDissonance = async (d: Dissonance) => {
-    if (!user) return
-    await supabase.from('coteries_reviews').insert({
-      user_id: user.id,
-      source_user_id: d.source_user_id,
-      ref_type: d.ref_type,
-      ref_id: d.ref_id,
-    })
-    setDissonances(prev => prev.filter(x =>
-      !(x.ref_id === d.ref_id && x.source_user_id === d.source_user_id && x.dissonance_type === d.dissonance_type)
-    ))
-  }
-
   const computeDetailPosition = () => {
     const rect = listFrameRef.current?.getBoundingClientRect()
     if (rect) {
@@ -865,66 +716,6 @@ export default function CoteriesFrame({ onClose }: CoteriesFrameProps) {
           </div>
         )}
 
-        {/* Dissonances */}
-        {dissonances.length > 0 && (
-          <div className={styles.dissonancesSection}>
-            <span className={styles.sectionLabel}>
-              <GitCompareArrows size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-              Dissonances ({dissonances.length})
-            </span>
-            {dissonances.map(d => (
-              <div key={`${d.ref_id}-${d.dissonance_type}`} className={styles.dissonanceItem}>
-                <div className={styles.dissonanceContent}>
-                  <span className={styles.dissonanceDesc}>
-                    {d.dissonance_type === 'new_object' && (
-                      <>{d.source_user_name} added <strong>{d.object_name}</strong></>
-                    )}
-                    {d.dissonance_type === 'new_connection' && (
-                      <>{d.source_user_name} connected <strong>{d.object_a_name}</strong> ↔ <strong>{d.object_b_name}</strong></>
-                    )}
-                    {d.dissonance_type === 'deactivated_connection' && (
-                      <>{d.source_user_name} disconnected <strong>{d.object_a_name}</strong> ↔ <strong>{d.object_b_name}</strong></>
-                    )}
-                    {d.dissonance_type === 'career_move' && (
-                      <>{d.source_user_name} updated <strong>{d.object_name}</strong></>
-                    )}
-                  </span>
-                  <div className={styles.dissonanceDetail}>
-                    {d.dissonance_type === 'new_object' && (
-                      <span>{d.object_class}</span>
-                    )}
-                    {(d.dissonance_type === 'new_connection' || d.dissonance_type === 'deactivated_connection') &&
-                      (d.role_a_name || d.role_b_name) && (
-                      <span>{[d.role_a_name, d.role_b_name].filter(Boolean).join(' / ')}</span>
-                    )}
-                    {d.dissonance_type === 'career_move' && (
-                      <>
-                        {d.their_title !== d.your_title && (
-                          <span>Title: {d.your_title || '—'} → {d.their_title || '—'}</span>
-                        )}
-                        {d.their_status !== d.your_status && (
-                          <span>Status: {d.your_status || '—'} → {d.their_status || '—'}</span>
-                        )}
-                        {d.their_name !== d.your_name && (
-                          <span>Name: {d.your_name || '—'} → {d.their_name || '—'}</span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className={styles.dissonanceActions}>
-                  <button className={styles.acceptBtn} onClick={() => handleAcceptDissonance(d)}>
-                    Accept
-                  </button>
-                  <button className={styles.declineBtn} onClick={() => handleDismissDissonance(d)}>
-                    <X size={12} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* Coteries list */}
         {coteries.length > 0 ? (
           <div className={styles.coteriesList}>
@@ -937,7 +728,19 @@ export default function CoteriesFrame({ onClose }: CoteriesFrameProps) {
               >
                 <Users size={14} className={styles.coterieIcon} />
                 <div className={styles.coterieInfo}>
-                  <span className={styles.coterieName}>{c.name}</span>
+                  <div className={styles.coterieNameRow}>
+                    <span className={styles.coterieName}>{c.name}</span>
+                    {updateCounts.get(c.id) && onOpenUpdates && (
+                      <span
+                        role="button"
+                        className={styles.updatesBadge}
+                        onClick={e => { e.stopPropagation(); onOpenUpdates() }}
+                        title="Open Coterie Updates"
+                      >
+                        {updateCounts.get(c.id)} {updateCounts.get(c.id) === 1 ? 'update' : 'updates'}
+                      </span>
+                    )}
+                  </div>
                   <span className={styles.coterieMeta}>
                     {c.member_count} {c.member_count === 1 ? 'member' : 'members'} · {c.map_count} {c.map_count === 1 ? 'map' : 'maps'}
                   </span>

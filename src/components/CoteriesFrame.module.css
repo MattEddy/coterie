@@ -42,6 +42,12 @@
   gap: 1px;
 }
 
+.coterieNameRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .coterieName {
   font-size: 13px;
   font-weight: 500;
@@ -49,6 +55,25 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.updatesBadge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-accent);
+  background: none;
+  border: 1px solid var(--color-accent);
+  border-radius: 10px;
+  padding: 1px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.updatesBadge:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
 }
 
 .coterieMeta {
@@ -512,59 +537,6 @@
 .deleteBtnConfirm:hover {
   background: var(--color-danger);
   color: white;
-}
-
-/* Dissonances section */
-.dissonancesSection {
-  margin-bottom: 8px;
-}
-
-.dissonanceItem {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 4px;
-  background: var(--color-surface-2);
-  margin-bottom: 4px;
-  border-left: 2px solid var(--color-accent);
-}
-
-.dissonanceContent {
-  flex: 1;
-  min-width: 0;
-}
-
-.dissonanceDesc {
-  font-size: 13px;
-  color: var(--color-text);
-  display: block;
-  line-height: 1.3;
-}
-
-.dissonanceDesc strong {
-  color: var(--color-accent);
-  font-weight: 600;
-}
-
-.dissonanceDetail {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin-top: 3px;
-}
-
-.dissonanceDetail span {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  font-family: 'Inter', var(--font-sans);
-}
-
-.dissonanceActions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-  padding-top: 1px;
 }
 
 /* Invitation badge */

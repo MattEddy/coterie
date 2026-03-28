@@ -725,6 +725,9 @@ RETURNS TABLE (
     your_title TEXT,
     their_status TEXT,
     your_status TEXT,
+    -- Type change context
+    their_types TEXT[],
+    your_types TEXT[],
     -- Dismissal tracking (maps to coteries_reviews)
     ref_type TEXT,
     ref_id UUID,
@@ -771,6 +774,7 @@ AS $$
         o.class::TEXT,
         NULL::UUID, NULL::TEXT, NULL::UUID, NULL::TEXT, NULL::TEXT, NULL::TEXT,
         NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT,
+        NULL::TEXT[], NULL::TEXT[],
         'object_override'::TEXT,
         m_ov.id,
         EXISTS(
@@ -799,6 +803,7 @@ AS $$
         ra.display_name::TEXT,
         rb.display_name::TEXT,
         NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT,
+        NULL::TEXT[], NULL::TEXT[],
         'connection_override'::TEXT,
         m_co.id,
         EXISTS(
@@ -844,6 +849,7 @@ AS $$
         ra.display_name::TEXT,
         rb.display_name::TEXT,
         NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT,
+        NULL::TEXT[], NULL::TEXT[],
         'connection_override'::TEXT,
         m_deact.id,
         EXISTS(
@@ -887,6 +893,7 @@ AS $$
         COALESCE(u_ov.title, o.title)::TEXT,
         COALESCE(m_ov.status, o.status)::TEXT,
         COALESCE(u_ov.status, o.status)::TEXT,
+        NULL::TEXT[], NULL::TEXT[],
         'object_override'::TEXT,
         m_ov.id,
         EXISTS(
@@ -904,6 +911,68 @@ AS $$
         COALESCE(m_ov.name, o.name) IS DISTINCT FROM COALESCE(u_ov.name, o.name)
         OR COALESCE(m_ov.title, o.title) IS DISTINCT FROM COALESCE(u_ov.title, o.title)
         OR COALESCE(m_ov.status, o.status) IS DISTINCT FROM COALESCE(u_ov.status, o.status)
+    )
+
+    UNION ALL
+
+    -- 5. TYPE CHANGES: member's effective types differ from mine
+    SELECT DISTINCT ON (com.coterie_id, com.member_id, so.object_id)
+        'type_change'::TEXT,
+        com.coterie_id, com.coterie_name, com.member_id, com.member_name,
+        so.object_id,
+        COALESCE(u_ov.name, o.name)::TEXT,
+        o.class::TEXT,
+        NULL::UUID, NULL::TEXT, NULL::UUID, NULL::TEXT, NULL::TEXT, NULL::TEXT,
+        NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT,
+        -- Their effective types
+        COALESCE(
+            (SELECT array_agg(t.display_name ORDER BY t.display_name) FROM objects_types_overrides oto
+             JOIN types t ON t.id = oto.type_id
+             WHERE oto.user_id = com.member_id AND oto.object_id = so.object_id),
+            (SELECT array_agg(t.display_name ORDER BY t.display_name) FROM objects_types ot
+             JOIN types t ON t.id = ot.type_id
+             WHERE ot.object_id = so.object_id),
+            '{}'::TEXT[]
+        ),
+        -- Your effective types
+        COALESCE(
+            (SELECT array_agg(t.display_name ORDER BY t.display_name) FROM objects_types_overrides oto
+             JOIN types t ON t.id = oto.type_id
+             WHERE oto.user_id = p_user_id AND oto.object_id = so.object_id),
+            (SELECT array_agg(t.display_name ORDER BY t.display_name) FROM objects_types ot
+             JOIN types t ON t.id = ot.type_id
+             WHERE ot.object_id = so.object_id),
+            '{}'::TEXT[]
+        ),
+        'object_override'::TEXT,
+        m_ov.id,
+        EXISTS(
+            SELECT 1 FROM coteries_reviews cr
+            WHERE cr.user_id = p_user_id AND cr.source_user_id = com.member_id
+            AND cr.ref_type = 'object_override' AND cr.ref_id = m_ov.id
+        )
+    FROM co_members com
+    JOIN shared_objects so ON so.coterie_id = com.coterie_id
+    JOIN objects o ON o.id = so.object_id AND o.is_active = TRUE
+    JOIN objects_overrides m_ov ON m_ov.user_id = com.member_id AND m_ov.object_id = so.object_id
+    JOIN objects_overrides u_ov ON u_ov.user_id = p_user_id AND u_ov.object_id = so.object_id
+    WHERE o.class IN (SELECT id FROM classes WHERE landscape_visible = TRUE)
+    AND COALESCE(
+        (SELECT array_agg(t.display_name ORDER BY t.display_name) FROM objects_types_overrides oto
+         JOIN types t ON t.id = oto.type_id
+         WHERE oto.user_id = com.member_id AND oto.object_id = so.object_id),
+        (SELECT array_agg(t.display_name ORDER BY t.display_name) FROM objects_types ot
+         JOIN types t ON t.id = ot.type_id
+         WHERE ot.object_id = so.object_id),
+        '{}'::TEXT[]
+    ) IS DISTINCT FROM COALESCE(
+        (SELECT array_agg(t.display_name ORDER BY t.display_name) FROM objects_types_overrides oto
+         JOIN types t ON t.id = oto.type_id
+         WHERE oto.user_id = p_user_id AND oto.object_id = so.object_id),
+        (SELECT array_agg(t.display_name ORDER BY t.display_name) FROM objects_types ot
+         JOIN types t ON t.id = ot.type_id
+         WHERE ot.object_id = so.object_id),
+        '{}'::TEXT[]
     )
 $$;
 

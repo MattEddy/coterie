@@ -6,7 +6,7 @@ import Frame from './Frame'
 import styles from './CoterieUpdatesFrame.module.css'
 
 interface Dissonance {
-  dissonance_type: 'new_object' | 'new_connection' | 'deactivated_connection' | 'career_move'
+  dissonance_type: 'new_object' | 'new_connection' | 'deactivated_connection' | 'career_move' | 'type_change'
   coterie_id: string
   coterie_name: string
   source_user_id: string
@@ -26,6 +26,8 @@ interface Dissonance {
   your_title: string | null
   their_status: string | null
   your_status: string | null
+  their_types: string[] | null
+  your_types: string[] | null
   ref_type: string
   ref_id: string
   is_dismissed: boolean
@@ -170,6 +172,33 @@ export default function CoterieUpdatesFrame({ onClose }: CoterieUpdatesFrameProp
         }
         break
       }
+
+      case 'type_change': {
+        if (!d.their_types || !d.object_id) break
+        // Replace user's type overrides with member's types
+        await supabase
+          .from('objects_types_overrides')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('object_id', d.object_id)
+
+        // Resolve display_names to type IDs
+        const { data: typeRows } = await supabase
+          .from('types')
+          .select('id, display_name')
+          .in('display_name', d.their_types)
+          .eq('class', d.object_class!)
+        if (typeRows && typeRows.length > 0) {
+          await supabase.from('objects_types_overrides').insert(
+            typeRows.map(t => ({
+              user_id: user.id,
+              object_id: d.object_id!,
+              type_id: t.id,
+            }))
+          )
+        }
+        break
+      }
     }
 
     removeDissonance(d)
@@ -214,6 +243,9 @@ export default function CoterieUpdatesFrame({ onClose }: CoterieUpdatesFrameProp
                     {d.dissonance_type === 'career_move' && (
                       <>{d.source_user_name} updated <strong>{d.object_name}</strong></>
                     )}
+                    {d.dissonance_type === 'type_change' && (
+                      <>{d.source_user_name} updated types for <strong>{d.object_name}</strong></>
+                    )}
                   </span>
                   <div className={styles.detail}>
                     {d.dissonance_type === 'new_object' && (
@@ -235,6 +267,14 @@ export default function CoterieUpdatesFrame({ onClose }: CoterieUpdatesFrameProp
                           <span>Name: {d.your_name || '—'} → {d.their_name || '—'}</span>
                         )}
                       </>
+                    )}
+                    {d.dissonance_type === 'type_change' && d.their_types && d.your_types && (
+                      <span>
+                        {d.their_types.filter(t => !d.your_types!.includes(t)).map(t => `+${t}`).join(' ')}
+                        {d.their_types.filter(t => !d.your_types!.includes(t)).length > 0 &&
+                         d.your_types.filter(t => !d.their_types!.includes(t)).length > 0 && '  '}
+                        {d.your_types.filter(t => !d.their_types!.includes(t)).map(t => `−${t}`).join(' ')}
+                      </span>
                     )}
                     <span className={styles.coterieName}>{d.coterie_name}</span>
                   </div>

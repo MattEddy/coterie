@@ -128,11 +128,12 @@ WHERE user_id = 'cccc1111-1111-1111-1111-111111111111'
 -- COTERIE SCENARIO (dissonance test data)
 -- =============================================================================
 -- Sets up a "Hollywood Tracking" coterie between Matt and Billy.
--- Billy has divergent data that creates all four dissonance types:
+-- Billy has divergent data that creates all five dissonance types:
 --   1. new_object:              Billy added Zack Van Amburg (Matt doesn't have him)
 --   2. new_connection:          Billy connected J.J. Abrams ↔ Netflix (Matt hasn't)
 --   3. deactivated_connection:  Billy says J.J. Abrams left Bad Robot
 --   4. career_move:             Billy updated Alan Bergman's title
+--   5. type_change:             Billy says Dana Walden is a Producer (not just Executive)
 
 -- Billy's landscape (overlaps with Matt on most canonical objects)
 INSERT INTO objects_overrides (user_id, object_id, map_x, map_y) VALUES
@@ -146,10 +147,27 @@ INSERT INTO objects_overrides (user_id, object_id, map_x, map_y) VALUES
     ('cccc2222-2222-2222-2222-222222222222', 'aaaa3333-3333-3333-3333-333333333333', 550, 400),  -- J.J. Abrams
     ('cccc2222-2222-2222-2222-222222222222', 'aaaa4444-4444-4444-4444-444444444444', 950, 300);  -- Bryan Lourd
 
--- Dissonance 4 (career_move): Billy says Alan Bergman got promoted
-UPDATE objects_overrides SET title = 'Chairman, Disney Entertainment'
+-- Coterie Intel: Billy has shared notes and contacts on shared objects
+UPDATE objects_overrides SET
+  shared_notes = 'Just got promoted — taking over features and streaming.',
+  title = 'Chairman, Disney Entertainment'
 WHERE user_id = 'cccc2222-2222-2222-2222-222222222222'
   AND object_id = 'aaaa1111-1111-1111-1111-111111111111';
+
+UPDATE objects_overrides SET
+  shared_notes = 'Really focused on genre — horror, sci-fi, action.',
+  data = '{"contacts": [{"type": "phone", "label": "Office", "value": "310-555-0199"}, {"type": "email", "label": "Asst", "value": "jj.office@badrobot.com"}]}'
+WHERE user_id = 'cccc2222-2222-2222-2222-222222222222'
+  AND object_id = 'aaaa3333-3333-3333-3333-333333333333';
+
+-- Dissonance 5 (type_change): Billy says Dana Walden is also a Producer
+-- Dana Walden's canonical type is just Executive. Billy overrides to Executive + Producer.
+INSERT INTO objects_types_overrides (user_id, object_id, type_id, is_primary)
+SELECT 'cccc2222-2222-2222-2222-222222222222', 'aaaa2222-2222-2222-2222-222222222222', id, true
+FROM types WHERE display_name = 'Executive' AND class = 'person';
+INSERT INTO objects_types_overrides (user_id, object_id, type_id, is_primary)
+SELECT 'cccc2222-2222-2222-2222-222222222222', 'aaaa2222-2222-2222-2222-222222222222', id, false
+FROM types WHERE display_name = 'Producer' AND class = 'person';
 
 -- Dissonance 3 (deactivated_connection): Billy says J.J. Abrams left Bad Robot
 INSERT INTO connections_overrides (user_id, connection_id, deactivated)

@@ -215,10 +215,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   }
 
   const headerActions = editing ? (
-    <>
-      <button className={styles.iconBtn} onClick={saveEdit} title="Save"><Check size={14} /></button>
-      <button className={styles.iconBtn} onClick={() => setEditing(false)} title="Cancel"><X size={14} /></button>
-    </>
+    <button className={styles.iconBtn} onClick={saveEdit} title="Save"><Check size={14} /></button>
   ) : (
     <>
       <button className={styles.iconBtn} onClick={startShare} title="Share as Coterie"><Share2 size={14} /></button>
@@ -231,7 +228,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     <Frame
       ref={ref}
       title={map.name}
-      onClose={onClose}
+      onClose={editing ? () => setEditing(false) : onClose}
       initialPosition={initialPosition}
       width={320}
       actions={headerActions}

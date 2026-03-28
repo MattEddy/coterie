@@ -38,13 +38,15 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
     }
     return initialPosition
   })
-  const [size, setSize] = useState<{ w: number; h: number | null }>(() => {
+  const [size, setSize] = useState<{ w: number; h?: number }>(() => {
     if (persistKey) {
       const saved = getLayout(persistKey)
-      if (saved) return { w: saved.w, h: saved.h ?? null }
+      if (saved) return { w: saved.w || width }
     }
-    return { w: width, h: null }
+    return { w: width }
   })
+  // Track whether the user explicitly resized (so we only persist h from resize)
+  const userResized = useRef(false)
   const [zIndex, setZIndex] = useState(getNextZ)
   const [collapsed, setCollapsed] = useState(false)
   const isDragging = useRef(false)
@@ -96,6 +98,7 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
       w: rect.width, h: rect.height,
     }
     document.documentElement.style.cursor = CURSORS[dir] || ''
+    userResized.current = true
     setZIndex(getNextZ())
     e.preventDefault()
     e.stopPropagation()
@@ -140,10 +143,12 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
         document.documentElement.style.cursor = ''
       }
       // Persist layout on drag/resize end
+      // Only save height on explicit resize — drag should not lock auto-sized frames
       if ((wasDragging || wasResizing) && persistKeyRef.current && frameRef.current) {
         const rect = frameRef.current.getBoundingClientRect()
         saveLayoutRef.current(persistKeyRef.current, {
-          x: rect.left, y: rect.top, w: rect.width, h: rect.height,
+          x: rect.left, y: rect.top, w: rect.width,
+          ...(wasResizing ? { h: rect.height } : {}),
         })
       }
     }

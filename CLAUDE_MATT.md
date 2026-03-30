@@ -41,6 +41,16 @@ Added tooltips to every icon button across all components: NavBar, Frame (close 
 - `src/components/Canvas.tsx` — `triggerCreate()` added to CanvasRef
 - `src/pages/Landscape.tsx` — hotkey handler, `toggleFrame` helper, removed AccountFrame import/rendering
 
+### CLAUDE.md Audit (2026-03-30)
+
+Short session — audited the project CLAUDE.md (784 lines) and slimmed it to 202 lines (74% reduction). Offloaded reference material into three side docs:
+
+- `docs/COTERIE_SHARING.md` (100 lines) — full coterie sharing spec (accept behavior per type, reviews table, privacy tiers, dedup, installation flow)
+- `docs/UI_REFERENCE.md` (172 lines) — MapsFrame architecture, workspace persistence, color scheme tables, schema overview, project structure, platform strategy, market position
+- `docs/IMPLEMENTATION_STATUS.md` (166 lines) — complete build history checklist
+
+Main CLAUDE.md retains: architecture, data model concepts, key design decisions, guiding tenet, all known gotchas, UI frame system, theming/typography, dev setup, and status/roadmap. Side docs are referenced inline so Claude knows where to look for detail.
+
 ### Open Items / Next Steps
 1. **"Accept and place" UX** — click canvas to position accepted objects instead of auto-placing at member's coordinates
 2. **Non-user invitation flow** — email sending, landing page with interactive demo, signup/payment. Needs deployment infrastructure.

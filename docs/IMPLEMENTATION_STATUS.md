@@ -1,0 +1,166 @@
+# Implementation Status
+
+Complete build history for Coterie. For current priorities, see `CLAUDE.md` → Status.
+
+## Web App (Vite + React)
+
+- [x] Graph data model (class/type taxonomy)
+- [x] Pro-tier Supabase schema (entity registry + overrides + unified maps + coteries)
+- [x] Expanded object fields (title, status, photo_url — contact info in data.contacts JSONB)
+- [x] Shared/private notes split on override tables
+- [x] Auto-create profile trigger
+- [x] Coteries_maps join table for map sharing
+- [x] Seed data demonstrating the model (test users with auth.identities)
+- [x] Local Supabase running with Schema Visualizer
+- [x] GitHub CLI (`gh`) installed, global CLAUDE.md backed up to gist
+- [x] `/backup-global` skill for pushing CLAUDE.md to gist
+- [x] Coterie sharing system fully designed (intel channel, updates channel, dissonance view)
+- [x] Canonical promotion model: entity registry (all objects get `objects` row from birth, `is_canon` + `created_by`)
+- [x] Vite + React + TypeScript web app scaffolded
+- [x] Supabase client integration (.env.local with local keys)
+- [x] Auth working (email/password login, AuthContext with session listener)
+- [x] React Flow canvas rendering seed data (objects as nodes, connections as edges)
+- [x] Custom ObjectNode component (class-based shapes: rect/pill/octagon, dim color tints)
+- [x] DetailPanel (floating read-only panel positioned adjacent to clicked node)
+- [x] Drag-to-reposition persists to Supabase (objects_overrides.map_x/map_y)
+- [x] Nearest-handle edge routing (handles on all 4 sides, live updates during drag)
+- [x] Finder-like canvas controls (lasso select, pinch zoom, scroll zoom, space+drag pan)
+- [x] Edges: gray/unlabeled by default, white/labeled on click
+- [x] CSS Modules styling throughout, dark theme with class-based dim tints
+- [x] Multi-select: lasso + Cmd/Shift-click, tiered UX (1→detail, 2→dual panels, 3+→multi panel)
+- [x] Panel overlap avoidance for dual selection
+- [x] "Industry" → "sector" rename (schema, seed, docs, UI)
+- [x] Person contact data tenet: CHECK constraint prevents canonical person contact info
+- [x] `user_objects` merged view (COALESCE canonical + overrides + types in one query)
+- [x] Urbanist font (Google Fonts), tagline: "Map your professional world."
+- [x] DetailPanel edit mode (pencil icon → all fields editable, saves to objects_overrides)
+- [x] Tag input with autocomplete for types (canonical-first ranking, user-created on the fly)
+- [x] Types table extended: `is_canon` boolean + `created_by` UUID
+- [x] Class-aware edit placeholders (Company Name / Name (First Last) / Project Name)
+- [x] Smart panel positioning (opens toward screen center, proportional anchor algorithm)
+- [x] Canvas `refreshData()` extracted for reuse after edits
+- [x] Lucide React icons (Pencil, Check, X) — icons-only with native tooltips
+- [x] Four-class model: company/person (landscape) + project/event (off-landscape, in detail panels)
+- [x] `landscape_visible` boolean on classes table
+- [x] Events as first-class objects (class=`event`) replacing `log_entries` table
+- [x] `event_date DATE` column on objects + event types (meeting, call, pitch, etc.)
+- [x] Event connection types: `participated_in`, `regarding`, `held_at`
+- [x] `objects_types_overrides` table for per-user type editing (parallels objects_overrides pattern)
+- [x] `user_objects` view uses correlated subqueries for types (user overrides → canonical → empty)
+- [x] Reactive panel positioning — panels track nodes through pan/zoom/drag via `useViewport()` + `useStore()`
+- [x] Off-screen panel hiding (all four viewport bounds)
+- [x] Dual-selection panel overlap avoidance via `preferredSide` prop
+- [x] Multi-select bounding-box panel positioning (3+ nodes)
+- [x] Selection highlight sync (custom `selectedItems` → React Flow `node.selected`)
+- [x] Edge highlighting generalized to all connections between any 2+ selected nodes
+- [x] Opus 4.6 codebase audit — cleaned dead code, fixed type save targets
+- [x] Option B storage: user-created objects store all data in overrides, objects row is skeleton
+- [x] JSONB contacts model: `data.contacts` array replaces fixed phone/email/website/address columns
+- [x] Person private reachability CHECK constraint via `jsonb_path_exists`
+- [x] Detail panel redesign: header (photo/name/title/types) + tabbed sections (Contact/Notes/Projects/Events)
+- [x] Per-section editing with independent save (no global edit mode)
+- [x] Projects/Events tabs: create, edit, delete, search existing, multi-object linking
+- [x] ObjectSearch component: reusable autocomplete for finding/linking objects
+- [x] Project name matching: search existing projects to link vs create new
+- [x] Hard delete for user tables (overrides) — no zombie rows, canonical tables keep soft delete
+- [x] Orphan cleanup: deleting last connection to user-created object hard-deletes it
+- [x] `connections_overrides.deactivated` boolean replaces `is_active` for canonical connection overrides
+- [x] `coteries_reviews` simplified to dismissal-only (accepted = the data change IS the record)
+- [x] Escape key layering: closes edit forms → closes panel
+- [x] Canvas refresh preserves selection state (fixes blank-screen bug on save)
+- [x] Double-click empty canvas to create objects (Person/Company toggle + name input)
+- [x] Landscape object deletion with cascade confirmation (blast radius query + overlay)
+- [x] Direction-agnostic connections with roles (replaces directional connection_types)
+- [x] `roles` table: shared vocabulary for connection endpoints, UUID PK, is_canon + created_by
+- [x] `types` table migrated to UUID PKs (prevents multi-user slug collisions)
+- [x] Views join through to `display_name` for types (no more slug-to-display mapping in UI)
+- [x] Visual connection creation via drag handle-to-handle + role assignment form
+- [x] Connection editing via double-click edge (edit roles, delete connection)
+- [x] Custom RoleEdge component: role labels positioned near each respective node
+- [x] Canvas loads both canonical + user-created connections, filtering deactivated
+- [x] Drag-opens-panel bug fixed (useOnSelectionChange skips single-node mousedown selections)
+- [x] `nodesRef` pattern for stable access to current nodes in edge/connection handlers
+- [x] Dual-select "Connect to" / "Connected to" button (checks existing connections, opens role form)
+- [x] Connection stays highlighted after create/edit form closes
+- [x] Straight connection line style throughout (including drag preview via `connectionLineType`)
+- [x] `--color-text-muted` unified across components, brightened to #999
+- [x] Company → Org class rename (schema, seed, CSS, all components)
+- [x] CreateObjectForm: "Create a new:" heading + cancel button
+- [x] Frame system: shared draggable `Frame` component (z-index-on-click, close button)
+- [x] NavBar: fixed top-right with account icon, hamburger menu popover, "Coterie" wordmark
+- [x] Menu popover: Search, Maps, Coteries, Settings — click opens frame, popover dismisses
+- [x] SearchFrame: live search → zoom to node (debounced query, arrow key nav, Enter to select, Escape clears/closes)
+- [x] Canvas `zoomToNode` via `forwardRef` + `useImperativeHandle` (animated center + select)
+- [x] AccountFrame with email display + sign out
+- [x] Maps/Coteries/Settings frames as stubs
+- [x] Old top bar removed — canvas fills full viewport, React Flow Controls removed
+- [x] Event date "today" button (CalendarCheck icon inside date input, accent blue)
+- [x] UTC date bug fix: `toISOString()` → local `getFullYear/getMonth/getDate`
+- [x] Color scheme redesign: "Dusty Rose + Teal" palette (evolved from scheme 10)
+- [x] Two-font system: Urbanist (display) + Inter (data fields on cards and detail panel)
+- [x] Node type labels colored by class (org=rose, person=teal) instead of muted gray
+- [x] Class-specific node border colors and dim backgrounds
+- [x] Cool-tinted panel surfaces for contrast against warm canvas background
+- [x] Person class changed from amber to teal (amber too close to gold accent)
+- [x] Gold accent brightened to `#d4b468`
+- [x] Light + Dark + Auto theme system (ThemeContext, `data-theme` attribute, localStorage persistence)
+- [x] All hardcoded colors extracted to CSS variables for theme support
+- [x] SettingsFrame: Light/Dark/Auto segmented control, © Buckethead info
+- [x] Flash-prevention script in index.html (reads localStorage before React mounts)
+- [x] MapsFrame: full CRUD (list with object counts, create, edit name/description, delete with confirmation)
+- [x] Map detail view: object list with remove, search-to-add objects (writes to `maps_objects`)
+- [x] Map as canvas filter: `activeMapId` state in Landscape → Canvas filters nodes to map's objects
+- [x] MultiSelectPanel: "New Map" (inline name input → create + add selected) and "Add to Map" (picker of existing maps)
+- [x] Canvas `refreshData` accepts `activeMapId`, queries `maps_objects` for filter set, connections filter naturally
+- [x] Frame: double-click title bar collapse/expand, `actions` prop, `forwardRef`, `titleClassName`
+- [x] Frame: `headerContent` prop for content inside the header (above border-bottom line)
+- [x] Frame: Mac-style edge/corner resize with appropriate cursors
+- [x] Frame: `persistKey` + workspace layout persistence (localStorage + Supabase `profiles.workspace_layout`)
+- [x] WorkspaceProvider context + useWorkspaceLayout hook (dual persistence with in-memory cache)
+- [x] MapsFrame: Finder-like list (click selects, double-click opens detail card to the right)
+- [x] Map selection highlights objects with gold borders on canvas (`mapHighlighted` node data flag)
+- [x] Click-to-edit mode: toggle map membership by clicking canvas objects (MousePointerClick icon)
+- [x] Isolate button: Focus icon filters canvas to show only map's objects
+- [x] Map deselection: global listener + custom `coterie:node-click` event (pointer capture workaround)
+- [x] Drag-aware deselection: dragging objects doesn't deselect map (onNodeClick doesn't fire after drag)
+- [x] Gold border suppresses white selection border when map is highlighted or in edit mode
+- [x] Maps `auto_add` boolean: new objects auto-inserted into auto-add maps on creation
+- [x] Map detail: in-place editing (headerContent), auto-add checkbox + gold hint text
+- [x] Chevron icon on selected map items to open detail card (in addition to double-click)
+- [x] Canvas `clearSelection()` exposed via CanvasRef
+- [x] CoteriesFrame: full UI — list coteries, pending invitations, create coterie (name + map picker + email tags), detail card (members, maps, invite, delete)
+- [x] Coterie creation from map detail card (Share2 icon → name pre-filled as "[Map Name] Coterie" + email invites)
+- [x] Coterie creation from CoteriesFrame (Create Coterie button → name + map picker + email tags)
+- [x] `coterie_invitations` table + `maps.source_coterie_id` schema additions
+- [x] Invitation acceptance: aggregated recipient map (source_coterie_id), object placement from owner's layout (centroid-relative)
+- [x] Canvas refresh via `coterie:refresh-canvas` DOM event (triggered after invite acceptance)
+- [x] Edge unhighlighting on selection clear (was missing — edges stayed highlighted)
+- [x] MultiSelectPanel: creating a map dispatches `coterie:map-created` event → MapsFrame refreshes + selects new map, panel closes
+- [x] Finder-like deselection on CoteriesFrame (click outside to deselect)
+- [x] Dissonance detection: `get_dissonances()` SQL function — 5 types (new_object, new_connection, deactivated_connection, career_move, type_change)
+- [x] CoterieUpdatesFrame: standalone frame for dissonances with hover-reveal Accept/Ignore actions
+- [x] NotificationBoxes: floating boxes below NavBar — invitations → CoteriesFrame, updates → CoterieUpdatesFrame
+- [x] Per-coterie "updates" badge in CoteriesFrame list (gold pill with count, opens CoterieUpdatesFrame)
+- [x] Cross-user polling (3s interval) for notification counts + dissonance list (Realtime postgres_changes unreliable in local dev)
+- [x] Coterie Intel (Channel 1): shared_notes + contacts from coterie members displayed in DetailPanel Notes + Contact tabs, attributed
+- [x] Contact adopt: "+" button on coterie intel contacts, copies to user's `data.contacts`, fingerprint tracking in `data.adopted_intel` hides adopted entries
+- [x] `type_change` dissonance: compares effective type arrays, accept copies member's types to `objects_types_overrides`
+- [x] RLS enabled (permissive) on `objects_overrides`, `connections_overrides`, `coterie_invitations` for future Realtime
+- [x] Frame: only persist height on explicit resize (not drag) — fixes stale height locking
+- [x] DetailPanel: types `+` button hidden until header edit mode active
+- [x] MapsFrame: single close button during map detail edit (Frame × becomes cancel-edit)
+- [x] Tooltip system: custom `Tooltip` component (portal-rendered, smart above/below positioning, configurable delay, disabled prop, fade-in animation, themed arrow)
+- [x] Tooltips on all icon buttons, frame titles (`titleTooltip` prop on Frame), tab bar, map actions, coterie actions, detail panel actions
+- [x] DetailPanel tab labels: icon + label in column layout, label visible (gold) only on active tab, replaces section headings inside tab content
+- [x] Account menu: NavBar account button opens dropdown popover (email + sign out) instead of AccountFrame panel
+- [x] Hotkeys: N (new object), S (search), M (maps), C (coteries), , (settings) — suppressed in inputs, toggle behavior
+- [x] Canvas `triggerCreate()` exposed via CanvasRef (opens create form at viewport center)
+
+## SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
+
+- [x] MapView with draggable cards, connections, zoom/pan
+- [x] Setup wizard for known_landscape import
+- [x] Contact import from macOS Contacts (fuzzy matching)
+- [x] News feed with RSS aggregation
+- [x] Claude API integration for article classification
+- [x] Local SQLite database

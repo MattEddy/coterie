@@ -60,6 +60,7 @@ function getNearestHandles(
 export interface CanvasRef {
   zoomToNode: (nodeId: string) => void
   clearSelection: () => void
+  triggerCreate: () => void
 }
 
 interface CanvasInnerProps {
@@ -103,7 +104,13 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
     clearSelection() {
       setSelectedItems([])
     },
-  }), [setCenter])
+    triggerCreate() {
+      const screenPos = { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+      const flowPos = screenToFlowPosition(screenPos)
+      setSelectedItems([])
+      setCreateForm({ screen: screenPos, flow: flowPos })
+    },
+  }), [setCenter, screenToFlowPosition])
 
   const [createForm, setCreateForm] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
   const [connectForm, setConnectForm] = useState<{

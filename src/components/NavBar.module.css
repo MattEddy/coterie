@@ -69,6 +69,19 @@
   background: var(--color-surface-2);
 }
 
+.accountEmail {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+}
+
+.menuDivider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 2px 8px;
+}
+
 .logo {
 
   font-size: 15px;

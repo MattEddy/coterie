@@ -1,9 +1,8 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Canvas from '../components/Canvas'
 import type { CanvasRef } from '../components/Canvas'
 import NavBar from '../components/NavBar'
 import type { FrameType } from '../components/NavBar'
-import AccountFrame from '../components/AccountFrame'
 import SearchFrame from '../components/SearchFrame'
 import MapsFrame from '../components/MapsFrame'
 import CoteriesFrame from '../components/CoteriesFrame'
@@ -45,6 +44,35 @@ export default function Landscape() {
     canvasRef.current?.zoomToNode(nodeId)
   }
 
+  const toggleFrame = useCallback((type: FrameType) => {
+    setOpenFrames(prev => {
+      const next = new Set(prev)
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+
+      switch (e.key.toLowerCase()) {
+        case 'n': canvasRef.current?.triggerCreate(); break
+        case 's': toggleFrame('search'); break
+        case 'm': toggleFrame('maps'); break
+        case 'c': toggleFrame('coteries'); break
+        case ',': toggleFrame('settings'); break
+        default: return
+      }
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [toggleFrame])
+
   return (
     <div className={styles.container}>
       <Canvas ref={canvasRef} activeMapId={activeMapId} highlightedObjectIds={highlightedObjectIds} mapEditMode={mapEditMode} onMapEditClick={handleMapEditClick} />
@@ -54,9 +82,6 @@ export default function Landscape() {
         onOpenUpdates={() => openFrame('coterie-updates')}
       />
 
-      {openFrames.has('account') && (
-        <AccountFrame onClose={() => closeFrame('account')} />
-      )}
       {openFrames.has('search') && (
         <SearchFrame
           onClose={() => closeFrame('search')}

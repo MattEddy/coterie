@@ -92,13 +92,15 @@ coterie/
 │   │   ├── ConnectionRoleForm.tsx # Role editor for creating/editing connections
 │   │   ├── ConnectionRoleForm.module.css
 │   │   ├── RoleEdge.tsx          # Custom edge with role labels near each endpoint
-│   │   ├── Frame.tsx             # Shared draggable frame (z-index management, close button)
+│   │   ├── Tooltip.tsx            # Portal-rendered tooltip (smart positioning, configurable delay)
+│   │   ├── Tooltip.module.css
+│   │   ├── Frame.tsx             # Shared draggable frame (z-index management, close button, titleTooltip)
 │   │   ├── Frame.module.css
-│   │   ├── NavBar.tsx            # Fixed top-right nav (account icon, menu popover, logo)
+│   │   ├── NavBar.tsx            # Fixed top-right nav (account menu, hamburger menu, logo, hotkeys)
 │   │   ├── NavBar.module.css
 │   │   ├── SearchFrame.tsx       # Search → zoom (keyboard nav, debounced query)
 │   │   ├── SearchFrame.module.css
-│   │   ├── AccountFrame.tsx      # Account details + sign out
+│   │   ├── AccountFrame.tsx      # Account details (legacy — replaced by NavBar account menu)
 │   │   ├── AccountFrame.module.css
 │   │   ├── MapsFrame.tsx         # Maps CRUD + detail view + canvas filter toggle
 │   │   ├── MapsFrame.module.css
@@ -719,6 +721,12 @@ When ready to deploy:
 - [x] Frame: only persist height on explicit resize (not drag) — fixes stale height locking
 - [x] DetailPanel: types `+` button hidden until header edit mode active
 - [x] MapsFrame: single close button during map detail edit (Frame × becomes cancel-edit)
+- [x] Tooltip system: custom `Tooltip` component (portal-rendered, smart above/below positioning, configurable delay, disabled prop, fade-in animation, themed arrow)
+- [x] Tooltips on all icon buttons, frame titles (`titleTooltip` prop on Frame), tab bar, map actions, coterie actions, detail panel actions
+- [x] DetailPanel tab labels: icon + label in column layout, label visible (gold) only on active tab, replaces section headings inside tab content
+- [x] Account menu: NavBar account button opens dropdown popover (email + sign out) instead of AccountFrame panel
+- [x] Hotkeys: N (new object), S (search), M (maps), C (coteries), , (settings) — suppressed in inputs, toggle behavior
+- [x] Canvas `triggerCreate()` exposed via CanvasRef (opens create form at viewport center)
 
 ### SwiftUI Prototype (v0.1 — legacy, in `Coterie/` dir)
 - [x] MapView with draggable cards, connections, zoom/pan

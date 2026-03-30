@@ -5,50 +5,41 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-03-27
+**Date:** 2026-03-28/29
 **Branch:** main
 
 ### Narrative
 
-Major session: built the complete coterie sharing pipeline — both channels (intel + updates) are now operational end-to-end. Also multiple UI polish fixes.
+UI polish session focused on discoverability: tooltips, tab labels, account menu, and hotkeys.
 
-**Dissonance detection (`get_dissonances` SQL function).** Built a SQL function that computes all structural differences between a user's data and their coterie members' data, scoped to objects in shared maps. Originally 4 types (new_object, new_connection, deactivated_connection, career_move), later extended to 5 with `type_change`. The shared scope includes both `coteries_maps` (sender's shared maps) and `source_coterie_id` maps (recipient's aggregated maps). Each dissonance includes dismissal tracking via `coteries_reviews`. Seed data exercises all 5 types with Billy having divergent data from Matt.
+**Tooltip system.** Matt asked about adding hover tooltips to buttons and panel headers. Discussed 4 options (native title, CSS-only, React component, Radix library). Chose Option C (custom React component) because it gives full control over delay, disabling, long descriptions, and positioning. Built `Tooltip.tsx` — portal-rendered, smart above/below positioning based on viewport space, configurable `delay` (default 400ms), `disabled` prop, `text` prop (empty = passthrough), small directional arrow, 100ms fade-in. Dismisses on scroll and mousedown.
 
-**CoterieUpdatesFrame (standalone dissonance view).** Matt wanted dissonances in their own frame, not inside CoteriesFrame. Built `CoterieUpdatesFrame.tsx` with hover-reveal Accept/Ignore buttons (not visible by default — "so we don't have a column of accepts"). Accept handlers differ by type: new_object creates override + adds to aggregated map, new_connection copies the connection, deactivated_connection mirrors the deactivation, career_move syncs differing fields only, type_change replaces `objects_types_overrides`.
+Added tooltips to every icon button across all components: NavBar, Frame (close button + `titleTooltip` prop for frame headings at 600ms delay), DetailPanel (header actions, types edit, tab bar, contact/notes/projects/events section buttons, today buttons, intel adopt), MapsFrame (select mode with dynamic text, isolate, open, share, edit, delete, remove from map), CoteriesFrame (delete, updates badge, open). Used 3 background agents for the big files (DetailPanel, MapsFrame, CoteriesFrame) while directly editing the smaller files.
 
-**NotificationBoxes.** Floating boxes below NavBar — one for coterie invitations (opens CoteriesFrame), one for coterie updates (opens CoterieUpdatesFrame). Only appear when there are notifications. Matt specifically asked for separate boxes per notification type, not a combined count.
+**Tab bar fix.** The Tooltip's `<span style="display: inline-flex">` wrapper broke the tab bar layout — buttons became narrow instead of spreading evenly. The `.tabButton` had `flex: 1` but the Tooltip span (now the flex child of `.tabBar`) didn't inherit it. Fixed with `.tabBar > * { flex: 1; }` in CSS.
 
-**Per-coterie "updates" badge.** Gold pill badge next to coterie names in the CoteriesFrame list showing update count. Clicking opens CoterieUpdatesFrame. Matt asked for "a tiny bit more space" between name and badge (gap: 6px → 10px).
+**Tab labels replace section headings.** Matt suggested moving section headings (Contact Info, Notes, Projects, Events) into the tab buttons themselves — visible only on the active tab. Each tab button now renders icon + label in a `flex-direction: column` layout. Label uses `visibility: hidden` on inactive tabs (preserves height stability). Removed the `<h3>` headings from inside each tab content section. Edit buttons right-aligned via `justify-content: flex-end` on `.tabSectionHeader`. Tooltips disabled on active tab (label is already visible). Cleaned up unused `heading` field from tab data.
 
-**Type changes as Channel 2 (5th dissonance type).** Matt proposed moving tag/type changes to Channel 2 (dissonances) instead of Channel 1 (intel). Reasoning: types are structural ("is this person an Executive or a Creative?"), not subjective commentary. The query compares sorted effective type arrays using the existing `objects_types_overrides` → `objects_types` fallback pattern. Accept copies the member's full type set. Render shows `+Added −Removed` format.
+**Account menu.** Matt felt the Account button opening a draggable Frame was inconsistent — "the Menu button next to it opens a menu, but this opens a panel." Converted to a dropdown popover matching the hamburger menu pattern. NavBar now handles account state internally with `useAuth()` — email display + sign out button. Opening one menu closes the other. Removed AccountFrame rendering from Landscape.tsx. Removed 'account' from FrameType. AccountFrame files left in place but unused.
 
-**Cross-user update mechanism.** Attempted Supabase Realtime postgres_changes — added tables to `supabase_realtime` publication and enabled RLS with permissive policies. Didn't work in local dev (known issue — Realtime container has JWT validation/RLS pipeline issues locally, GitHub #21624). Matt pushed for research before more fixes: "Can we do some research before we just keep trying fixes? This seems pretty fundamental." Research confirmed three options: postgres_changes (broken locally), Broadcast (requires manual send at every write point), polling (simple, works). Went with **3-second polling** as the pragmatic V1 solution, with a note to swap to Broadcast/postgres_changes on Supabase Cloud.
-
-**Coterie Intel (Channel 1).** Built the passive intel display in DetailPanel. When viewing an object shared with coterie members, their `shared_notes` appear in the Notes tab and their `data.contacts` appear in the Contact tab — attributed to the author. `private_notes` is never selected. Query: find coterie peer user IDs via `coteries_members`, then query their `objects_overrides` for the same object.
-
-**Contact adopt with fingerprint tracking.** Matt identified the dedup problem: automatic matching is unreliable (phone formats, address variations, personal labels). Proposed voluntary adoption: "give a way to add coterie data to MY data and remove it from the coterie list (for me)." Built a `+` button (hover-reveal) on each coterie intel contact. Clicking copies the contact to the user's `data.contacts` and stores a fingerprint (`"userId:type:value"`) in `data.adopted_intel`. Adopted contacts are filtered out of the intel display. Matt called the fingerprint approach "magic."
-
-**Frame height persistence fix.** The Coteries frame was rendering tiny because Frame.tsx saved height on every drag (not just resize), locking auto-sized frames to stale heights. Fixed: only persist `h` on explicit resize. Height no longer restored from persisted layout — frames auto-size to content.
-
-**DetailPanel types read-only.** Matt asked to hide the types `+` button until header edit mode is active. The `+` now only appears when the pencil icon is clicked. Cancelling or saving header edit also closes the tag picker.
-
-**MapsFrame edit close button.** Two × buttons were showing during map detail edit (one to cancel edit, one to close panel). Matt wanted just the cancel-edit button. Fixed: Frame's `onClose` becomes cancel-edit when editing, removing the duplicate.
+**Hotkeys.** Matt asked "how can hotkeys work in our app?" Explained the canvas-app pattern: single-key hotkeys suppressed when focus is in an input. Wired up in a `useEffect` in Landscape.tsx: N (new object — triggers `canvasRef.current.triggerCreate()`), S (search), M (maps), C (coteries), , (settings). All toggle behavior (press again to close). Added `triggerCreate()` to CanvasRef — opens the create form at viewport center. Modifier keys (Cmd/Ctrl/Alt) bypass the handler.
 
 ### Files Modified
-- `supabase/migrations/20260203000000_pro_schema.sql` — `get_dissonances()` function (5 types), Realtime publication + RLS policies
-- `supabase/seed.sql` — Billy's landscape, coterie scenario with all 5 dissonance types, coterie intel seed data
-- `src/components/CoterieUpdatesFrame.tsx` — NEW: standalone dissonance frame
-- `src/components/CoterieUpdatesFrame.module.css` — NEW: styling with hover-reveal actions
-- `src/components/NotificationBoxes.tsx` — NEW: floating notification boxes with polling
-- `src/components/NotificationBoxes.module.css` — NEW: positioning below NavBar
-- `src/components/CoteriesFrame.tsx` — stripped dissonances, added update counts + badge, `onOpenUpdates` prop
-- `src/components/CoteriesFrame.module.css` — updates badge styles, removed dissonance styles
-- `src/components/DetailPanel.tsx` — coterie intel loading + display (notes + contacts), contact adopt with fingerprints, types read-only until edit mode
-- `src/components/DetailPanel.module.css` — coterie intel section + adopt button styles
-- `src/components/Frame.tsx` — height persistence fix (only on resize), `userResized` ref
-- `src/components/MapsFrame.tsx` — single close button during edit
-- `src/components/NavBar.tsx` — `'coterie-updates'` added to FrameType
-- `src/pages/Landscape.tsx` — CoterieUpdatesFrame + NotificationBoxes wiring
+- `src/components/Tooltip.tsx` — NEW: custom tooltip component
+- `src/components/Tooltip.module.css` — NEW: tooltip styles with arrow + fade-in
+- `src/components/Frame.tsx` — `titleTooltip` prop, Tooltip on close button
+- `src/components/NavBar.tsx` — account dropdown menu (replaced onOpenFrame('account')), useAuth, LogOut icon, both menus dismiss each other, Tooltip disabled when menu open
+- `src/components/NavBar.module.css` — `.accountEmail`, `.menuDivider` styles
+- `src/components/DetailPanel.tsx` — Tooltip on all icon buttons + tabs, tab labels (icon + label column layout), removed section headings, cleaned up `heading` field
+- `src/components/DetailPanel.module.css` — `.tabLabel`, `.tabActive .tabLabel`, `.tabBar > *` flex fix, `.tabButton` column layout (44px height), `.tabSectionHeader` justify-content: flex-end, removed `.tabHeading` rules
+- `src/components/MapsFrame.tsx` — Tooltip on all actions + `titleTooltip` on Frame
+- `src/components/CoteriesFrame.tsx` — Tooltip on all actions + `titleTooltip` on Frame
+- `src/components/CoterieUpdatesFrame.tsx` — `titleTooltip` on Frame
+- `src/components/SearchFrame.tsx` — `titleTooltip` on Frame
+- `src/components/SettingsFrame.tsx` — `titleTooltip` on Frame
+- `src/components/AccountFrame.tsx` — `titleTooltip` on Frame (now unused)
+- `src/components/Canvas.tsx` — `triggerCreate()` added to CanvasRef
+- `src/pages/Landscape.tsx` — hotkey handler, `toggleFrame` helper, removed AccountFrame import/rendering
 
 ### Open Items / Next Steps
 1. **"Accept and place" UX** — click canvas to position accepted objects instead of auto-placing at member's coordinates
@@ -57,3 +48,4 @@ Major session: built the complete coterie sharing pipeline — both channels (in
 4. **DetailPanel → Frame migration** — make detail panels draggable
 5. **Light mode polish** — may need tuning
 6. **RLS policies** — real policies before deploy (permissive placeholders currently on 3 tables)
+7. **Delete AccountFrame files** — now unused after account menu migration, left in place for cleanup

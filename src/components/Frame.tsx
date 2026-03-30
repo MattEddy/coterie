@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, forwardRef, type ReactNode } from 'react'
 import { useWorkspace } from '../contexts/WorkspaceContext'
+import Tooltip from './Tooltip'
 import styles from './Frame.module.css'
 
 let zCounter = 100
@@ -24,10 +25,11 @@ interface FrameProps {
   headerContent?: ReactNode
   resizable?: boolean
   persistKey?: string
+  titleTooltip?: string
 }
 
 const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
-  { title, onClose, initialPosition, width = 320, children, actions, titleClassName, headerContent, resizable, persistKey },
+  { title, onClose, initialPosition, width = 320, children, actions, titleClassName, headerContent, resizable, persistKey, titleTooltip },
   externalRef
 ) {
   const { getLayout, saveLayout } = useWorkspace()
@@ -179,10 +181,18 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
     >
       <div className={`${styles.header} ${collapsed ? styles.headerCollapsed : ''}`} onMouseDown={handleHeaderMouseDown}>
         <div className={styles.headerTop}>
-          <span className={`${styles.title} ${titleClassName ?? ''}`}>{title}</span>
+          <span className={`${styles.title} ${titleClassName ?? ''}`}>
+            {titleTooltip ? (
+              <Tooltip text={titleTooltip} delay={600}>
+                <span>{title}</span>
+              </Tooltip>
+            ) : title}
+          </span>
           <div className={styles.headerRight}>
             {!collapsed && actions}
-            <button className={styles.close} onClick={onClose}>&times;</button>
+            <Tooltip text="Close">
+              <button className={styles.close} onClick={onClose}>&times;</button>
+            </Tooltip>
           </div>
         </div>
         {!collapsed && headerContent && (

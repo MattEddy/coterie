@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { ObjectNodeData, ContactEntry } from './ObjectNode'
 import type { NodeRect } from '../types'
+import Tooltip from './Tooltip'
 import styles from './DetailPanel.module.css'
 
 // Must match ObjectNode.module.css .card width/height and Canvas.tsx constants
@@ -23,11 +24,11 @@ interface DetailPanelProps {
 
 type TabId = 'contact' | 'notes' | 'projects' | 'events'
 
-const tabs: { id: TabId; Icon: typeof Phone; label: string; heading: string }[] = [
-  { id: 'contact', Icon: Phone, label: 'Contact', heading: 'Contact Info' },
-  { id: 'notes', Icon: FileText, label: 'Notes', heading: 'Notes' },
-  { id: 'projects', Icon: Clipboard, label: 'Projects', heading: 'Projects' },
-  { id: 'events', Icon: Calendar, label: 'Events', heading: 'Events' },
+const tabs: { id: TabId; Icon: typeof Phone; label: string }[] = [
+  { id: 'contact', Icon: Phone, label: 'Contact' },
+  { id: 'notes', Icon: FileText, label: 'Notes' },
+  { id: 'projects', Icon: Clipboard, label: 'Projects' },
+  { id: 'events', Icon: Calendar, label: 'Events' },
 ]
 
 const classPlaceholders: Record<string, { name: string; title: string }> = {
@@ -1459,14 +1460,15 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                       onChange={e => setNewItemValues(prev => ({ ...prev, event_date: e.target.value }))}
                       autoFocus={dateInputActive && !newItemValues.event_date}
                     />
-                    <button
-                      className={styles.todayBtn}
-                      onClick={() => setNewItemValues(prev => ({ ...prev, event_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}` }))}
-                      title="Today"
-                      type="button"
-                    >
-                      <CalendarCheck size={14} />
-                    </button>
+                    <Tooltip text="Set to today">
+                      <button
+                        className={styles.todayBtn}
+                        onClick={() => setNewItemValues(prev => ({ ...prev, event_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}` }))}
+                        type="button"
+                      >
+                        <CalendarCheck size={14} />
+                      </button>
+                    </Tooltip>
                   </div>
                 ) : (
                   <input
@@ -1629,36 +1631,39 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                   ) : null}
 
                   <div className={styles.itemActions}>
-                    <button
-                      className={styles.iconButtonSm}
-                      onClick={() => setShowLinkSearch(!showLinkSearch)}
-                      title="Link to another object"
-                    >
-                      <Link size={11} />
-                    </button>
-                    <button
-                      className={styles.iconButtonSm}
-                      onClick={() => {
-                        setEditingItemId(item.id)
-                        setEditItemValues({
-                          name: item.name || '',
-                          title: item.title || '',
-                          status: item.status || '',
-                          event_date: item.event_date || '',
-                        })
-                        setEditItemTypes(item.types || [])
-                      }}
-                      title="Edit"
-                    >
-                      <Pencil size={11} />
-                    </button>
-                    <button
-                      className={styles.iconButtonSmDanger}
-                      onClick={() => deleteConnectedItem(item.id, targetClass)}
-                      title="Remove"
-                    >
-                      <X size={11} />
-                    </button>
+                    <Tooltip text="Link existing">
+                      <button
+                        className={styles.iconButtonSm}
+                        onClick={() => setShowLinkSearch(!showLinkSearch)}
+                      >
+                        <Link size={11} />
+                      </button>
+                    </Tooltip>
+                    <Tooltip text="Edit">
+                      <button
+                        className={styles.iconButtonSm}
+                        onClick={() => {
+                          setEditingItemId(item.id)
+                          setEditItemValues({
+                            name: item.name || '',
+                            title: item.title || '',
+                            status: item.status || '',
+                            event_date: item.event_date || '',
+                          })
+                          setEditItemTypes(item.types || [])
+                        }}
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    </Tooltip>
+                    <Tooltip text="Remove">
+                      <button
+                        className={styles.iconButtonSmDanger}
+                        onClick={() => deleteConnectedItem(item.id, targetClass)}
+                      >
+                        <X size={11} />
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
               )}
@@ -1689,14 +1694,15 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                         value={editItemValues.event_date}
                         onChange={e => setEditItemValues(prev => ({ ...prev, event_date: e.target.value }))}
                       />
-                      <button
-                        className={styles.todayBtn}
-                        onClick={() => setEditItemValues(prev => ({ ...prev, event_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}` }))}
-                        title="Today"
-                        type="button"
-                      >
-                        <CalendarCheck size={14} />
-                      </button>
+                      <Tooltip text="Set to today">
+                        <button
+                          className={styles.todayBtn}
+                          onClick={() => setEditItemValues(prev => ({ ...prev, event_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}` }))}
+                          type="button"
+                        >
+                          <CalendarCheck size={14} />
+                        </button>
+                      </Tooltip>
                     </div>
                   )}
                   {targetClass === 'project' && (
@@ -1788,13 +1794,17 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             </div>
             {headerEditing && (
               showTagInput ? (
-                <button className={styles.iconButtonSm} onClick={saveTypes} title="Save types">
-                  <Check size={12} />
-                </button>
+                <Tooltip text="Save types">
+                  <button className={styles.iconButtonSm} onClick={saveTypes}>
+                    <Check size={12} />
+                  </button>
+                </Tooltip>
               ) : (
-                <button className={styles.iconButtonSm} onClick={() => { setEditTypes(object.types || []); setShowTagInput(true) }} title="Edit types">
-                  <Plus size={12} />
-                </button>
+                <Tooltip text="Edit types">
+                  <button className={styles.iconButtonSm} onClick={() => { setEditTypes(object.types || []); setShowTagInput(true) }}>
+                    <Plus size={12} />
+                  </button>
+                </Tooltip>
               )
             )}
           </div>
@@ -1811,24 +1821,34 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         <div className={styles.headerActions}>
           {headerEditing ? (
             <>
-              <button className={styles.iconButton} onClick={saveHeader} title="Save">
-                <Check size={14} />
-              </button>
-              <button className={styles.iconButton} onClick={() => { setHeaderValues({ name: object.name || '', title: object.title || '' }); setHeaderEditing(false); setShowTagInput(false) }} title="Cancel">
-                <X size={14} />
-              </button>
+              <Tooltip text="Save">
+                <button className={styles.iconButton} onClick={saveHeader}>
+                  <Check size={14} />
+                </button>
+              </Tooltip>
+              <Tooltip text="Cancel">
+                <button className={styles.iconButton} onClick={() => { setHeaderValues({ name: object.name || '', title: object.title || '' }); setHeaderEditing(false); setShowTagInput(false) }}>
+                  <X size={14} />
+                </button>
+              </Tooltip>
             </>
           ) : (
             <>
-              <button className={styles.iconButton} onClick={() => setHeaderEditing(true)} title="Edit name & title">
-                <Pencil size={12} />
-              </button>
-              <button className={styles.iconButton} onClick={initiateDelete} title="Remove from landscape">
-                <Trash2 size={12} />
-              </button>
-              <button className={styles.iconButton} onClick={onClose} title="Close">
-                <X size={14} />
-              </button>
+              <Tooltip text="Edit name, title, and types">
+                <button className={styles.iconButton} onClick={() => setHeaderEditing(true)}>
+                  <Pencil size={12} />
+                </button>
+              </Tooltip>
+              <Tooltip text="Remove from Landscape">
+                <button className={styles.iconButton} onClick={initiateDelete}>
+                  <Trash2 size={12} />
+                </button>
+              </Tooltip>
+              <Tooltip text="Close">
+                <button className={styles.iconButton} onClick={onClose}>
+                  <X size={14} />
+                </button>
+              </Tooltip>
             </>
           )}
         </div>
@@ -1837,14 +1857,15 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       {/* ===== TAB BAR ===== */}
       <div className={styles.tabBar}>
         {tabs.map(tab => (
-          <button
-            key={tab.id}
-            className={`${styles.tabButton} ${activeTab === tab.id ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-            title={tab.label}
-          >
-            <tab.Icon size={16} />
-          </button>
+          <Tooltip key={tab.id} text={tab.label} disabled={activeTab === tab.id}>
+            <button
+              className={`${styles.tabButton} ${activeTab === tab.id ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <tab.Icon size={16} />
+              <span className={styles.tabLabel}>{tab.label}</span>
+            </button>
+          </Tooltip>
         ))}
       </div>
 
@@ -1854,22 +1875,23 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {activeTab === 'contact' && (
           <div className={styles.tabSection}>
             <div className={styles.tabSectionHeader}>
-              <h3 className={styles.tabHeading}>Contact Info</h3>
               {contactEditing ? (
                 <>
-                  <button className={styles.iconButtonSm} onClick={saveContact} title="Save"><Check size={12} /></button>
-                  <button className={styles.iconButtonSm} onClick={() => {
+                  <Tooltip text="Save"><button className={styles.iconButtonSm} onClick={saveContact}><Check size={12} /></button></Tooltip>
+                  <Tooltip text="Cancel"><button className={styles.iconButtonSm} onClick={() => {
                     setEditContacts(object.data?.contacts ?? [])
                     setContactEditing(false)
-                  }} title="Cancel"><X size={12} /></button>
+                  }}><X size={12} /></button></Tooltip>
                 </>
               ) : (
-                <button className={styles.iconButtonSm} onClick={() => {
-                  setEditContacts(object.data?.contacts ?? [])
-                  setContactEditing(true)
-                }} title="Edit contact info">
-                  <Pencil size={12} />
-                </button>
+                <Tooltip text="Edit contact info">
+                  <button className={styles.iconButtonSm} onClick={() => {
+                    setEditContacts(object.data?.contacts ?? [])
+                    setContactEditing(true)
+                  }}>
+                    <Pencil size={12} />
+                  </button>
+                </Tooltip>
               )}
             </div>
             {contactEditing ? (
@@ -1909,13 +1931,14 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                         autoComplete="off"
                       />
                     )}
-                    <button
-                      className={styles.iconButtonSm}
-                      onClick={() => setEditContacts(prev => prev.filter((_, j) => j !== i))}
-                      title="Remove"
-                    >
-                      <X size={10} />
-                    </button>
+                    <Tooltip text="Remove">
+                      <button
+                        className={styles.iconButtonSm}
+                        onClick={() => setEditContacts(prev => prev.filter((_, j) => j !== i))}
+                      >
+                        <X size={10} />
+                      </button>
+                    </Tooltip>
                   </div>
                 ))}
                 <button
@@ -1957,13 +1980,14 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                                 <span className={styles.label}>{c.label || c.type}</span>
                                 <span className={styles.value}>{c.value}</span>
                               </div>
-                              <button
-                                className={styles.intelAdoptBtn}
-                                onClick={() => adoptIntelContact(ci.user_id, c)}
-                                title="Add to my contacts"
-                              >
-                                <Plus size={11} />
-                              </button>
+                              <Tooltip text="Add to my contacts">
+                                <button
+                                  className={styles.intelAdoptBtn}
+                                  onClick={() => adoptIntelContact(ci.user_id, c)}
+                                >
+                                  <Plus size={11} />
+                                </button>
+                              </Tooltip>
                             </div>
                           ))}
                         </div>
@@ -1980,19 +2004,20 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {activeTab === 'notes' && (
           <div className={styles.tabSection}>
             <div className={styles.tabSectionHeader}>
-              <h3 className={styles.tabHeading}>Notes</h3>
               {notesEditing ? (
                 <>
-                  <button className={styles.iconButtonSm} onClick={saveNotes} title="Save"><Check size={12} /></button>
-                  <button className={styles.iconButtonSm} onClick={() => {
+                  <Tooltip text="Save"><button className={styles.iconButtonSm} onClick={saveNotes}><Check size={12} /></button></Tooltip>
+                  <Tooltip text="Cancel"><button className={styles.iconButtonSm} onClick={() => {
                     setNotesValues({ shared_notes: object.shared_notes || '', private_notes: object.private_notes || '' })
                     setNotesEditing(false)
-                  }} title="Cancel"><X size={12} /></button>
+                  }}><X size={12} /></button></Tooltip>
                 </>
               ) : (
-                <button className={styles.iconButtonSm} onClick={() => setNotesEditing(true)} title="Edit notes">
-                  <Pencil size={12} />
-                </button>
+                <Tooltip text="Edit notes">
+                  <button className={styles.iconButtonSm} onClick={() => setNotesEditing(true)}>
+                    <Pencil size={12} />
+                  </button>
+                </Tooltip>
               )}
             </div>
             {notesEditing ? (
@@ -2055,15 +2080,16 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {activeTab === 'projects' && (
           <div className={styles.tabSection}>
             <div className={styles.tabSectionHeader}>
-              <h3 className={styles.tabHeading}>Projects</h3>
               {!creatingProject && (
-                <button className={styles.iconButtonSm} onClick={() => {
-                  setNewItemValues({ name: '', title: '', status: '', event_date: '' })
-                  setNewItemTypes([])
-                  setCreatingProject(true)
-                }} title="Add project">
-                  <Plus size={12} />
-                </button>
+                <Tooltip text="Add project">
+                  <button className={styles.iconButtonSm} onClick={() => {
+                    setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+                    setNewItemTypes([])
+                    setCreatingProject(true)
+                  }}>
+                    <Plus size={12} />
+                  </button>
+                </Tooltip>
               )}
             </div>
             {creatingProject && renderCreateForm('project')}
@@ -2075,15 +2101,16 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {activeTab === 'events' && (
           <div className={styles.tabSection}>
             <div className={styles.tabSectionHeader}>
-              <h3 className={styles.tabHeading}>Events</h3>
               {!creatingEvent && (
-                <button className={styles.iconButtonSm} onClick={() => {
-                  setNewItemValues({ name: '', title: '', status: '', event_date: '' })
-                  setNewItemTypes([])
-                  setCreatingEvent(true)
-                }} title="Add event">
-                  <Plus size={12} />
-                </button>
+                <Tooltip text="Add event">
+                  <button className={styles.iconButtonSm} onClick={() => {
+                    setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+                    setNewItemTypes([])
+                    setCreatingEvent(true)
+                  }}>
+                    <Plus size={12} />
+                  </button>
+                </Tooltip>
               )}
             </div>
             {creatingEvent && renderCreateForm('event')}

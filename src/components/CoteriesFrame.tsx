@@ -3,6 +3,7 @@ import { Users, Plus, ChevronRight, Trash2, X, Map as MapIcon, UserPlus } from '
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
+import Tooltip from './Tooltip'
 import styles from './CoteriesFrame.module.css'
 
 // --- Types ---
@@ -146,9 +147,11 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
   }
 
   const headerActions = isOwner ? (
-    <button className={styles.iconBtn} onClick={() => setConfirmDelete(true)} title="Delete coterie">
-      <Trash2 size={14} className={styles.iconBtnDanger} />
-    </button>
+    <Tooltip text="Delete coterie">
+      <button className={styles.iconBtn} onClick={() => setConfirmDelete(true)}>
+        <Trash2 size={14} className={styles.iconBtnDanger} />
+      </button>
+    </Tooltip>
   ) : null
 
   return (
@@ -692,7 +695,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates }: CoteriesFrameP
 
   return (
     <>
-      <Frame ref={listFrameRef} title="Coteries" onClose={onClose} initialPosition={{ x: 60, y: 180 }} width={280} resizable persistKey="coteries">
+      <Frame ref={listFrameRef} title="Coteries" titleTooltip="Manage your trusted sharing circles" onClose={onClose} initialPosition={{ x: 60, y: 180 }} width={280} resizable persistKey="coteries">
         {/* Pending invitations */}
         {invitations.length > 0 && (
           <div className={styles.invitationsSection}>
@@ -731,14 +734,15 @@ export default function CoteriesFrame({ onClose, onOpenUpdates }: CoteriesFrameP
                   <div className={styles.coterieNameRow}>
                     <span className={styles.coterieName}>{c.name}</span>
                     {updateCounts.get(c.id) && onOpenUpdates && (
-                      <span
-                        role="button"
-                        className={styles.updatesBadge}
-                        onClick={e => { e.stopPropagation(); onOpenUpdates() }}
-                        title="Open Coterie Updates"
-                      >
-                        {updateCounts.get(c.id)} {updateCounts.get(c.id) === 1 ? 'update' : 'updates'}
-                      </span>
+                      <Tooltip text="View coterie updates">
+                        <span
+                          role="button"
+                          className={styles.updatesBadge}
+                          onClick={e => { e.stopPropagation(); onOpenUpdates() }}
+                        >
+                          {updateCounts.get(c.id)} {updateCounts.get(c.id) === 1 ? 'update' : 'updates'}
+                        </span>
+                      </Tooltip>
                     )}
                   </div>
                   <span className={styles.coterieMeta}>
@@ -747,14 +751,15 @@ export default function CoteriesFrame({ onClose, onOpenUpdates }: CoteriesFrameP
                 </div>
                 {selectedCoterieId === c.id && (
                   <div className={styles.coterieActions}>
-                    <span
-                      role="button"
-                      className={styles.coterieActionBtn}
-                      title="Open"
-                      onClick={e => { e.stopPropagation(); handleCoterieDoubleClick(c) }}
-                    >
-                      <ChevronRight size={13} />
-                    </span>
+                    <Tooltip text="Open coterie details">
+                      <span
+                        role="button"
+                        className={styles.coterieActionBtn}
+                        onClick={e => { e.stopPropagation(); handleCoterieDoubleClick(c) }}
+                      >
+                        <ChevronRight size={13} />
+                      </span>
+                    </Tooltip>
                   </div>
                 )}
               </button>

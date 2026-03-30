@@ -3,6 +3,7 @@ import { Map as MapIcon, Plus, Check, Pencil, Trash2, X, Search, Focus, MousePoi
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
+import Tooltip from './Tooltip'
 import styles from './MapsFrame.module.css'
 
 interface MapRow {
@@ -215,12 +216,12 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   }
 
   const headerActions = editing ? (
-    <button className={styles.iconBtn} onClick={saveEdit} title="Save"><Check size={14} /></button>
+    <Tooltip text="Save"><button className={styles.iconBtn} onClick={saveEdit}><Check size={14} /></button></Tooltip>
   ) : (
     <>
-      <button className={styles.iconBtn} onClick={startShare} title="Share as Coterie"><Share2 size={14} /></button>
-      <button className={styles.iconBtn} onClick={startEdit} title="Edit"><Pencil size={14} /></button>
-      <button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmDelete(true)} title="Delete"><Trash2 size={14} /></button>
+      <Tooltip text="Share as Coterie"><button className={styles.iconBtn} onClick={startShare}><Share2 size={14} /></button></Tooltip>
+      <Tooltip text="Edit map"><button className={styles.iconBtn} onClick={startEdit}><Pencil size={14} /></button></Tooltip>
+      <Tooltip text="Delete map"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmDelete(true)}><Trash2 size={14} /></button></Tooltip>
     </>
   )
 
@@ -344,13 +345,12 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
               <div key={obj.object_ref_id} className={styles.objectItem}>
                 <span className={styles.classDot} data-class={obj.class} />
                 <span className={styles.objectName}>{obj.name}</span>
-                <button
+                <Tooltip text="Remove from map"><button
                   className={styles.removeBtn}
                   onClick={() => handleRemoveObject(obj.object_ref_id)}
-                  title="Remove from map"
                 >
                   <X size={12} />
-                </button>
+                </button></Tooltip>
               </div>
             ))}
           </div>
@@ -638,7 +638,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
 
   return (
     <>
-      <Frame ref={listFrameRef} title="Maps" onClose={onClose} initialPosition={{ x: 60, y: 120 }} width={280} resizable persistKey="maps">
+      <Frame ref={listFrameRef} title="Maps" titleTooltip="Organize and share filtered views of your Landscape" onClose={onClose} initialPosition={{ x: 60, y: 120 }} width={280} resizable persistKey="maps">
         {maps.length > 0 ? (
           <div className={styles.mapsList} onClick={() => { if (!mapEditMode) setSelectedMapId(null) }}>
             {maps.map(m => (
@@ -657,30 +657,33 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
                 </div>
                 {selectedMapId === m.id ? (
                   <div className={styles.mapActions}>
+                    <Tooltip text={mapEditMode ? 'Stop editing' : 'Select Mode \u2014 click objects to add or remove'}>
                     <span
                       role="button"
                       className={`${styles.mapActionBtn} ${mapEditMode ? styles.mapActionBtnActive : ''}`}
-                      title={mapEditMode ? 'Stop editing' : 'Click objects to add/remove'}
                       onClick={e => { e.stopPropagation(); toggleEditMode() }}
                     >
                       <MousePointerClick size={13} />
                     </span>
+                    </Tooltip>
+                    <Tooltip text={activeMapId === m.id ? 'Show all objects' : "Isolate \u2014 show only this map's objects"}>
                     <span
                       role="button"
                       className={`${styles.mapActionBtn} ${activeMapId === m.id ? styles.mapActionBtnActive : ''}`}
-                      title={activeMapId === m.id ? 'Show all' : 'Isolate on canvas'}
                       onClick={e => { e.stopPropagation(); onActivateMap(activeMapId === m.id ? null : m.id) }}
                     >
                       <Focus size={13} />
                     </span>
+                    </Tooltip>
+                    <Tooltip text="Open map details">
                     <span
                       role="button"
                       className={styles.mapActionBtn}
-                      title="Open"
                       onClick={e => { e.stopPropagation(); handleMapDoubleClick(m) }}
                     >
                       <ChevronRight size={13} />
                     </span>
+                    </Tooltip>
                   </div>
                 ) : (
                   activeMapId === m.id && <span className={styles.activeIndicator} />

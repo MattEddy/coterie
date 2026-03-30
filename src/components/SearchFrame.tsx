@@ -57,7 +57,7 @@ export default function SearchFrame({ onClose, onSelectResult }: SearchFrameProp
   }, [query, user])
 
   return (
-    <Frame title="Search" onClose={onClose} initialPosition={{ x: 60, y: 60 }} width={300} persistKey="search">
+    <Frame title="Search" titleTooltip="Find and zoom to objects on your Landscape" onClose={onClose} initialPosition={{ x: 60, y: 60 }} width={300} persistKey="search">
       <div className={styles.searchInput}>
         <Search size={14} className={styles.searchIcon} />
         <input

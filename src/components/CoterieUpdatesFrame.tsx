@@ -217,7 +217,7 @@ export default function CoterieUpdatesFrame({ onClose }: CoterieUpdatesFrameProp
   }
 
   return (
-    <Frame title="Coterie Updates" onClose={onClose} initialPosition={{ x: 60, y: 60 }} width={320} resizable persistKey="coterie-updates">
+    <Frame title="Coterie Updates" titleTooltip="Differences between your data and your coterie's" onClose={onClose} initialPosition={{ x: 60, y: 60 }} width={320} resizable persistKey="coterie-updates">
       {dissonances.length > 0 ? (
         <div className={styles.list}>
           {dissonances.map(d => {

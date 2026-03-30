@@ -191,12 +191,18 @@
   border-top: 1px solid var(--color-border);
 }
 
+.tabBar > * {
+  flex: 1;
+}
+
 .tabButton {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 32px;
+  gap: 2px;
+  height: 44px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
@@ -204,6 +210,18 @@
   color: var(--color-text-muted);
   cursor: pointer;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.tabLabel {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  visibility: hidden;
+}
+
+.tabActive .tabLabel {
+  visibility: visible;
 }
 
 .tabButton:hover {
@@ -228,14 +246,6 @@
   overflow-y: auto;
 }
 
-.tabHeading {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-}
-
 .tabSection {
   display: flex;
   flex-direction: column;
@@ -246,10 +256,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
-}
-
-.tabSectionHeader .tabHeading {
-  flex: 1;
+  justify-content: flex-end;
 }
 
 /* ===== READ MODE FIELDS ===== */

@@ -1,0 +1,62 @@
+.bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.label {
+  color: var(--color-text-muted);
+}
+
+.label strong {
+  color: var(--color-accent);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.cancelBtn {
+  padding: 6px 14px;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cancelBtn:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.placeBtn {
+  padding: 6px 14px;
+  background: var(--color-accent);
+  border: none;
+  border-radius: 4px;
+  color: var(--color-bg);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.placeBtn:hover {
+  background: var(--color-accent-hover);
+}

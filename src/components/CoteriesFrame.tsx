@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
-import { Users, Plus, ChevronRight, Trash2, X, Map as MapIcon, UserPlus } from 'lucide-react'
+import { Users, Plus, ChevronRight, Trash2, X, Map as MapIcon, UserPlus, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
 import Tooltip from './Tooltip'
 import styles from './CoteriesFrame.module.css'
+import type { PlacementCluster } from '../types'
 
 // --- Types ---
 
@@ -65,6 +66,8 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
   const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([])
   const [maps, setMaps] = useState<CoterieMap[]>([])
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmLeave, setConfirmLeave] = useState(false)
+  const [transferTargetId, setTransferTargetId] = useState<string | null>(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const isOwner = coterie.owner_id === user?.id
 
@@ -116,12 +119,32 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
 
   useEffect(() => {
     setConfirmDelete(false)
+    setConfirmLeave(false)
+    setTransferTargetId(null)
     setInviteEmail('')
     loadDetail()
   }, [coterie.id, loadDetail])
 
   const handleDelete = async () => {
     await supabase.from('coteries').update({ is_active: false }).eq('id', coterie.id)
+    onCoterieDeleted(coterie.id)
+  }
+
+  const handleLeave = async () => {
+    if (!user) return
+
+    // If owner, transfer ownership first
+    if (isOwner && transferTargetId) {
+      await supabase.from('coteries').update({ owner_id: transferTargetId }).eq('id', coterie.id)
+      await supabase.from('coteries_members').update({ role: 'owner' }).eq('coterie_id', coterie.id).eq('user_id', transferTargetId)
+    }
+
+    // Remove self from members
+    await supabase.from('coteries_members').delete().eq('coterie_id', coterie.id).eq('user_id', user.id)
+
+    // Detach aggregated map (becomes personal map)
+    await supabase.from('maps').update({ source_coterie_id: null }).eq('user_id', user.id).eq('source_coterie_id', coterie.id)
+
     onCoterieDeleted(coterie.id)
   }
 
@@ -146,13 +169,26 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
     onCoterieUpdated({ ...coterie, member_count: coterie.member_count + 1 })
   }
 
-  const headerActions = isOwner ? (
-    <Tooltip text="Delete coterie">
-      <button className={styles.iconBtn} onClick={() => setConfirmDelete(true)}>
-        <Trash2 size={14} className={styles.iconBtnDanger} />
-      </button>
-    </Tooltip>
-  ) : null
+  const otherMembers = members.filter(m => m.user_id !== user?.id)
+
+  const headerActions = (
+    <>
+      {(isOwner ? otherMembers.length > 0 : true) && (
+        <Tooltip text="Leave coterie">
+          <button className={styles.iconBtn} onClick={() => setConfirmLeave(true)}>
+            <LogOut size={14} />
+          </button>
+        </Tooltip>
+      )}
+      {isOwner && (
+        <Tooltip text="Delete coterie">
+          <button className={styles.iconBtn} onClick={() => setConfirmDelete(true)}>
+            <Trash2 size={14} className={styles.iconBtnDanger} />
+          </button>
+        </Tooltip>
+      )}
+    </>
+  )
 
   return (
     <Frame
@@ -169,12 +205,51 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
       {confirmDelete && (
         <div className={styles.deleteConfirm}>
           <span className={styles.deleteConfirmText}>
-            Delete &ldquo;{coterie.name}&rdquo;? Members will keep their objects but lose the shared intel connection.
+            Delete &ldquo;{coterie.name}&rdquo;? You&rsquo;ll keep your objects from the Coterie, but you&rsquo;ll lose the shared intel connection.
           </span>
           <div className={styles.deleteConfirmActions}>
             <button className={styles.formBtn} onClick={() => setConfirmDelete(false)}>Cancel</button>
             <button className={styles.deleteBtnConfirm} onClick={handleDelete}>Delete</button>
           </div>
+        </div>
+      )}
+
+      {/* Leave confirmation */}
+      {confirmLeave && (
+        <div className={styles.deleteConfirm}>
+          {isOwner ? (
+            <>
+              <span className={styles.deleteConfirmText}>
+                Choose a new owner before leaving:
+              </span>
+              <div className={styles.memberList}>
+                {otherMembers.map(m => (
+                  <button
+                    key={m.user_id}
+                    className={`${styles.memberItem} ${transferTargetId === m.user_id ? styles.memberItemSelected : ''}`}
+                    onClick={() => setTransferTargetId(m.user_id)}
+                    style={{ cursor: 'pointer', border: 'none', background: transferTargetId === m.user_id ? 'var(--color-surface-2)' : 'none', borderRadius: 4, width: '100%', textAlign: 'left' }}
+                  >
+                    <span className={styles.memberName}>{m.display_name}</span>
+                  </button>
+                ))}
+              </div>
+              <div className={styles.deleteConfirmActions}>
+                <button className={styles.formBtn} onClick={() => { setConfirmLeave(false); setTransferTargetId(null) }}>Cancel</button>
+                <button className={styles.deleteBtnConfirm} onClick={handleLeave} disabled={!transferTargetId}>Leave</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className={styles.deleteConfirmText}>
+                Leave &ldquo;{coterie.name}&rdquo;? You&rsquo;ll keep your objects, but you&rsquo;ll lose the shared intel connection.
+              </span>
+              <div className={styles.deleteConfirmActions}>
+                <button className={styles.formBtn} onClick={() => setConfirmLeave(false)}>Cancel</button>
+                <button className={styles.deleteBtnConfirm} onClick={handleLeave}>Leave</button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -267,7 +342,6 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
         .select('id, name')
         .eq('user_id', user.id)
         .eq('is_active', true)
-        .is('source_coterie_id', null)
         .order('name')
       if (!data) return
       const withCounts: MapOption[] = []
@@ -427,9 +501,10 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
 interface CoteriesFrameProps {
   onClose: () => void
   onOpenUpdates?: () => void
+  onEnterPlacement?: (cluster: PlacementCluster) => void
 }
 
-export default function CoteriesFrame({ onClose, onOpenUpdates }: CoteriesFrameProps) {
+export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement }: CoteriesFrameProps) {
   const { user } = useAuth()
   const [coteries, setCoteries] = useState<CoterieRow[]>([])
   const [invitations, setInvitations] = useState<PendingInvite[]>([])
@@ -595,66 +670,137 @@ export default function CoteriesFrame({ onClose, onOpenUpdates }: CoteriesFrameP
         object_ref_id: objId,
       }))
       await supabase.from('maps_objects').insert(mapObjInserts)
+    }
 
-      // Create objects_overrides for objects the user doesn't already have
-      const { data: existingOverrides } = await supabase
+    // Find which objects the user doesn't already have
+    const { data: existingOverrides } = await supabase
+      .from('objects_overrides')
+      .select('object_id')
+      .eq('user_id', user.id)
+    const existingIds = new Set(existingOverrides?.map(o => o.object_id) ?? [])
+    const newObjectIds = Array.from(allObjectIds).filter(id => !existingIds.has(id))
+
+    if (newObjectIds.length === 0) {
+      // All objects already on landscape, just refresh
+      await loadCoteries()
+      await loadInvitations()
+      document.dispatchEvent(new Event('coterie:refresh-canvas'))
+      return
+    }
+
+    // Get owner positions for relative layout
+    const { data: coterieRow } = await supabase
+      .from('coteries')
+      .select('owner_id')
+      .eq('id', invite.coterie_id)
+      .single()
+
+    let ownerPositions = new Map<string, { x: number; y: number }>()
+    if (coterieRow) {
+      const { data: ownerOverrides } = await supabase
         .from('objects_overrides')
-        .select('object_id')
-        .eq('user_id', user.id)
-      const existingIds = new Set(existingOverrides?.map(o => o.object_id) ?? [])
-
-      // Get positions from the coterie owner to derive relative layout
-      const { data: coterieRow } = await supabase
-        .from('coteries')
-        .select('owner_id')
-        .eq('id', invite.coterie_id)
-        .single()
-
-      let ownerPositions = new Map<string, { x: number; y: number }>()
-      if (coterieRow) {
-        const { data: ownerOverrides } = await supabase
-          .from('objects_overrides')
-          .select('object_id, map_x, map_y')
-          .eq('user_id', coterieRow.owner_id)
-          .in('object_id', Array.from(allObjectIds))
-        if (ownerOverrides) {
-          for (const ov of ownerOverrides) {
-            if (ov.map_x != null && ov.map_y != null) {
-              ownerPositions.set(ov.object_id, { x: ov.map_x, y: ov.map_y })
-            }
+        .select('object_id, map_x, map_y')
+        .eq('user_id', coterieRow.owner_id)
+        .in('object_id', newObjectIds)
+      if (ownerOverrides) {
+        for (const ov of ownerOverrides) {
+          if (ov.map_x != null && ov.map_y != null) {
+            ownerPositions.set(ov.object_id, { x: ov.map_x, y: ov.map_y })
           }
         }
       }
-
-      // Compute centroid of owner positions for relative placement
-      const positions = Array.from(ownerPositions.values())
-      const centroid = positions.length > 0
-        ? { x: positions.reduce((s, p) => s + p.x, 0) / positions.length, y: positions.reduce((s, p) => s + p.y, 0) / positions.length }
-        : { x: 0, y: 0 }
-
-      // Place new objects relative to centroid, anchored at (0, 0) for now
-      // TODO: "accept and place" UX — let user click to set anchor point
-      const newOverrides = Array.from(allObjectIds)
-        .filter(id => !existingIds.has(id))
-        .map(id => {
-          const ownerPos = ownerPositions.get(id)
-          return {
-            user_id: user.id,
-            object_id: id,
-            map_x: ownerPos ? ownerPos.x - centroid.x : 0,
-            map_y: ownerPos ? ownerPos.y - centroid.y : 0,
-          }
-        })
-
-      if (newOverrides.length > 0) {
-        await supabase.from('objects_overrides').insert(newOverrides)
-      }
     }
 
-    // Refresh
-    await loadCoteries()
-    await loadInvitations()
-    document.dispatchEvent(new Event('coterie:refresh-canvas'))
+    // Compute centroid
+    const positions = Array.from(ownerPositions.values())
+    const centroid = positions.length > 0
+      ? { x: positions.reduce((s, p) => s + p.x, 0) / positions.length, y: positions.reduce((s, p) => s + p.y, 0) / positions.length }
+      : { x: 0, y: 0 }
+
+    // Fetch object details for ghost rendering
+    const { data: objectRows } = await supabase
+      .from('objects')
+      .select('id, name, class')
+      .in('id', newObjectIds)
+
+    // Get owner's names (may override canonical names)
+    const { data: ownerNameRows } = coterieRow ? await supabase
+      .from('objects_overrides')
+      .select('object_id, name')
+      .eq('user_id', coterieRow.owner_id)
+      .in('object_id', newObjectIds) : { data: [] }
+    const ownerNames = new Map((ownerNameRows ?? []).map(o => [o.object_id, o.name]))
+
+    // Fetch connections between these objects
+    const { data: connRows } = await supabase
+      .from('connections')
+      .select('object_a_id, object_b_id')
+      .eq('is_active', true)
+      .in('object_a_id', newObjectIds)
+      .in('object_b_id', newObjectIds)
+
+    const items = newObjectIds.map(id => {
+      const obj = objectRows?.find(o => o.id === id)
+      const ownerPos = ownerPositions.get(id)
+      return {
+        objectId: id,
+        name: ownerNames.get(id) ?? obj?.name ?? 'Unknown',
+        class: obj?.class ?? 'person',
+        relativeX: ownerPos ? ownerPos.x - centroid.x : 0,
+        relativeY: ownerPos ? ownerPos.y - centroid.y : 0,
+      }
+    })
+
+    const connections = (connRows ?? []).map(c => ({
+      sourceId: c.object_a_id,
+      targetId: c.object_b_id,
+    }))
+
+    // Enter placement mode
+    if (onEnterPlacement) {
+      onEnterPlacement({
+        label: invite.coterie_name,
+        items,
+        connections,
+        onConfirm: async (anchorX, anchorY) => {
+          const overrides = items.map(item => ({
+            user_id: user.id,
+            object_id: item.objectId,
+            map_x: anchorX + item.relativeX,
+            map_y: anchorY + item.relativeY,
+          }))
+          await supabase.from('objects_overrides').insert(overrides)
+          await loadCoteries()
+          await loadInvitations()
+        },
+        onCancel: () => {
+          // Still create overrides at default positions (invitation already accepted)
+          const overrides = items.map(item => ({
+            user_id: user.id,
+            object_id: item.objectId,
+            map_x: item.relativeX,
+            map_y: item.relativeY,
+          }))
+          supabase.from('objects_overrides').insert(overrides).then(() => {
+            document.dispatchEvent(new Event('coterie:refresh-canvas'))
+          })
+        },
+      })
+    } else {
+      // Fallback: auto-place (no placement mode available)
+      const overrides = items.map(item => ({
+        user_id: user.id,
+        object_id: item.objectId,
+        map_x: item.relativeX,
+        map_y: item.relativeY,
+      }))
+      if (overrides.length > 0) {
+        await supabase.from('objects_overrides').insert(overrides)
+      }
+      await loadCoteries()
+      await loadInvitations()
+      document.dispatchEvent(new Event('coterie:refresh-canvas'))
+    }
   }
 
   const handleDeclineInvite = async (invite: PendingInvite) => {

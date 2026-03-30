@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
 import styles from './CoterieUpdatesFrame.module.css'
+import type { PlacementCluster } from '../types'
 
 interface Dissonance {
   dissonance_type: 'new_object' | 'new_connection' | 'deactivated_connection' | 'career_move' | 'type_change'
@@ -35,9 +36,10 @@ interface Dissonance {
 
 interface CoterieUpdatesFrameProps {
   onClose: () => void
+  onEnterPlacement?: (cluster: PlacementCluster) => void
 }
 
-export default function CoterieUpdatesFrame({ onClose }: CoterieUpdatesFrameProps) {
+export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: CoterieUpdatesFrameProps) {
   const { user } = useAuth()
   const [dissonances, setDissonances] = useState<Dissonance[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -82,6 +84,53 @@ export default function CoterieUpdatesFrame({ onClose }: CoterieUpdatesFrameProp
           .single()
         if (!memberOv) return
 
+        if (onEnterPlacement && d.object_id) {
+          onEnterPlacement({
+            label: memberOv.name ?? d.object_name ?? 'New Object',
+            items: [{
+              objectId: d.object_id,
+              name: memberOv.name ?? d.object_name ?? 'Unknown',
+              class: d.object_class ?? 'person',
+              relativeX: 0,
+              relativeY: 0,
+            }],
+            connections: [],
+            onConfirm: async (anchorX, anchorY) => {
+              await supabase.from('objects_overrides').insert({
+                user_id: user!.id,
+                object_id: d.object_id,
+                name: memberOv.name,
+                title: memberOv.title,
+                status: memberOv.status,
+                map_x: anchorX,
+                map_y: anchorY,
+                event_date: memberOv.event_date,
+                data: memberOv.data,
+              })
+
+              const { data: aggMap } = await supabase
+                .from('maps')
+                .select('id')
+                .eq('user_id', user!.id)
+                .eq('source_coterie_id', d.coterie_id)
+                .single()
+              if (aggMap) {
+                await supabase.from('maps_objects').upsert({
+                  map_id: aggMap.id,
+                  object_ref_id: d.object_id!,
+                })
+              }
+
+              removeDissonance(d)
+            },
+            onCancel: () => {
+              // User cancelled — dissonance stays in the list
+            },
+          })
+          return // Don't remove dissonance yet
+        }
+
+        // Fallback: no placement mode, auto-place at member's position
         await supabase.from('objects_overrides').insert({
           user_id: user.id,
           object_id: d.object_id,

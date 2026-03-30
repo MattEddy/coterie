@@ -977,6 +977,37 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   async function executeDelete() {
     if (!user) return
 
+    // Delete the override FIRST (critical operation — removes from landscape)
+    console.log('DELETE override:', { object_id: object.id, user_id: user.id })
+
+    const { error: deleteError, count } = await supabase
+      .from('objects_overrides')
+      .delete({ count: 'exact' })
+      .eq('object_id', object.id)
+      .eq('user_id', user.id)
+
+    console.log('DELETE result:', { error: deleteError, count })
+
+    if (deleteError) {
+      console.error('Failed to delete objects_overrides:', deleteError)
+      return
+    }
+
+    // Verify the row is actually gone
+    const { data: verify } = await supabase
+      .from('objects_overrides')
+      .select('id')
+      .eq('object_id', object.id)
+      .eq('user_id', user.id)
+    console.log('POST-DELETE verify:', verify?.length ? 'STILL EXISTS!' : 'gone')
+
+    // If user-created, hard-delete the objects row too
+    if (!object.is_canon && object.created_by === user.id) {
+      await supabase.from('objects').delete().eq('id', object.id)
+    }
+
+    // Clean up connections (non-critical — wrapped in try/catch)
+    try {
     // 1. Delete user-created connections involving this object
     await supabase
       .from('connections_overrides')
@@ -1087,17 +1118,8 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         }
       }
     }
-
-    // 4. Delete the override (removes from user's landscape)
-    await supabase
-      .from('objects_overrides')
-      .delete()
-      .eq('object_id', object.id)
-      .eq('user_id', user.id)
-
-    // 5. If user-created, hard-delete the objects row too
-    if (!object.is_canon && object.created_by === user.id) {
-      await supabase.from('objects').delete().eq('id', object.id)
+    } catch (e) {
+      console.error('Connection cleanup error (non-critical):', e)
     }
 
     setDeleteConfirm(null)

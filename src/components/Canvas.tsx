@@ -22,6 +22,8 @@ import MultiSelectPanel from './MultiSelectPanel'
 import CreateObjectForm from './CreateObjectForm'
 import ConnectionRoleForm from './ConnectionRoleForm'
 import RoleEdge from './RoleEdge'
+import PlacementOverlay from './PlacementOverlay'
+import type { PlacementCluster } from '../types'
 import styles from './Canvas.module.css'
 
 const nodeTypes = { object: ObjectNode }
@@ -61,6 +63,9 @@ export interface CanvasRef {
   zoomToNode: (nodeId: string) => void
   clearSelection: () => void
   triggerCreate: () => void
+  getPlacementAnchor: () => { x: number; y: number } | null
+  restoreViewport: () => void
+  fitBoundsAnimated: (bounds: { x: number; y: number; width: number; height: number }) => void
 }
 
 interface CanvasInnerProps {
@@ -68,11 +73,12 @@ interface CanvasInnerProps {
   highlightedObjectIds?: string[] | null
   mapEditMode?: boolean
   onMapEditClick?: (objectId: string) => void
+  placementCluster?: PlacementCluster | null
 }
 
-const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner({ activeMapId, highlightedObjectIds, mapEditMode, onMapEditClick }, ref) {
+const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner({ activeMapId, highlightedObjectIds, mapEditMode, onMapEditClick, placementCluster }, ref) {
   const { user } = useAuth()
-  const { flowToScreenPosition, screenToFlowPosition, setCenter } = useReactFlow()
+  const { flowToScreenPosition, screenToFlowPosition, setCenter, fitBounds, getViewport, setViewport } = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
@@ -84,6 +90,11 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
   const mapEditModeRef = useRef(false)
   mapEditModeRef.current = !!mapEditMode
+
+  // Placement mode state
+  const [ghostAnchor, setGhostAnchor] = useState<{ x: number; y: number } | null>(null)
+  const [isGrabbed, setIsGrabbed] = useState(false)
+  const savedViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
   const onMapEditClickRef = useRef<((objectId: string) => void) | null>(null)
   onMapEditClickRef.current = onMapEditClick || null
   const highlightedIdsRef = useRef<string[] | null>(null)
@@ -110,7 +121,101 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       setSelectedItems([])
       setCreateForm({ screen: screenPos, flow: flowPos })
     },
-  }), [setCenter, screenToFlowPosition])
+    getPlacementAnchor() {
+      return ghostAnchor
+    },
+    restoreViewport() {
+      if (savedViewportRef.current) {
+        setViewport(savedViewportRef.current, { duration: 500 })
+        savedViewportRef.current = null
+      }
+    },
+    fitBoundsAnimated(bounds: { x: number; y: number; width: number; height: number }) {
+      fitBounds(bounds, { padding: 0.2, duration: 800 })
+    },
+  }), [setCenter, screenToFlowPosition, ghostAnchor, setViewport, fitBounds])
+
+  // Placement mode: zoom out and position ghost
+  useEffect(() => {
+    if (!placementCluster) {
+      setGhostAnchor(null)
+      setIsGrabbed(false)
+      return
+    }
+
+    // Save current viewport
+    const vp = getViewport()
+    savedViewportRef.current = vp
+
+    // Compute bounding box of existing nodes
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const node of nodesRef.current) {
+      minX = Math.min(minX, node.position.x)
+      minY = Math.min(minY, node.position.y)
+      maxX = Math.max(maxX, node.position.x + NODE_WIDTH)
+      maxY = Math.max(maxY, node.position.y + NODE_HEIGHT)
+    }
+    if (!isFinite(minX)) { minX = 0; minY = 0; maxX = 400; maxY = 300 }
+
+    // Position ghost to the right with a gap
+    const GAP = 400
+    const anchorX = maxX + GAP
+    const anchorY = (minY + maxY) / 2
+
+    setGhostAnchor({ x: anchorX, y: anchorY })
+    setSelectedItems([])
+    setCreateForm(null)
+    setConnectForm(null)
+
+    // Compute ghost bounding box
+    let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity
+    for (const item of placementCluster.items) {
+      gMinX = Math.min(gMinX, anchorX + item.relativeX)
+      gMinY = Math.min(gMinY, anchorY + item.relativeY)
+      gMaxX = Math.max(gMaxX, anchorX + item.relativeX + NODE_WIDTH)
+      gMaxY = Math.max(gMaxY, anchorY + item.relativeY + NODE_HEIGHT)
+    }
+    if (!isFinite(gMinX)) { gMinX = anchorX; gMinY = anchorY; gMaxX = anchorX + NODE_WIDTH; gMaxY = anchorY + NODE_HEIGHT }
+
+    // Zoom to encompass both landscapes
+    const combinedBounds = {
+      x: Math.min(minX, gMinX) - 100,
+      y: Math.min(minY, gMinY) - 100,
+      width: Math.max(maxX, gMaxX) - Math.min(minX, gMinX) + 200,
+      height: Math.max(maxY, gMaxY) - Math.min(minY, gMinY) + 200,
+    }
+
+    setTimeout(() => fitBounds(combinedBounds, { padding: 0.15, duration: 800 }), 50)
+  }, [placementCluster, fitBounds, getViewport])
+
+  // Placement: mouse move while grabbed
+  useEffect(() => {
+    if (!isGrabbed || !placementCluster) return
+    let rafId: number
+    const handleMove = (e: MouseEvent) => {
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+        setGhostAnchor(flowPos)
+      })
+    }
+    window.addEventListener('mousemove', handleMove)
+    return () => { window.removeEventListener('mousemove', handleMove); cancelAnimationFrame(rafId) }
+  }, [isGrabbed, placementCluster, screenToFlowPosition])
+
+  // Placement: mousedown anywhere drops the ghost
+  useEffect(() => {
+    if (!isGrabbed) return
+    const handleMouseDown = () => setIsGrabbed(false)
+    window.addEventListener('mousedown', handleMouseDown)
+    return () => window.removeEventListener('mousedown', handleMouseDown)
+  }, [isGrabbed])
+
+  const handleGhostMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isGrabbed) return // drop handled by window listener
+    e.stopPropagation()
+    setIsGrabbed(true)
+  }, [isGrabbed])
 
   const [createForm, setCreateForm] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
   const [connectForm, setConnectForm] = useState<{
@@ -259,6 +364,13 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
 
     const objectIds = filteredObjects.map(o => o.id)
 
+    // Skip connection loading when there are no objects (empty IN clause is invalid)
+    if (objectIds.length === 0) {
+      connectionsRef.current = []
+      rebuildEdges()
+      return
+    }
+
     // Load canonical connections
     const { data: canonConns } = await supabase
       .from('connections')
@@ -369,6 +481,8 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   // Click-based selection: normal click replaces, Cmd/Shift-click toggles
   const handleNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
+      if (placementCluster) return
+
       // Map edit mode: toggle object membership instead of selecting
       if (mapEditModeRef.current && onMapEditClickRef.current) {
         onMapEditClickRef.current(node.id)
@@ -422,53 +536,41 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   // so ObjectNode's `selected` prop reflects our custom multi-selection
   useEffect(() => {
     const selectedIds = new Set(selectedItems.map(i => i.nodeId))
-    setNodes(current => {
-      let changed = false
-      const next = current.map(n => {
-        const shouldBeSelected = selectedIds.has(n.id)
-        if (n.selected !== shouldBeSelected) {
-          changed = true
-          return { ...n, selected: shouldBeSelected }
-        }
-        return n
-      })
-      return changed ? next : current
-    })
+    // Check via ref first to avoid calling setNodes when nothing changed (prevents render loop)
+    const needsSync = nodesRef.current.some(n => n.selected !== selectedIds.has(n.id))
+    if (!needsSync) return
+    setNodes(current => current.map(n => ({
+      ...n,
+      selected: selectedIds.has(n.id),
+    })))
   }, [selectedItems, setNodes])
 
   // Sync map-highlight state to node data
   useEffect(() => {
     const highlightSet = highlightedObjectIds ? new Set(highlightedObjectIds) : null
-    setNodes(current => {
-      let changed = false
-      const next = current.map(n => {
-        const shouldHighlight = highlightSet ? highlightSet.has(n.id) : false
-        const data = n.data as unknown as ObjectNodeData
-        if (data.mapHighlighted !== shouldHighlight) {
-          changed = true
-          return { ...n, data: { ...n.data, mapHighlighted: shouldHighlight } }
-        }
-        return n
-      })
-      return changed ? next : current
+    const needsSync = nodesRef.current.some(n => {
+      const data = n.data as unknown as ObjectNodeData
+      const shouldHighlight = highlightSet ? highlightSet.has(n.id) : false
+      return data.mapHighlighted !== shouldHighlight
     })
+    if (!needsSync) return
+    setNodes(current => current.map(n => {
+      const shouldHighlight = highlightSet ? highlightSet.has(n.id) : false
+      return { ...n, data: { ...n.data, mapHighlighted: shouldHighlight } }
+    }))
   }, [highlightedObjectIds, setNodes])
 
   // Clear selection and sync edit mode flag to nodes
   useEffect(() => {
     if (mapEditMode) setSelectedItems([])
-    setNodes(current => {
-      let changed = false
-      const next = current.map(n => {
-        const data = n.data as unknown as ObjectNodeData
-        if (data.mapEditMode !== !!mapEditMode) {
-          changed = true
-          return { ...n, data: { ...n.data, mapEditMode: !!mapEditMode } }
-        }
-        return n
-      })
-      return changed ? next : current
+    const needsSync = nodesRef.current.some(n => {
+      const data = n.data as unknown as ObjectNodeData
+      return data.mapEditMode !== !!mapEditMode
     })
+    if (!needsSync) return
+    setNodes(current => current.map(n => ({
+      ...n, data: { ...n.data, mapEditMode: !!mapEditMode }
+    })))
   }, [mapEditMode, setNodes])
 
   // Double-click detection for edges
@@ -536,6 +638,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   const lastPaneClickRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 })
 
   const handlePaneClick = useCallback((event: React.MouseEvent) => {
+    if (placementCluster) return
     const now = Date.now()
     const last = lastPaneClickRef.current
     const dx = Math.abs(event.clientX - last.x)
@@ -867,6 +970,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         minZoom={0.1}
         maxZoom={2}
         zoomOnDoubleClick={false}
+        deleteKeyCode={null}
         connectionLineType={ConnectionLineType.Straight}
         panOnScroll
         panOnDrag={[1]}
@@ -881,6 +985,16 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--color-dots)" />
       </ReactFlow>
+
+      {/* Placement mode ghost overlay */}
+      {placementCluster && ghostAnchor && (
+        <PlacementOverlay
+          cluster={placementCluster}
+          anchor={ghostAnchor}
+          isGrabbed={isGrabbed}
+          onGhostMouseDown={handleGhostMouseDown}
+        />
+      )}
 
       {/* Level 1: Single selection */}
       {selectedItems.length === 1 && (
@@ -957,12 +1071,13 @@ interface CanvasProps {
   highlightedObjectIds?: string[] | null
   mapEditMode?: boolean
   onMapEditClick?: (objectId: string) => void
+  placementCluster?: PlacementCluster | null
 }
 
-const Canvas = forwardRef<CanvasRef, CanvasProps>(function Canvas({ activeMapId, highlightedObjectIds, mapEditMode, onMapEditClick }, ref) {
+const Canvas = forwardRef<CanvasRef, CanvasProps>(function Canvas({ activeMapId, highlightedObjectIds, mapEditMode, onMapEditClick, placementCluster }, ref) {
   return (
     <ReactFlowProvider>
-      <CanvasInner ref={ref} activeMapId={activeMapId} highlightedObjectIds={highlightedObjectIds} mapEditMode={mapEditMode} onMapEditClick={onMapEditClick} />
+      <CanvasInner ref={ref} activeMapId={activeMapId} highlightedObjectIds={highlightedObjectIds} mapEditMode={mapEditMode} onMapEditClick={onMapEditClick} placementCluster={placementCluster} />
     </ReactFlowProvider>
   )
 })

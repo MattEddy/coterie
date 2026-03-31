@@ -203,19 +203,19 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
     return () => { window.removeEventListener('mousemove', handleMove); cancelAnimationFrame(rafId) }
   }, [isGrabbed, placementCluster, screenToFlowPosition])
 
-  // Placement: mousedown anywhere drops the ghost
+  // Placement: mouseup anywhere drops the ghost
   useEffect(() => {
     if (!isGrabbed) return
-    const handleMouseDown = () => setIsGrabbed(false)
-    window.addEventListener('mousedown', handleMouseDown)
-    return () => window.removeEventListener('mousedown', handleMouseDown)
+    const handleMouseUp = () => setIsGrabbed(false)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => window.removeEventListener('mouseup', handleMouseUp)
   }, [isGrabbed])
 
   const handleGhostMouseDown = useCallback((e: React.MouseEvent) => {
-    if (isGrabbed) return // drop handled by window listener
     e.stopPropagation()
+    e.preventDefault()
     setIsGrabbed(true)
-  }, [isGrabbed])
+  }, [])
 
   const [createForm, setCreateForm] = useState<{ screen: { x: number; y: number }; flow: { x: number; y: number } } | null>(null)
   const [connectForm, setConnectForm] = useState<{
@@ -274,7 +274,8 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         )
       }
     } else {
-      // Clear any highlighted edges
+      // Skip if an edge click just set the highlight
+      if (edgeClickedRef.current) return
       setEdges(current =>
         current.map(e =>
           e.data?.highlighted
@@ -482,6 +483,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   const handleNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
       if (placementCluster) return
+      edgeClickedRef.current = false
 
       // Map edit mode: toggle object membership instead of selecting
       if (mapEditModeRef.current && onMapEditClickRef.current) {
@@ -575,6 +577,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
 
   // Double-click detection for edges
   const lastEdgeClickRef = useRef<{ time: number; edgeId: string }>({ time: 0, edgeId: '' })
+  const edgeClickedRef = useRef(false)
 
   // Handle edge selection — show label + turn white when selected
   const handleEdgeClick = useCallback(
@@ -613,6 +616,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       }
 
       lastEdgeClickRef.current = { time: now, edgeId: edge.id }
+      edgeClickedRef.current = true
       setSelectedItems([])
       setEdges(current =>
         current.map(e => {
@@ -639,6 +643,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
 
   const handlePaneClick = useCallback((event: React.MouseEvent) => {
     if (placementCluster) return
+    edgeClickedRef.current = false
     const now = Date.now()
     const last = lastPaneClickRef.current
     const dx = Math.abs(event.clientX - last.x)

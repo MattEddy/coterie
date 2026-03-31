@@ -5,35 +5,41 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-03-30
+**Date:** 2026-03-31
 **Branch:** main
 
 ### Narrative
 
-Strategy session — no code changes. Explored encryption options for contact data, landed on a tier structure with encryption details committed to CLAUDE.md.
+Bug fix and UX polish session focused on coterie sharing, placement flow, and edge selection. All coterie sharing tested and confirmed working end-to-end.
 
-**Encryption brainstorm.** Matt asked what encryption options Coterie could offer for contact privacy. Walked through the full spectrum: pgcrypto column encryption, server-side envelope encryption, client-side E2EE with user-held keys, and coterie-scoped group keys. Discussed tradeoffs — E2EE breaks server-side search, complicates the contact adopt flow, and introduces key recovery as a UX problem.
+**Encryption strategy jam (carried over from previous session).** Tier roadmap with encryption details already committed to CLAUDE.md: Pro (standard), Secure (E2EE contacts add-on), Studio (AI), Free (local Tauri app).
 
-**Industry benchmarks.** Compared Google Contacts, Apple iCloud Contacts, Outlook, and Salesforce — all use AES-256 at rest + TLS in transit, none offer E2EE. Even Apple's Advanced Data Protection explicitly excludes Contacts. Matt asked about Proton — Proton Contacts does E2EE on phone/address/notes but leaves name and email unencrypted (needed for mail routing).
+**Edge selection bug.** Clicking a relationship line did nothing — the highlight was set by `handleEdgeClick` but immediately cleared by the `useEffect` reacting to `setSelectedItems([])`. Added `edgeClickedRef` guard. First version had a second bug: the ref got consumed on the first effect run, but `useOnSelectionChange` fired asynchronously triggering a second run. Fix: don't reset the ref in the effect — only clear it in `handleNodeClick` and `handlePaneClick`.
 
-**Key insight: Coterie can exceed Proton.** Since canon objects never store contact info (CHECK constraint), and contact data only lives in `objects_overrides.data.contacts`, Coterie can E2EE ALL personal reachability (including email) while leaving identity fields plaintext. Proton can't do this because they need email addresses to route mail.
+**Map objects showing "Unknown" for user-created objects.** `MapsFrame.loadMapObjects` queried `objects` directly (where user-created rows have `name = NULL`). Switched to query through `user_objects` view which coalesces overrides — consistent with rest of app.
 
-**Tier structure crystallized:**
-- **Pro** (current work): standard encryption (AES-256 at rest via Supabase/AWS, TLS, RLS). Matches industry standard.
-- **Secure** (paid add-on): E2EE on `data.contacts` only. Per-user keypair + coterie group keys for shared contacts. Exceeds Proton.
-- **Studio**: Pro + AI intelligence features.
-- **Free** (later, marketing funnel): standalone local app (Tauri + React + SQLite), no auth/server. PowerSync for Pro<->local sync.
+**Coterie sharing: blank shapes + spurious dissonances.** The acceptance flow in `CoteriesFrame.handleAcceptInvite` only wrote `map_x`/`map_y` to the recipient's `objects_overrides`. User-created objects (skeleton `objects` row) rendered as blank shapes because `COALESCE(NULL, NULL) = NULL`. Fix: fetch owner's overrides (name, title, status) and copy them into recipient's overrides on insert. Also: owner's user-created connections (`connections_overrides` with `connection_id IS NULL`) weren't being copied, causing 8 spurious `new_connection` dissonances. Fix: fetch and duplicate those connection overrides for the recipient.
 
-**Build order confirmed:** Pro first (freight train), Secure next (natural extension), Free later (marketing tool). The Free tier's local-first architecture gets easier the longer it waits.
+**Ghost placement UX overhaul.**
+- Visual: changed from dim colored silhouettes with text labels to white outline shapes with SVG glow filter (`feGaussianBlur` + `feMerge`). No fill, no text — just ghostline outlines.
+- Interaction: replaced click-to-grab/click-to-release with standard Mac drag (mousedown to grab, mousemove to drag, mouseup to release).
+- PlacementBar text: "Drag to place **Coterie Name** objects." for multiple items, "Drag to place **Object Name**." for single items. Added `itemCount` prop.
 
 ### Files Modified
-- `CLAUDE.md` — updated Tech Stack with 4-tier roadmap + encryption details; reorganized Planned into "Planned (Pro)" and "Future Tiers"
+- `src/components/Canvas.tsx` — `edgeClickedRef` for edge selection race fix, cleared in `handleNodeClick`/`handlePaneClick`; placement drag changed from mousedown-to-drop to mouseup-to-drop
+- `src/components/RoleEdge.tsx` — unchanged (already correct)
+- `src/components/MapsFrame.tsx` — `loadMapObjects` switched from `objects` table to `user_objects` view
+- `src/components/CoteriesFrame.tsx` — acceptance flow copies owner's name/title/status into recipient overrides; fetches and copies owner's user-created connections; ghost preview includes user-created connections
+- `src/components/PlacementOverlay.tsx` — white outline ghost shapes with glow filter, no text labels
+- `src/components/PlacementBar.tsx` — dynamic text based on `itemCount` prop
+- `src/pages/Landscape.tsx` — passes `itemCount` to PlacementBar
+- `CLAUDE.md` — edge click gotcha, coterie acceptance data copy gotcha, accept-and-place marked done
 
 ### Open Items / Next Steps
-1. **"Accept and place" UX** — click canvas to position accepted objects instead of auto-placing at member's coordinates
-2. **Non-user invitation flow** — email sending, landing page with interactive demo, signup/payment. Needs deployment infrastructure.
-3. **Swap polling for Broadcast/Realtime** — when deploying to Supabase Cloud where the Realtime pipeline works properly
-4. **DetailPanel -> Frame migration** — make detail panels draggable
-5. **Light mode polish** — may need tuning
+1. **DetailPanel -> Frame migration** — make detail panels draggable
+2. **Light mode polish** — may need tuning
+3. **Map packages (store)** — browse + stamp placement
+4. **Non-user invitation flow** — email sending, landing page with interactive demo, signup/payment
+5. **Swap polling for Broadcast/Realtime** — when deploying to Supabase Cloud
 6. **RLS policies** — real policies before deploy (permissive placeholders currently on 3 tables)
-7. **Delete AccountFrame files** — now unused after account menu migration, left in place for cleanup
+7. **Delete AccountFrame files** — now unused after account menu migration

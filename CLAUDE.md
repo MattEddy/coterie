@@ -152,6 +152,12 @@ Dark Reader injects `filter` creating new containing block. Fix: `<meta name="da
 ### Lucide `Map` Icon Shadows Native `Map`
 Import as `{ Map as MapIcon }`.
 
+### React Flow Edge Click + `useOnSelectionChange` Race
+`onEdgeClick` → `setSelectedItems([])` triggers the selection-change effect which clears edge highlights. `useOnSelectionChange` fires asynchronously after the initial render, so a boolean ref guard gets consumed too early. Fix: use a persistent `edgeClickedRef` that stays true until explicitly cleared in `handleNodeClick` or `handlePaneClick` — don't reset it inside the effect.
+
+### Coterie Acceptance Must Copy Override Data
+When accepting a shared map, the recipient's `objects_overrides` must include `name`, `title`, `status` from the owner's overrides — not just `map_x`/`map_y`. User-created objects have `objects.name = NULL` (skeleton row), so without copying, they render as blank shapes. Same for `connections_overrides`: owner's user-created connections (`connection_id IS NULL`) must be duplicated for the recipient to avoid spurious `new_connection` dissonances.
+
 ## UI Architecture
 
 ### Frame System
@@ -187,7 +193,7 @@ Deploy: Supabase Cloud (`supabase db push`) + Vercel.
 Full build history: `docs/IMPLEMENTATION_STATUS.md`
 
 ### Next Up
-- [ ] "Accept and place" UX — click canvas to position accepted objects
+- [x] "Accept and place" UX — ghost placement with drag interaction, tested and working
 - [ ] DetailPanel migration to Frame component (draggable)
 - [ ] Light mode polish
 - [ ] Map packages (store) — browse + stamp placement

@@ -32,7 +32,12 @@ Landscape coordinates are always per-user (in overrides), never canonical.
 - **Dev**: Supabase local (Docker), single migration file during early dev
 - **Schema**: `supabase/migrations/20260203000000_pro_schema.sql` (edit directly, `supabase db reset` to rebuild)
 
-Three tiers planned: **Pro** (in development), Free (carved from Pro), Studio (Pro + AI). Building Pro first.
+Four tiers planned — building in order:
+
+1. **Pro** (in development): Web app, full features (coteries, maps, sharing). Standard encryption (AES-256 at rest via AWS/Supabase, TLS in transit, RLS access control) — matches Google/Apple/Outlook security model.
+2. **Secure** (Pro add-on): E2EE on `objects_overrides.data.contacts` only. Client-side encryption with per-user keypair + coterie group keys for shared contacts. Exceeds Proton (they leave email unencrypted; we encrypt ALL personal reachability). Canon layer unaffected — contact info is structurally excluded by CHECK constraint, so E2EE has zero impact on platform features. Identity fields (name, title, types) remain plaintext.
+3. **Studio** (Pro + AI): AI-powered contact intelligence, classification, etc.
+4. **Free** (later, marketing funnel): Standalone local app (Tauri + React + SQLite). No auth, no server, no coteries — just the landscape tool. Upgrade trigger = sharing/backup/sync. Sync via PowerSync (Supabase ↔ local SQLite). Same React UI wrapped in Tauri.
 
 ## Data Model (Graph-based)
 
@@ -187,13 +192,16 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [ ] Light mode polish
 - [ ] Map packages (store) — browse + stamp placement
 
-### Planned
+### Planned (Pro)
 - [ ] Operator dedup tooling
 - [ ] Canon check / diff-merge UI
 - [ ] RLS policies (before deploy)
-- [ ] Free tier (carved from Pro)
-- [ ] AI contact intelligence (see `docs/STUDIO_CONTACT_INTELLIGENCE.md`)
 - [ ] Contact sync (Google/Microsoft APIs)
+
+### Future Tiers
+- [ ] **Secure**: E2EE contacts — per-user keypair (OpenPGP/ECC), coterie group keys, client-side encrypt/decrypt of `data.contacts` field
+- [ ] **Studio**: AI contact intelligence (see `docs/STUDIO_CONTACT_INTELLIGENCE.md`)
+- [ ] **Free**: Tauri desktop app, local SQLite, PowerSync for Pro↔local sync
 
 ## Reference
 

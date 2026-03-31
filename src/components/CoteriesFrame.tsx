@@ -723,15 +723,15 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
       .select('id, name, class')
       .in('id', newObjectIds)
 
-    // Get owner's names (may override canonical names)
-    const { data: ownerNameRows } = coterieRow ? await supabase
+    // Get owner's overrides (name, title, status) for user-created objects
+    const { data: ownerOverrideRows } = coterieRow ? await supabase
       .from('objects_overrides')
-      .select('object_id, name')
+      .select('object_id, name, title, status')
       .eq('user_id', coterieRow.owner_id)
       .in('object_id', newObjectIds) : { data: [] }
-    const ownerNames = new Map((ownerNameRows ?? []).map(o => [o.object_id, o.name]))
+    const ownerOverrides = new Map((ownerOverrideRows ?? []).map(o => [o.object_id, o]))
 
-    // Fetch connections between these objects
+    // Fetch canonical connections between these objects
     const { data: connRows } = await supabase
       .from('connections')
       .select('object_a_id, object_b_id')
@@ -739,22 +739,47 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
       .in('object_a_id', newObjectIds)
       .in('object_b_id', newObjectIds)
 
+    // Fetch owner's user-created connections between these objects
+    const { data: ownerConnRows } = coterieRow ? await supabase
+      .from('connections_overrides')
+      .select('id, object_a_id, object_b_id, role_a, role_b')
+      .eq('user_id', coterieRow.owner_id)
+      .is('connection_id', null)
+      .eq('deactivated', false)
+      .in('object_a_id', newObjectIds)
+      .in('object_b_id', newObjectIds) : { data: [] }
+    const ownerUserConns = ownerConnRows ?? []
+
     const items = newObjectIds.map(id => {
       const obj = objectRows?.find(o => o.id === id)
       const ownerPos = ownerPositions.get(id)
       return {
         objectId: id,
-        name: ownerNames.get(id) ?? obj?.name ?? 'Unknown',
+        name: ownerOverrides.get(id)?.name ?? obj?.name ?? 'Unknown',
         class: obj?.class ?? 'person',
         relativeX: ownerPos ? ownerPos.x - centroid.x : 0,
         relativeY: ownerPos ? ownerPos.y - centroid.y : 0,
       }
     })
 
-    const connections = (connRows ?? []).map(c => ({
-      sourceId: c.object_a_id,
-      targetId: c.object_b_id,
-    }))
+    const connections = [
+      ...(connRows ?? []).map(c => ({ sourceId: c.object_a_id, targetId: c.object_b_id })),
+      ...ownerUserConns.map(c => ({ sourceId: c.object_a_id, targetId: c.object_b_id })),
+    ]
+
+    // Copy owner's user-created connections for the recipient
+    const insertUserConnections = async () => {
+      if (ownerUserConns.length === 0) return
+      const connOverrides = ownerUserConns.map(c => ({
+        user_id: user.id,
+        object_a_id: c.object_a_id,
+        object_b_id: c.object_b_id,
+        role_a: c.role_a,
+        role_b: c.role_b,
+        deactivated: false,
+      }))
+      await supabase.from('connections_overrides').insert(connOverrides)
+    }
 
     // Enter placement mode
     if (onEnterPlacement) {
@@ -763,40 +788,61 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
         items,
         connections,
         onConfirm: async (anchorX, anchorY) => {
-          const overrides = items.map(item => ({
-            user_id: user.id,
-            object_id: item.objectId,
-            map_x: anchorX + item.relativeX,
-            map_y: anchorY + item.relativeY,
-          }))
+          const overrides = items.map(item => {
+            const oo = ownerOverrides.get(item.objectId)
+            return {
+              user_id: user.id,
+              object_id: item.objectId,
+              map_x: anchorX + item.relativeX,
+              map_y: anchorY + item.relativeY,
+              ...(oo?.name && { name: oo.name }),
+              ...(oo?.title && { title: oo.title }),
+              ...(oo?.status && { status: oo.status }),
+            }
+          })
           await supabase.from('objects_overrides').insert(overrides)
+          await insertUserConnections()
           await loadCoteries()
           await loadInvitations()
         },
         onCancel: () => {
           // Still create overrides at default positions (invitation already accepted)
-          const overrides = items.map(item => ({
-            user_id: user.id,
-            object_id: item.objectId,
-            map_x: item.relativeX,
-            map_y: item.relativeY,
-          }))
-          supabase.from('objects_overrides').insert(overrides).then(() => {
+          const overrides = items.map(item => {
+            const oo = ownerOverrides.get(item.objectId)
+            return {
+              user_id: user.id,
+              object_id: item.objectId,
+              map_x: item.relativeX,
+              map_y: item.relativeY,
+              ...(oo?.name && { name: oo.name }),
+              ...(oo?.title && { title: oo.title }),
+              ...(oo?.status && { status: oo.status }),
+            }
+          })
+          supabase.from('objects_overrides').insert(overrides).then(async () => {
+            await insertUserConnections()
             document.dispatchEvent(new Event('coterie:refresh-canvas'))
           })
         },
       })
     } else {
       // Fallback: auto-place (no placement mode available)
-      const overrides = items.map(item => ({
-        user_id: user.id,
-        object_id: item.objectId,
-        map_x: item.relativeX,
-        map_y: item.relativeY,
-      }))
+      const overrides = items.map(item => {
+        const oo = ownerOverrides.get(item.objectId)
+        return {
+          user_id: user.id,
+          object_id: item.objectId,
+          map_x: item.relativeX,
+          map_y: item.relativeY,
+          ...(oo?.name && { name: oo.name }),
+          ...(oo?.title && { title: oo.title }),
+          ...(oo?.status && { status: oo.status }),
+        }
+      })
       if (overrides.length > 0) {
         await supabase.from('objects_overrides').insert(overrides)
       }
+      await insertUserConnections()
       await loadCoteries()
       await loadInvitations()
       document.dispatchEvent(new Event('coterie:refresh-canvas'))

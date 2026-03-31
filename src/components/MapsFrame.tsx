@@ -61,18 +61,27 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   const [shareEmailInput, setShareEmailInput] = useState('')
 
   const loadMapObjects = useCallback(async (mapId: string) => {
-    const { data } = await supabase
+    if (!user) return
+    const { data: moData } = await supabase
       .from('maps_objects')
-      .select('object_ref_id, objects(name, class, title)')
+      .select('object_ref_id')
       .eq('map_id', mapId)
+    if (!moData) return
+    const ids = moData.map(d => d.object_ref_id)
+    if (ids.length === 0) { setMapObjects([]); return }
+    const { data } = await supabase
+      .from('user_objects')
+      .select('id, name, class, title')
+      .eq('user_id', user.id)
+      .in('id', ids)
     if (!data) return
     setMapObjects(data.map((d: any) => ({
-      object_ref_id: d.object_ref_id,
-      name: d.objects?.name ?? 'Unknown',
-      class: d.objects?.class ?? 'org',
-      title: d.objects?.title ?? null,
+      object_ref_id: d.id,
+      name: d.name ?? 'Unknown',
+      class: d.class ?? 'org',
+      title: d.title ?? null,
     })))
-  }, [])
+  }, [user])
 
   // Reset on map change
   useEffect(() => {

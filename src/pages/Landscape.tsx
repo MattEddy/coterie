@@ -146,6 +146,7 @@ export default function Landscape() {
       {placementCluster && (
         <PlacementBar
           label={placementCluster.label}
+          itemCount={placementCluster.items.length}
           onPlace={handlePlace}
           onCancel={handlePlaceCancel}
         />

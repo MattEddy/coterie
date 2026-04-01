@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
-import { Map as MapIcon, Plus, Check, Pencil, Trash2, X, Search, Focus, MousePointerClick, ChevronRight, Share2 } from 'lucide-react'
+import { Map as MapIcon, Plus, Check, Pencil, Trash2, X, Search, Focus, MousePointerClick, ChevronRight, Share2, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
@@ -12,6 +12,8 @@ interface MapRow {
   description: string | null
   auto_add: boolean
   object_count: number
+  source_coterie_id: string | null
+  coterie_name: string | null
 }
 
 interface MapObject {
@@ -48,6 +50,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   const [editDesc, setEditDesc] = useState('')
   const [editAutoAdd, setEditAutoAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [coterieDeleteBlock, setCoterieDeleteBlock] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
@@ -143,6 +146,8 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     }
 
     setSharing(false)
+    // Notify maps list to refresh (coterie linkage changed)
+    document.dispatchEvent(new CustomEvent('maps:refresh'))
   }
 
   const startEdit = () => {
@@ -230,7 +235,18 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     <>
       <Tooltip text="Share as Coterie"><button className={styles.iconBtn} onClick={startShare}><Share2 size={14} /></button></Tooltip>
       <Tooltip text="Edit map"><button className={styles.iconBtn} onClick={startEdit}><Pencil size={14} /></button></Tooltip>
-      <Tooltip text="Delete map"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmDelete(true)}><Trash2 size={14} /></button></Tooltip>
+      <Tooltip text="Delete map"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={async () => {
+        if (map.source_coterie_id) {
+          const { data: coterie } = await supabase
+            .from('coteries')
+            .select('name')
+            .eq('id', map.source_coterie_id)
+            .single()
+          setCoterieDeleteBlock(coterie?.name || 'a coterie')
+        } else {
+          setConfirmDelete(true)
+        }
+      }}><Trash2 size={14} /></button></Tooltip>
     </>
   )
 
@@ -283,6 +299,22 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
         ) : undefined
       }
     >
+      {/* Coterie linkage banner */}
+      {map.coterie_name && (
+        <div className={styles.coterieBanner}>
+          <Users size={12} className={styles.coterieBannerIcon} />
+          <span>
+            {coterieDeleteBlock
+              ? <>Leave the <strong>{map.coterie_name}</strong> coterie before deleting this map.</>
+              : <>Linked to <strong>{map.coterie_name}</strong></>
+            }
+          </span>
+          {coterieDeleteBlock && (
+            <button className={styles.formBtn} onClick={() => setCoterieDeleteBlock(null)}>OK</button>
+          )}
+        </div>
+      )}
+
       {/* Delete confirmation */}
       {confirmDelete && (
         <div className={styles.deleteConfirm}>
@@ -450,7 +482,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     if (!user) return
     const { data } = await supabase
       .from('maps')
-      .select('id, name, description, auto_add')
+      .select('id, name, description, auto_add, source_coterie_id')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .order('name')
@@ -463,24 +495,65 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
         .eq('map_id', m.id)
       counts.set(m.id, count ?? 0)
     }
+
+    // Resolve coterie names for linked maps (recipient: source_coterie_id, sender: coteries_maps)
+    const coterieNames = new Map<string, string>()
+    const recipientIds = data.filter(m => m.source_coterie_id).map(m => m.source_coterie_id!)
+    if (recipientIds.length > 0) {
+      const { data: coteries } = await supabase
+        .from('coteries')
+        .select('id, name')
+        .in('id', recipientIds)
+      for (const c of coteries || []) {
+        for (const m of data) {
+          if (m.source_coterie_id === c.id) coterieNames.set(m.id, c.name)
+        }
+      }
+    }
+    // Sender maps linked via coteries_maps
+    const mapIds = data.map(m => m.id)
+    const { data: cmRows } = await supabase
+      .from('coteries_maps')
+      .select('map_id, coterie_id')
+      .in('map_id', mapIds)
+    if (cmRows?.length) {
+      const coterieIds = [...new Set(cmRows.map(r => r.coterie_id))]
+      const { data: coteries } = await supabase
+        .from('coteries')
+        .select('id, name')
+        .in('id', coterieIds)
+      const nameMap = new Map((coteries || []).map(c => [c.id, c.name]))
+      for (const r of cmRows) {
+        if (!coterieNames.has(r.map_id)) {
+          coterieNames.set(r.map_id, nameMap.get(r.coterie_id) || 'a coterie')
+        }
+      }
+    }
+
     setMaps(data.map(m => ({
       ...m,
       object_count: counts.get(m.id) ?? 0,
+      coterie_name: coterieNames.get(m.id) ?? null,
     })))
   }, [user])
 
   useEffect(() => { loadMaps() }, [loadMaps])
 
-  // Listen for map creation from MultiSelectPanel
+  // Listen for map creation from MultiSelectPanel + coterie linkage changes
   useEffect(() => {
-    const handler = (e: Event) => {
+    const handleCreated = (e: Event) => {
       const mapId = (e as CustomEvent).detail?.mapId
       loadMaps().then(() => {
         if (mapId) setSelectedMapId(mapId)
       })
     }
-    document.addEventListener('coterie:map-created', handler)
-    return () => document.removeEventListener('coterie:map-created', handler)
+    const handleRefresh = () => loadMaps()
+    document.addEventListener('coterie:map-created', handleCreated)
+    document.addEventListener('maps:refresh', handleRefresh)
+    return () => {
+      document.removeEventListener('coterie:map-created', handleCreated)
+      document.removeEventListener('maps:refresh', handleRefresh)
+    }
   }, [loadMaps])
 
   // Load map object IDs when selection changes
@@ -605,6 +678,10 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     const newId = selectedMapId === map.id ? null : map.id
     setSelectedMapId(newId)
     if (newId) onMapSelected?.()
+    // If a detail card is already open, switch to the clicked map
+    if (openedMap && newId && newId !== openedMap.id) {
+      setOpenedMap(map)
+    }
   }
 
   const handleMapDoubleClick = (map: MapRow) => {
@@ -618,7 +695,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     const { data, error } = await supabase
       .from('maps')
       .insert({ name: createName.trim(), description: createDesc.trim() || null, user_id: user.id })
-      .select('id, name, description, auto_add')
+      .select('id, name, description, auto_add, source_coterie_id')
       .single()
     if (error) { console.error('Map create error:', error); return }
     if (data) {
@@ -626,7 +703,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
       setCreateName('')
       setCreateDesc('')
       await loadMaps()
-      const newMap = { ...data, object_count: 0 }
+      const newMap = { ...data, object_count: 0, coterie_name: null }
       computeDetailPosition()
       setOpenedMap(newMap)
       setSelectedMapId(newMap.id)
@@ -637,6 +714,16 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     setOpenedMap(updated)
     setMaps(prev => prev.map(m => m.id === updated.id ? updated : m))
   }
+
+  // Sync openedMap when maps list reloads (e.g., coterie linkage changes)
+  useEffect(() => {
+    if (openedMap) {
+      const fresh = maps.find(m => m.id === openedMap.id)
+      if (fresh && fresh.coterie_name !== openedMap.coterie_name) {
+        setOpenedMap(prev => prev ? { ...prev, coterie_name: fresh.coterie_name } : prev)
+      }
+    }
+  }, [maps])
 
   const handleMapDeleted = (mapId: string) => {
     setOpenedMap(null)
@@ -662,6 +749,11 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
                   <span className={styles.mapName}>{m.name}</span>
                   <span className={styles.mapCount}>
                     {m.object_count} {m.object_count === 1 ? 'object' : 'objects'}
+                    {m.coterie_name && (
+                      <Tooltip text={`Linked to ${m.coterie_name}`}>
+                        <Users size={13} className={styles.coterieBadge} />
+                      </Tooltip>
+                    )}
                   </span>
                 </div>
                 {selectedMapId === m.id ? (

@@ -14,6 +14,7 @@ export default function NotificationBoxes({ onOpenCoteries, onOpenUpdates }: Not
   const [inviteCount, setInviteCount] = useState(0)
   const [dissonanceCount, setDissonanceCount] = useState(0)
   const loadCountsRef = useRef<() => Promise<void>>()
+  const prevInviteCountRef = useRef(0)
 
   const loadCounts = useCallback(async () => {
     if (!user) return
@@ -25,7 +26,12 @@ export default function NotificationBoxes({ onOpenCoteries, onOpenUpdates }: Not
         .select('*', { count: 'exact', head: true })
         .eq('email', authUser.email)
         .eq('status', 'pending')
-      setInviteCount(count ?? 0)
+      const newCount = count ?? 0
+      if (newCount !== prevInviteCountRef.current) {
+        prevInviteCountRef.current = newCount
+        document.dispatchEvent(new CustomEvent('coteries:refresh'))
+      }
+      setInviteCount(newCount)
     }
 
     const { data } = await supabase.rpc('get_dissonances', { p_user_id: user.id })

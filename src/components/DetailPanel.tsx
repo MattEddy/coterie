@@ -1,11 +1,14 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
 import { useReactFlow, useStore, useViewport } from '@xyflow/react'
-import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, CalendarCheck, Plus, ChevronDown, ChevronRight, Search, Link, Trash2 } from 'lucide-react'
+import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, CalendarCheck, Plus, ChevronDown, ChevronRight, Link, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { getEffectiveConnections, otherObjectId } from '../lib/connections'
 import { useAuth } from '../contexts/AuthContext'
 import type { ObjectNodeData, ContactEntry } from './ObjectNode'
 import type { NodeRect } from '../types'
 import Tooltip from './Tooltip'
+import TagInput from './TagInput'
+import ObjectSearch from './ObjectSearch'
 import styles from './DetailPanel.module.css'
 
 // Must match ObjectNode.module.css .card width/height and Canvas.tsx constants
@@ -49,6 +52,11 @@ const contactTypes = ['phone', 'email', 'url', 'address', 'social']
 
 const emptyContact = (): ContactEntry => ({ type: 'phone', label: '', value: '' })
 
+function todayDateString(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 
 interface LinkedObject {
   id: string
@@ -67,290 +75,12 @@ interface ConnectedItem {
   linkedObjects?: LinkedObject[]
 }
 
-// --- Tag Input Component ---
-
-interface TagInputProps {
-  tags: string[]
-  onChange: (tags: string[]) => void
-  objectClass: string
-  placeholder: string
-  userId: string
-  autoFocus?: boolean
-  onCancel?: () => void
-}
-
-function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus: shouldAutoFocus = true, onCancel }: TagInputProps) {
-  const [inputValue, setInputValue] = useState('')
-  const [suggestions, setSuggestions] = useState<{ id: string; display_name: string; is_canon: boolean }[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [highlightIndex, setHighlightIndex] = useState(-1)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (shouldAutoFocus) inputRef.current?.focus()
-  }, [shouldAutoFocus])
-
-  useEffect(() => {
-    if (inputValue.length < 1) {
-      setSuggestions([])
-      return
-    }
-
-    const query = inputValue.toLowerCase().trim()
-    supabase
-      .from('types')
-      .select('id, display_name, is_canon')
-      .eq('class', objectClass)
-      .ilike('display_name', `%${query}%`)
-      .or(`is_canon.eq.true,created_by.eq.${userId}`)
-      .order('is_canon', { ascending: false })
-      .order('display_name')
-      .limit(8)
-      .then(({ data }) => {
-        if (data) {
-          // Filter out already-added tags (compare by display_name)
-          setSuggestions(data.filter(t => !tags.includes(t.display_name)))
-        }
-      })
-  }, [inputValue, objectClass, tags, userId])
-
-  function addTag(displayName: string) {
-    if (!tags.includes(displayName)) {
-      onChange([...tags, displayName])
-    }
-    setInputValue('')
-    setSuggestions([])
-    setHighlightIndex(-1)
-    inputRef.current?.focus()
-  }
-
-  function removeTag(displayName: string) {
-    onChange(tags.filter(t => t !== displayName))
-  }
-
-  async function createAndAddTag(name: string) {
-    const trimmed = name.trim()
-    if (!trimmed || tags.includes(trimmed)) return
-
-    // Check if type with this display_name already exists for this class
-    const { data: existing } = await supabase
-      .from('types')
-      .select('id')
-      .eq('display_name', trimmed)
-      .eq('class', objectClass)
-      .maybeSingle()
-
-    if (!existing) {
-      await supabase.from('types').insert({
-        display_name: trimmed,
-        class: objectClass,
-        is_canon: false,
-        created_by: userId,
-      })
-    }
-
-    addTag(trimmed)
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setHighlightIndex(prev => Math.min(prev + 1, suggestions.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setHighlightIndex(prev => Math.max(prev - 1, -1))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (highlightIndex >= 0 && suggestions[highlightIndex]) {
-        addTag(suggestions[highlightIndex].display_name)
-      } else if (inputValue.trim()) {
-        const exact = suggestions.find(s => s.display_name.toLowerCase() === inputValue.trim().toLowerCase())
-        if (exact) {
-          addTag(exact.display_name)
-        } else {
-          createAndAddTag(inputValue.trim())
-        }
-      }
-    } else if (e.key === 'Backspace' && !inputValue && tags.length > 0) {
-      removeTag(tags[tags.length - 1])
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      onCancel?.()
-    }
-  }
-
-  return (
-    <div className={styles.tagInputContainer} ref={containerRef}>
-      <div className={styles.tagInputField}>
-        {tags.map(t => (
-          <span key={t} className={styles.tagChip}>
-            {t}
-            <button className={styles.tagRemove} onClick={() => removeTag(t)} type="button">
-              <X size={10} />
-            </button>
-          </span>
-        ))}
-        <input
-          ref={inputRef}
-          className={styles.tagTextInput}
-          value={inputValue}
-          onChange={e => {
-            setInputValue(e.target.value)
-            setShowSuggestions(true)
-            setHighlightIndex(0)
-          }}
-          onFocus={() => setShowSuggestions(true)}
-          onBlur={() => {
-            setTimeout(() => setShowSuggestions(false), 200)
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder={tags.length === 0 ? placeholder : ''}
-        />
-      </div>
-      {showSuggestions && suggestions.length > 0 && (
-        <div className={styles.suggestions}>
-          {suggestions.map((s, i) => (
-            <button
-              key={s.id}
-              className={`${styles.suggestion} ${i === highlightIndex ? styles.suggestionHighlight : ''}`}
-              onMouseDown={() => addTag(s.display_name)}
-              type="button"
-            >
-              <span>{s.display_name}</span>
-              {s.is_canon && <span className={styles.canonBadge}>canon</span>}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// --- Object Search Input (for name matching + link search) ---
-
-interface ObjectSearchProps {
-  userId: string
-  targetClass?: string        // filter to a specific class (e.g. 'project')
-  excludeIds?: string[]       // IDs to exclude from results
-  placeholder: string
-  onSelect: (obj: { id: string; name: string; class: string }) => void
-  onCreateNew?: (name: string) => void  // if provided, allows creating new from typed text
-  onCancel?: () => void       // called on Escape key
-  autoFocus?: boolean
-}
-
-function ObjectSearch({ userId, targetClass, excludeIds = [], placeholder, onSelect, onCreateNew, onCancel, autoFocus }: ObjectSearchProps) {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<{ id: string; name: string; class: string; title: string | null }[]>([])
-  const [showResults, setShowResults] = useState(false)
-  const [highlightIndex, setHighlightIndex] = useState(0)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (autoFocus) inputRef.current?.focus()
-  }, [autoFocus])
-
-  useEffect(() => {
-    if (query.length < 2) {
-      setResults([])
-      return
-    }
-
-    let q = supabase
-      .from('user_objects')
-      .select('id, name, class, title')
-      .eq('user_id', userId)
-      .ilike('name', `%${query}%`)
-      .limit(8)
-
-    if (targetClass) {
-      q = q.eq('class', targetClass)
-    } else {
-      // For link search, show landscape objects + projects
-      q = q.in('class', ['org', 'person', 'project'])
-    }
-
-    q.then(({ data }) => {
-      if (data) {
-        setResults(data.filter(o => !excludeIds.includes(o.id)))
-        setHighlightIndex(0)
-      }
-    })
-  }, [query, userId, targetClass, excludeIds])
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    const hasResults = results.length > 0
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setHighlightIndex(prev => Math.min(prev + 1, results.length - (onCreateNew ? 0 : 1)))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setHighlightIndex(prev => Math.max(prev - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (hasResults && highlightIndex < results.length) {
-        onSelect(results[highlightIndex])
-        setQuery('')
-        setResults([])
-      } else if (onCreateNew && query.trim()) {
-        onCreateNew(query.trim())
-        setQuery('')
-        setResults([])
-      }
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      onCancel?.()
-    }
-  }
-
-  return (
-    <div className={styles.tagInputContainer}>
-      <input
-        ref={inputRef}
-        className={styles.searchInput}
-        value={query}
-        onChange={e => {
-          setQuery(e.target.value)
-          setShowResults(true)
-          setHighlightIndex(0)
-        }}
-        onFocus={() => setShowResults(true)}
-        onBlur={() => setTimeout(() => setShowResults(false), 200)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        autoComplete="off"
-      />
-      {showResults && (results.length > 0 || (onCreateNew && query.trim())) && (
-        <div className={styles.suggestions}>
-          {results.map((r, i) => (
-            <button
-              key={r.id}
-              className={`${styles.suggestion} ${i === highlightIndex ? styles.suggestionHighlight : ''}`}
-              onMouseDown={() => { onSelect(r); setQuery(''); setResults([]) }}
-              type="button"
-            >
-              <span>{r.name}</span>
-              <span className={styles.canonBadge}>{r.class}</span>
-            </button>
-          ))}
-          {onCreateNew && query.trim() && (
-            <button
-              className={`${styles.suggestion} ${highlightIndex === results.length ? styles.suggestionHighlight : ''}`}
-              onMouseDown={() => { onCreateNew(query.trim()); setQuery(''); setResults([]) }}
-              type="button"
-            >
-              <span>Create "{query.trim()}"</span>
-              <span className={styles.canonBadge}>new</span>
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // --- Detail Panel ---
+
+const headerClassStyles: Record<string, string> = {
+  org: styles.headerOrg,
+  person: styles.headerPerson,
+}
 
 const GAP = 12
 const PANEL_WIDTH = 300
@@ -424,6 +154,14 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const [newItemValues, setNewItemValues] = useState({ name: '', title: '', status: '', event_date: '' })
   const [newItemTypes, setNewItemTypes] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [dateInputActive, setDateInputActive] = useState(false)
+
+  function resetCreateForm() {
+    setNewItemValues({ name: '', title: '', status: '', event_date: '' })
+    setNewItemTypes([])
+    setNewItemLinks([])
+    setDateInputActive(false)
+  }
 
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -464,37 +202,10 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const loadConnectedItems = useCallback(async (objectId: string, targetClass: 'project' | 'event') => {
     if (!user) return
 
-    // Query all canonical connections involving this object
-    const { data: canonConns } = await supabase
-      .from('connections')
-      .select('id, object_a_id, object_b_id, role_a, role_b')
-      .eq('is_active', true)
-      .or(`object_a_id.eq.${objectId},object_b_id.eq.${objectId}`)
-
-    // Query user-created connections
-    const { data: userConns } = await supabase
-      .from('connections_overrides')
-      .select('id, object_a_id, object_b_id, role_a, role_b')
-      .eq('user_id', user.id)
-      .is('connection_id', null)
-      .or(`object_a_id.eq.${objectId},object_b_id.eq.${objectId}`)
-
-    // Exclude deactivated canonical connections
-    const { data: deactivated } = await supabase
-      .from('connections_overrides')
-      .select('connection_id')
-      .eq('user_id', user.id)
-      .not('connection_id', 'is', null)
-      .eq('deactivated', true)
-
-    const deactivatedIds = new Set((deactivated || []).map(d => d.connection_id))
-
-    // Collect the "other" object IDs
-    const filteredCanon = (canonConns || []).filter(c => !deactivatedIds.has(c.id))
-    const allConns = [...filteredCanon, ...(userConns || [])]
+    const conns = await getEffectiveConnections(objectId, user.id)
     const itemIds = new Set<string>()
-    for (const c of allConns) {
-      const otherId = c.object_a_id === objectId ? c.object_b_id : c.object_a_id
+    for (const c of conns) {
+      const otherId = otherObjectId(c, objectId)
       if (otherId) itemIds.add(otherId)
     }
 
@@ -615,33 +326,10 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const loadLinkedObjects = useCallback(async (itemId: string) => {
     if (!user) return
 
-    // Get all connections involving this item
-    const { data: canonConns } = await supabase
-      .from('connections')
-      .select('id, object_a_id, object_b_id')
-      .eq('is_active', true)
-      .or(`object_a_id.eq.${itemId},object_b_id.eq.${itemId}`)
-
-    const { data: userConns } = await supabase
-      .from('connections_overrides')
-      .select('object_a_id, object_b_id')
-      .eq('user_id', user.id)
-      .is('connection_id', null)
-      .or(`object_a_id.eq.${itemId},object_b_id.eq.${itemId}`)
-
-    const { data: deactivated } = await supabase
-      .from('connections_overrides')
-      .select('connection_id')
-      .eq('user_id', user.id)
-      .not('connection_id', 'is', null)
-      .eq('deactivated', true)
-
-    const deactivatedIds = new Set((deactivated || []).map(d => d.connection_id))
-    const filteredCanon = (canonConns || []).filter(c => !deactivatedIds.has(c.id))
-    const allConns = [...filteredCanon, ...(userConns || [])]
+    const conns = await getEffectiveConnections(itemId, user.id)
     const otherIds = new Set<string>()
-    for (const c of allConns) {
-      const otherId = c.object_a_id === itemId ? c.object_b_id : c.object_a_id
+    for (const c of conns) {
+      const otherId = otherObjectId(c, itemId)
       if (otherId && otherId !== object.id) otherIds.add(otherId)
     }
 
@@ -743,10 +431,9 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     setCreatingEvent(false)
     setExpandedItemId(null)
     setEditingItemId(null)
-    setDateInputActive(false)
     setLinkedObjects([])
     setShowLinkSearch(false)
-    setNewItemLinks([])
+    resetCreateForm()
     setHeaderValues({ name: object.name || '', title: object.title || '' })
     setEditTypes(object.types || [])
     setEditContacts(object.data?.contacts ?? [])
@@ -890,52 +577,17 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
     const userObjectIds = new Set((userObjRows || []).map(r => r.object_id))
 
-    // Get canonical connections involving this object
-    const { data: canonConns } = await supabase
-      .from('connections')
-      .select('id, object_a_id, object_b_id, role_a, role_b')
-      .eq('is_active', true)
-      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
-
-    // Get user-created connections involving this object
-    const { data: userConns } = await supabase
-      .from('connections_overrides')
-      .select('id, object_a_id, object_b_id, role_a, role_b')
-      .eq('user_id', user.id)
-      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
-
-    // Get deactivated canonical connection IDs so we can exclude them
-    const { data: deactivated } = await supabase
-      .from('connections_overrides')
-      .select('connection_id')
-      .eq('user_id', user.id)
-      .eq('deactivated', true)
-      .not('connection_id', 'is', null)
-
-    const deactivatedIds = new Set((deactivated || []).map(d => d.connection_id))
+    const conns = await getEffectiveConnections(object.id, user.id)
 
     // Only count connections where the other endpoint is on the user's landscape
-    // and the connection isn't already deactivated
-    const visibleCanon = (canonConns || []).filter(c => {
-      if (deactivatedIds.has(c.id)) return false
-      const otherId = c.object_a_id === object.id ? c.object_b_id : c.object_a_id
-      return userObjectIds.has(otherId)
-    })
-
-    const visibleUser = (userConns || []).filter(c => {
-      if (c.connection_id) return false // deactivation overrides aren't real connections
-      const otherId = c.object_a_id === object.id ? c.object_b_id : c.object_a_id
-      return userObjectIds.has(otherId)
-    })
-
-    const totalConnections = visibleCanon.length + visibleUser.length
+    const totalConnections = conns.filter(c => {
+      return userObjectIds.has(otherObjectId(c, object.id))
+    }).length
 
     // Find connected off-landscape objects (projects/events) that would be orphaned
-    const allConns = [...(canonConns || []).filter(c => !deactivatedIds.has(c.id)), ...(userConns || []).filter(c => !c.connection_id)]
     const relatedIds = new Set<string>()
-    for (const c of allConns) {
-      const otherId = c.object_a_id === object.id ? c.object_b_id : c.object_a_id
-      relatedIds.add(otherId)
+    for (const c of conns) {
+      relatedIds.add(otherObjectId(c, object.id))
     }
 
     // Check which are orphans (only connected to this object)
@@ -978,28 +630,13 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (!user) return
 
     // Delete the override FIRST (critical operation — removes from landscape)
-    console.log('DELETE override:', { object_id: object.id, user_id: user.id })
-
-    const { error: deleteError, count } = await supabase
+    const { error: deleteError } = await supabase
       .from('objects_overrides')
-      .delete({ count: 'exact' })
+      .delete()
       .eq('object_id', object.id)
       .eq('user_id', user.id)
 
-    console.log('DELETE result:', { error: deleteError, count })
-
-    if (deleteError) {
-      console.error('Failed to delete objects_overrides:', deleteError)
-      return
-    }
-
-    // Verify the row is actually gone
-    const { data: verify } = await supabase
-      .from('objects_overrides')
-      .select('id')
-      .eq('object_id', object.id)
-      .eq('user_id', user.id)
-    console.log('POST-DELETE verify:', verify?.length ? 'STILL EXISTS!' : 'gone')
+    if (deleteError) return
 
     // If user-created, hard-delete the objects row too
     if (!object.is_canon && object.created_by === user.id) {
@@ -1186,9 +823,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
     // Reset and reload
     setSaving(false)
-    setNewItemValues({ name: '', title: '', status: '', event_date: '' })
-    setNewItemTypes([])
-    setNewItemLinks([])
+    resetCreateForm()
     if (targetClass === 'project') {
       setCreatingProject(false)
       loadConnectedItems(object.id, 'project')
@@ -1373,8 +1008,6 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     nodeRect.bottom < 0 || nodeRect.top > window.innerHeight ||
     nodeRect.right < 0 || nodeRect.left > window.innerWidth
 
-  const [dateInputActive, setDateInputActive] = useState(false)
-
   // --- Create form (reused for projects and events) ---
   // IDs already connected to this node (to exclude from search)
   const connectedIds = useMemo(() => {
@@ -1394,13 +1027,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             objectClass="event"
             placeholder="Event Type(s)"
             userId={user!.id}
-            onCancel={() => {
-              setCreatingEvent(false)
-              setNewItemValues({ name: '', title: '', status: '', event_date: '' })
-              setNewItemTypes([])
-              setNewItemLinks([])
-              setDateInputActive(false)
-            }}
+            onCancel={() => { setCreatingEvent(false); resetCreateForm() }}
           />
         )}
 
@@ -1414,12 +1041,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             autoFocus
             onSelect={proj => linkExistingItem(proj.id, 'project')}
             onCreateNew={name => setNewItemValues(prev => ({ ...prev, name }))}
-            onCancel={() => {
-              setCreatingProject(false)
-              setNewItemValues({ name: '', title: '', status: '', event_date: '' })
-              setNewItemTypes([])
-              setNewItemLinks([])
-            }}
+            onCancel={() => { setCreatingProject(false); resetCreateForm() }}
           />
         ) : (
           <textarea
@@ -1430,10 +1052,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
               if (e.key === 'Escape') {
                 if (targetClass === 'project') setCreatingProject(false)
                 else setCreatingEvent(false)
-                setNewItemValues({ name: '', title: '', status: '', event_date: '' })
-                setNewItemTypes([])
-                setNewItemLinks([])
-                setDateInputActive(false)
+                resetCreateForm()
               }
             }}
             placeholder={targetClass === 'project' ? 'Project name' : 'Event name'}
@@ -1450,10 +1069,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             onClick={() => {
               if (targetClass === 'project') setCreatingProject(false)
               else setCreatingEvent(false)
-              setNewItemValues({ name: '', title: '', status: '', event_date: '' })
-              setNewItemTypes([])
-              setNewItemLinks([])
-              setDateInputActive(false)
+              resetCreateForm()
             }}
           >
             Cancel
@@ -1485,7 +1101,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                     <Tooltip text="Set to today">
                       <button
                         className={styles.todayBtn}
-                        onClick={() => setNewItemValues(prev => ({ ...prev, event_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}` }))}
+                        onClick={() => setNewItemValues(prev => ({ ...prev, event_date: todayDateString() }))}
                         type="button"
                       >
                         <CalendarCheck size={14} />
@@ -1562,10 +1178,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                 onClick={() => {
                   if (targetClass === 'project') setCreatingProject(false)
                   else setCreatingEvent(false)
-                  setNewItemValues({ name: '', title: '', status: '', event_date: '' })
-                  setNewItemTypes([])
-                  setNewItemLinks([])
-                  setDateInputActive(false)
+                  resetCreateForm()
                 }}
               >
                 Cancel
@@ -1719,7 +1332,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                       <Tooltip text="Set to today">
                         <button
                           className={styles.todayBtn}
-                          onClick={() => setEditItemValues(prev => ({ ...prev, event_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}` }))}
+                          onClick={() => setEditItemValues(prev => ({ ...prev, event_date: todayDateString() }))}
                           type="button"
                         >
                           <CalendarCheck size={14} />
@@ -1772,7 +1385,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   return (
     <div ref={panelRef} className={styles.panel} style={{ left: pos.left, top: pos.top, width: PANEL_WIDTH, visibility: nodeOffScreen ? 'hidden' : 'visible' } as CSSProperties}>
       {/* ===== HEADER ===== */}
-      <div className={styles.header}>
+      <div className={`${styles.header} ${headerClassStyles[object.class] || ''}`}>
         {object.photo_url && (
           <img className={styles.photo} src={object.photo_url} alt="" />
         )}
@@ -1896,7 +1509,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {/* CONTACT TAB */}
         {activeTab === 'contact' && (
           <div className={styles.tabSection}>
-            <div className={styles.tabSectionHeader}>
+            <div className={styles.tabFloatingAction}>
               {contactEditing ? (
                 <>
                   <Tooltip text="Save"><button className={styles.iconButtonSm} onClick={saveContact}><Check size={12} /></button></Tooltip>
@@ -2002,7 +1615,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                                 <span className={styles.label}>{c.label || c.type}</span>
                                 <span className={styles.value}>{c.value}</span>
                               </div>
-                              <Tooltip text="Add to my contacts">
+                              <Tooltip text="Add to my intel">
                                 <button
                                   className={styles.intelAdoptBtn}
                                   onClick={() => adoptIntelContact(ci.user_id, c)}
@@ -2025,7 +1638,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {/* NOTES TAB */}
         {activeTab === 'notes' && (
           <div className={styles.tabSection}>
-            <div className={styles.tabSectionHeader}>
+            <div className={styles.tabFloatingAction}>
               {notesEditing ? (
                 <>
                   <Tooltip text="Save"><button className={styles.iconButtonSm} onClick={saveNotes}><Check size={12} /></button></Tooltip>
@@ -2101,19 +1714,18 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {/* PROJECTS TAB */}
         {activeTab === 'projects' && (
           <div className={styles.tabSection}>
-            <div className={styles.tabSectionHeader}>
-              {!creatingProject && (
+            {!creatingProject && (
+              <div className={styles.tabFloatingAction}>
                 <Tooltip text="Add project">
                   <button className={styles.iconButtonSm} onClick={() => {
-                    setNewItemValues({ name: '', title: '', status: '', event_date: '' })
-                    setNewItemTypes([])
+                    resetCreateForm()
                     setCreatingProject(true)
                   }}>
                     <Plus size={12} />
                   </button>
                 </Tooltip>
-              )}
-            </div>
+              </div>
+            )}
             {creatingProject && renderCreateForm('project')}
             {renderItemList(connectedProjects, 'project')}
           </div>
@@ -2122,19 +1734,18 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {/* EVENTS TAB */}
         {activeTab === 'events' && (
           <div className={styles.tabSection}>
-            <div className={styles.tabSectionHeader}>
-              {!creatingEvent && (
+            {!creatingEvent && (
+              <div className={styles.tabFloatingAction}>
                 <Tooltip text="Add event">
                   <button className={styles.iconButtonSm} onClick={() => {
-                    setNewItemValues({ name: '', title: '', status: '', event_date: '' })
-                    setNewItemTypes([])
+                    resetCreateForm()
                     setCreatingEvent(true)
                   }}>
                     <Plus size={12} />
                   </button>
                 </Tooltip>
-              )}
-            </div>
+              </div>
+            )}
             {creatingEvent && renderCreateForm('event')}
             {renderItemList(connectedEvents, 'event')}
           </div>

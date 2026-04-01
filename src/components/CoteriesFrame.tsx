@@ -601,6 +601,13 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
 
   useEffect(() => { loadCoteries(); loadInvitations(); loadUpdateCounts() }, [loadCoteries, loadInvitations, loadUpdateCounts])
 
+  // Refresh when new invites arrive (detected by NotificationBoxes polling)
+  useEffect(() => {
+    const handler = () => { loadInvitations(); loadCoteries() }
+    document.addEventListener('coteries:refresh', handler)
+    return () => document.removeEventListener('coteries:refresh', handler)
+  }, [loadInvitations, loadCoteries])
+
   // Click anywhere outside coteries UI to deselect
   useEffect(() => {
     if (!selectedCoterieId) return
@@ -804,6 +811,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
           await insertUserConnections()
           await loadCoteries()
           await loadInvitations()
+          document.dispatchEvent(new CustomEvent('maps:refresh'))
         },
         onCancel: () => {
           // Still create overrides at default positions (invitation already accepted)
@@ -865,7 +873,11 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
   }
 
   const handleCoterieClick = (coterie: CoterieRow) => {
-    setSelectedCoterieId(selectedCoterieId === coterie.id ? null : coterie.id)
+    const newId = selectedCoterieId === coterie.id ? null : coterie.id
+    setSelectedCoterieId(newId)
+    if (openedCoterie && newId && newId !== openedCoterie.id) {
+      setOpenedCoterie(coterie)
+    }
   }
 
   const handleCoterieDoubleClick = (coterie: CoterieRow) => {

@@ -5,7 +5,7 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 10px;
   z-index: 20;
   box-shadow: var(--shadow);
   display: flex;
@@ -18,6 +18,20 @@
   display: flex;
   gap: 10px;
   align-items: flex-start;
+  padding: 6px;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.headerOrg {
+  background: var(--color-org-dim);
+  border-color: var(--color-org-border);
+}
+
+.headerPerson {
+  background: var(--color-person-dim);
+  border-color: var(--color-person-border);
 }
 
 .photo {
@@ -116,12 +130,22 @@
   border-radius: 3px;
 }
 
+.headerOrg .type {
+  color: var(--color-org-type);
+  background: color-mix(in srgb, var(--color-org) 15%, transparent);
+}
+
+.headerPerson .type {
+  color: var(--color-person-type);
+  background: color-mix(in srgb, var(--color-person) 15%, transparent);
+}
+
 .tagRemoveInline {
   display: flex;
   align-items: center;
   background: none;
   border: none;
-  color: var(--color-accent);
+  color: inherit;
   cursor: pointer;
   padding: 0;
   opacity: 0.6;
@@ -187,8 +211,6 @@
   display: flex;
   gap: 2px;
   margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--color-border);
 }
 
 .tabBar > * {
@@ -247,16 +269,26 @@
 }
 
 .tabSection {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.tabSectionHeader {
+.tabFloatingAction {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 2px;
-  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 1;
+}
+
+.tabSection:hover .tabFloatingAction {
+  opacity: 1;
 }
 
 /* ===== READ MODE FIELDS ===== */

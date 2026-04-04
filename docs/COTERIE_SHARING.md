@@ -18,9 +18,40 @@ A **coterie** is a named trust circle — Hollywood "tracking group" model. Cote
 
 **Invitation flow**:
 - **Existing user**: Email + in-app notification → CoteriesFrame shows pending invite → Accept → objects placed on Landscape (relative to owner's layout, centroid-anchored)
-- **New user** (viral path): Email → landing page with interactive demo Landscape → signup (credit-card-free trial) → auto-placed objects → minimal welcome modal establishing autonomy ("This is your Landscape. Your changes are yours.")
+- **New user** (viral path): Email → landing page → signup (credit-card-free trial) → auto-placed objects → welcome modal
 
 **New objects after initial share**: When sender adds objects to linked maps, they surface as dissonances to recipients (diff-based, not events). Recipient accepts → added to Landscape + their aggregated map Z.
+
+## Non-User Invitation Landing Page (decided 2026-03-25)
+
+Public route: `/invite/:token` — token encodes coterie + inviter, so the page personalizes automatically. Lives in the same Vite app (code-split), reusing the actual React Flow canvas for the interactive demo.
+
+### Layout (top to bottom)
+
+1. **Header**: "[Sender] has invited you to join" + **COTERIE** logo
+2. **App pitch**: Brief description of the app. "Map your professional world." + **[Features →]** link opening a modal with key features (copy TBD).
+3. **Interactive demo canvas**: Embedded React Flow Landscape with 3–4 seed objects from `known_landscape` (real studios/agencies — "real names land harder if Billy is in entertainment"). Working drag, selection, detail panels. The app sells itself by letting the visitor *use* it.
+4. **Coterie blurb**: "Join [Sender]'s *[Coterie Name]* and start sharing professional intel with your trusted circle." Explains they'll inherit contact info and share intel with members going forward, and can invite others.
+5. **CTA**: **[ Join Coterie → ]** — opens signup flow (email OTP, same as main app).
+
+### Post-Signup (first-time user)
+
+- **No "accept and place"** — the shared map is auto-placed and centered on the empty Landscape. "Place it relative to what? The canvas is empty."
+- **Welcome modal** — minimal, focused on autonomy:
+  > **Welcome to Coterie**
+  > This is your Landscape. Everything you add, change, or note is yours — [Sender] and your coterie will see shared notes, but your Landscape is your own.
+  > **[Got it]**
+
+### Trial & Payment
+
+Credit-card-free trial via Stripe (trial without payment method). Trial length TBD (14 or 30 days). Pricing/sales page content TBD. Deferred until invite flow works end-to-end.
+
+### Still TBD
+
+- Exact "brief description" copy and Features modal content
+- Which specific 3–4 demo objects from seed data
+- Visual styling / responsive layout
+- Pricing page
 
 **`source_coterie_id` column jobs**: initial map creation, dissonance acceptance (knows which map to add to), UI treatment (coterie badge in MapsFrame), leaving a coterie (null out → becomes regular map), duplicate prevention.
 

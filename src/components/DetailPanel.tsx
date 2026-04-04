@@ -484,6 +484,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       })
       .eq('object_id', object.id)
       .eq('user_id', user.id)
+    if (showTagInput) await saveTypes()
     setHeaderEditing(false)
     setShowTagInput(false)
     onObjectUpdated?.()
@@ -1427,20 +1428,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                 </span>
               ))}
             </div>
-            {headerEditing && (
-              showTagInput ? (
-                <Tooltip text="Save types">
-                  <button className={styles.iconButtonSm} onClick={saveTypes}>
-                    <Check size={12} />
-                  </button>
-                </Tooltip>
-              ) : (
-                <Tooltip text="Edit types">
-                  <button className={styles.iconButtonSm} onClick={() => { setEditTypes(object.types || []); setShowTagInput(true) }}>
-                    <Plus size={12} />
-                  </button>
-                </Tooltip>
-              )
+            {headerEditing && !showTagInput && (
+              <Tooltip text="Edit types">
+                <button className={styles.iconButtonSm} onClick={() => { setEditTypes(object.types || []); setShowTagInput(true) }}>
+                  <Plus size={12} />
+                </button>
+              </Tooltip>
             )}
           </div>
           {showTagInput && (

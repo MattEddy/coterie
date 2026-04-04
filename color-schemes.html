@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coterie Color Schemes</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Urbanist', sans-serif; background: #111; color: #e8e8e8; padding: 40px; }
+h1 { text-align: center; margin-bottom: 12px; font-size: 28px; color: #c9a55a; }
+.subtitle { text-align: center; margin-bottom: 40px; font-size: 14px; color: #666; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 32px; max-width: 1600px; margin: 0 auto; }
+
+.scheme { border-radius: 12px; overflow: hidden; border: 1px solid #333; }
+.scheme-header { padding: 16px 20px; font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+.scheme-body { padding: 20px; }
+
+.swatches { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.swatch { width: 36px; height: 36px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 600; color: rgba(255,255,255,0.7); }
+
+.canvas { border-radius: 8px; padding: 20px; position: relative; min-height: 220px; margin-bottom: 12px; }
+.node { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8px 16px; font-size: 12px; font-weight: 600; border: 1.5px solid; position: absolute; }
+.node-org { border-radius: 8px; width: 120px; height: 48px; }
+.node-person { border-radius: 30px; width: 140px; height: 48px; }
+.node .type { font-size: 10px; font-weight: 500; margin-top: 2px; }
+.line { position: absolute; background: #444; height: 1px; transform-origin: left center; }
+
+.navbar { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 8px; font-size: 14px; font-weight: 600; border: 1px solid; position: absolute; top: 12px; right: 12px; }
+
+.frame { border-radius: 8px; border: 1px solid; width: 170px; position: absolute; }
+.frame-header { padding: 6px 10px; font-size: 11px; font-weight: 600; border-bottom: 1px solid; }
+.frame-body { padding: 8px 10px; font-size: 11px; }
+.frame-input { width: 100%; padding: 4px 6px; border-radius: 4px; border: 1px solid; font-size: 11px; font-family: 'Urbanist', sans-serif; outline: none; margin-bottom: 4px; }
+.frame-result { padding: 4px 6px; border-radius: 4px; font-size: 11px; }
+
+.description { font-size: 12px; opacity: 0.5; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<h1>Coterie Color Schemes</h1>
+<p class="subtitle">Gold + Charcoal + Purple/Mauve variations</p>
+
+<div class="grid">
+
+<!-- 1: Gold accent, mauve orgs -->
+<div class="scheme" style="background: #0f0f0f;">
+  <div class="scheme-header" style="background: #1a1a1a; color: #c9a55a; border-bottom: 1px solid #2a2a2a;">
+    1. Gold Accent, Mauve Orgs
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0f0f0f;">bg</div>
+      <div class="swatch" style="background: #1a1a1a;">srf</div>
+      <div class="swatch" style="background: #c9a55a;">acc</div>
+      <div class="swatch" style="background: #8b6e8e;">org</div>
+      <div class="swatch" style="background: #6b9b7a;">per</div>
+      <div class="swatch" style="background: #777;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0f0f0f;">
+      <div class="navbar" style="background: #1a1a1a; border-color: #333; color: #e0d5c0;">
+        &#9786; &#9776; <span style="color: #c9a55a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #221e24; border-color: #3a3040; color: #e8e8e8;">
+        Disney<span class="type" style="color: #8b6e8e;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #221e24; border-color: #3a3040; color: #e8e8e8;">
+        Netflix<span class="type" style="color: #8b6e8e;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #18261e; border-color: #284030; color: #e8e8e8;">
+        Alan Bergman<span class="type" style="color: #6b9b7a;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #1a1a1a; border-color: #333;">
+        <div class="frame-header" style="border-color: #333; color: #c9a55a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #252525; border-color: #333; color: #ddd;" placeholder="Search..." />
+          <div class="frame-result" style="background: #252525; color: #ddd;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Gold accent, dusty mauve orgs, sage green people. The purple is muted enough to feel sophisticated, not playful.</p>
+  </div>
+</div>
+
+<!-- 2: Warm gold, plum orgs -->
+<div class="scheme" style="background: #110e0c;">
+  <div class="scheme-header" style="background: #1c1816; color: #d4b064; border-bottom: 1px solid #2e2822;">
+    2. Warm Gold, Plum Orgs
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #110e0c;">bg</div>
+      <div class="swatch" style="background: #1c1816;">srf</div>
+      <div class="swatch" style="background: #d4b064;">acc</div>
+      <div class="swatch" style="background: #7a5478;">org</div>
+      <div class="swatch" style="background: #b89860;">per</div>
+      <div class="swatch" style="background: #8a7a6a;">mut</div>
+    </div>
+    <div class="canvas" style="background: #110e0c;">
+      <div class="navbar" style="background: #1c1816; border-color: #2e2822; color: #e0d5c0;">
+        &#9786; &#9776; <span style="color: #d4b064;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #201620; border-color: #38283a; color: #e0d5c0;">
+        Disney<span class="type" style="color: #7a5478;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #201620; border-color: #38283a; color: #e0d5c0;">
+        Netflix<span class="type" style="color: #7a5478;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #221e14; border-color: #3a3220; color: #e0d5c0;">
+        Alan Bergman<span class="type" style="color: #b89860;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #1c1816; border-color: #2e2822;">
+        <div class="frame-header" style="border-color: #2e2822; color: #d4b064;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #242018; border-color: #2e2822; color: #e0d5c0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #242018; color: #e0d5c0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Espresso base, rich plum orgs, warm gold people. The plum and gold are complementary — jewel-toned without being garish. Very "private screening room."</p>
+  </div>
+</div>
+
+<!-- 3: Pale gold, lavender orgs -->
+<div class="scheme" style="background: #0e0e10;">
+  <div class="scheme-header" style="background: #18181c; color: #c4aa6a; border-bottom: 1px solid #28282e;">
+    3. Pale Gold, Lavender Orgs
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0e0e10;">bg</div>
+      <div class="swatch" style="background: #18181c;">srf</div>
+      <div class="swatch" style="background: #c4aa6a;">acc</div>
+      <div class="swatch" style="background: #7b7b9e;">org</div>
+      <div class="swatch" style="background: #6aaa8a;">per</div>
+      <div class="swatch" style="background: #6a6a78;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0e0e10;">
+      <div class="navbar" style="background: #18181c; border-color: #28282e; color: #e0dde8;">
+        &#9786; &#9776; <span style="color: #c4aa6a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a1a24; border-color: #2a2a3a; color: #e0dde8;">
+        Disney<span class="type" style="color: #7b7b9e;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a1a24; border-color: #2a2a3a; color: #e0dde8;">
+        Netflix<span class="type" style="color: #7b7b9e;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #142420; border-color: #203830; color: #e0dde8;">
+        Alan Bergman<span class="type" style="color: #6aaa8a;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #18181c; border-color: #28282e;">
+        <div class="frame-header" style="border-color: #28282e; color: #c4aa6a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1e1e24; border-color: #28282e; color: #e0dde8;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1e1e24; color: #e0dde8;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Cool charcoal with subtle violet tint. Lavender-gray orgs, mint people. Softer, more cerebral. The gold accent warms it up. Think Bloomberg terminal meets gallery opening.</p>
+  </div>
+</div>
+
+<!-- 4: Amber gold, deep purple -->
+<div class="scheme" style="background: #0c0a10;">
+  <div class="scheme-header" style="background: #16141c; color: #daa844; border-bottom: 1px solid #262230;">
+    4. Amber & Amethyst
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0c0a10;">bg</div>
+      <div class="swatch" style="background: #16141c;">srf</div>
+      <div class="swatch" style="background: #daa844;">acc</div>
+      <div class="swatch" style="background: #6e4e8a;">org</div>
+      <div class="swatch" style="background: #5a9a7a;">per</div>
+      <div class="swatch" style="background: #6a6478;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0c0a10;">
+      <div class="navbar" style="background: #16141c; border-color: #262230; color: #e8e4f0;">
+        &#9786; &#9776; <span style="color: #daa844;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a1428; border-color: #2e2244; color: #e8e4f0;">
+        Disney<span class="type" style="color: #6e4e8a;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a1428; border-color: #2e2244; color: #e8e4f0;">
+        Netflix<span class="type" style="color: #6e4e8a;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #12221a; border-color: #1e3a2c; color: #e8e4f0;">
+        Alan Bergman<span class="type" style="color: #5a9a7a;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #16141c; border-color: #262230;">
+        <div class="frame-header" style="border-color: #262230; color: #daa844;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1c1a24; border-color: #262230; color: #e8e4f0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1c1a24; color: #e8e4f0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Deep purple-black base, amber gold accent, amethyst orgs. The most dramatic combo — high contrast between warm gold and cool purple. Regal. "Secret society" energy.</p>
+  </div>
+</div>
+
+<!-- 5: Honey gold, mauve-gray -->
+<div class="scheme" style="background: #101010;">
+  <div class="scheme-header" style="background: #1a1a1a; color: #c9a55a; border-bottom: 1px solid #2a2a2a;">
+    5. Honey & Smoke
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #101010;">bg</div>
+      <div class="swatch" style="background: #1a1a1a;">srf</div>
+      <div class="swatch" style="background: #c9a55a;">acc</div>
+      <div class="swatch" style="background: #9080a0;">org</div>
+      <div class="swatch" style="background: #c9a55a;">per</div>
+      <div class="swatch" style="background: #706878;">mut</div>
+    </div>
+    <div class="canvas" style="background: #101010;">
+      <div class="navbar" style="background: #1a1a1a; border-color: #2a2a2a; color: #e8e8e8;">
+        &#9786; &#9776; <span style="color: #c9a55a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1e1a24; border-color: #322a3e; color: #e8e8e8;">
+        Disney<span class="type" style="color: #9080a0;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1e1a24; border-color: #322a3e; color: #e8e8e8;">
+        Netflix<span class="type" style="color: #9080a0;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #221e12; border-color: #3a3220; color: #e8e8e8;">
+        Alan Bergman<span class="type" style="color: #c9a55a;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #1a1a1a; border-color: #2a2a2a;">
+        <div class="frame-header" style="border-color: #2a2a2a; color: #c9a55a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #222; border-color: #2a2a2a; color: #e8e8e8;" placeholder="Search..." />
+          <div class="frame-result" style="background: #222; color: #e8e8e8;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Neutral charcoal, smoky lavender orgs, honey gold people. Gold does double duty (accent + person). Two-tone palette with the mauve adding just enough color contrast. Clean and confident.</p>
+  </div>
+</div>
+
+<!-- 6: Antique gold, dusty rose -->
+<div class="scheme" style="background: #0f0e0e;">
+  <div class="scheme-header" style="background: #1a1818; color: #bfa058; border-bottom: 1px solid #2a2626;">
+    6. Antique Gold & Dusty Rose
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0f0e0e;">bg</div>
+      <div class="swatch" style="background: #1a1818;">srf</div>
+      <div class="swatch" style="background: #bfa058;">acc</div>
+      <div class="swatch" style="background: #8a6070;">org</div>
+      <div class="swatch" style="background: #6a8a70;">per</div>
+      <div class="swatch" style="background: #7a7070;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0f0e0e;">
+      <div class="navbar" style="background: #1a1818; border-color: #2a2626; color: #e0dcd8;">
+        &#9786; &#9776; <span style="color: #bfa058;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #221a1e; border-color: #3a2830; color: #e0dcd8;">
+        Disney<span class="type" style="color: #8a6070;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #221a1e; border-color: #3a2830; color: #e0dcd8;">
+        Netflix<span class="type" style="color: #8a6070;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #182018; border-color: #28382a; color: #e0dcd8;">
+        Alan Bergman<span class="type" style="color: #6a8a70;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #1a1818; border-color: #2a2626;">
+        <div class="frame-header" style="border-color: #2a2626; color: #bfa058;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #221e1e; border-color: #2a2626; color: #e0dcd8;" placeholder="Search..." />
+          <div class="frame-result" style="background: #221e1e; color: #e0dcd8;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Warm charcoal with a slight rose tint. Dusty rose/mauve orgs, muted sage people. The most "vintage" of the bunch — aged, textured feeling. Like a faded tapestry in a private library.</p>
+  </div>
+</div>
+
+<!-- 7: Bright gold, violet -->
+<div class="scheme" style="background: #0e0c12;">
+  <div class="scheme-header" style="background: #181620; color: #e0b84a; border-bottom: 1px solid #282436;">
+    7. Electric Gold & Violet
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0e0c12;">bg</div>
+      <div class="swatch" style="background: #181620;">srf</div>
+      <div class="swatch" style="background: #e0b84a;">acc</div>
+      <div class="swatch" style="background: #8060b0;">org</div>
+      <div class="swatch" style="background: #50b080;">per</div>
+      <div class="swatch" style="background: #686080;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0e0c12;">
+      <div class="navbar" style="background: #181620; border-color: #282436; color: #eae6f0;">
+        &#9786; &#9776; <span style="color: #e0b84a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Disney<span class="type" style="color: #8060b0;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Netflix<span class="type" style="color: #8060b0;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #122418; border-color: #1e402a; color: #eae6f0;">
+        Alan Bergman<span class="type" style="color: #50b080;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #181620; border-color: #282436;">
+        <div class="frame-header" style="border-color: #282436; color: #e0b84a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1e1c28; border-color: #282436; color: #eae6f0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1e1c28; color: #eae6f0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Bolder, more saturated take. Punchy violet orgs, emerald people, electric gold accent. The most energetic option — still dark and professional, but with more pop. Awards show lobby.</p>
+  </div>
+</div>
+
+<!-- 8: Champagne gold, muted purple-gray -->
+<div class="scheme" style="background: #111111;">
+  <div class="scheme-header" style="background: #1a1a1a; color: #c9a55a; border-bottom: 1px solid #2a2a2a;">
+    8. Champagne & Charcoal
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #111111;">bg</div>
+      <div class="swatch" style="background: #1a1a1a;">srf</div>
+      <div class="swatch" style="background: #c9a55a;">acc</div>
+      <div class="swatch" style="background: #7a6888;">org</div>
+      <div class="swatch" style="background: #88a880;">per</div>
+      <div class="swatch" style="background: #777;">mut</div>
+    </div>
+    <div class="canvas" style="background: #111111;">
+      <div class="navbar" style="background: #1a1a1a; border-color: #2e2e2e; color: #e8e8e8;">
+        &#9786; &#9776; <span style="color: #c9a55a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1c1820; border-color: #302838; color: #e8e8e8;">
+        Disney<span class="type" style="color: #7a6888;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1c1820; border-color: #302838; color: #e8e8e8;">
+        Netflix<span class="type" style="color: #7a6888;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #1a221a; border-color: #2a3a2a; color: #e8e8e8;">
+        Alan Bergman<span class="type" style="color: #88a880;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #1a1a1a; border-color: #2e2e2e;">
+        <div class="frame-header" style="border-color: #2e2e2e; color: #c9a55a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #222; border-color: #2e2e2e; color: #e8e8e8;" placeholder="Search..." />
+          <div class="frame-result" style="background: #222; color: #e8e8e8;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">The balanced middle ground. Neutral charcoal, understated purple-gray orgs, soft sage people. Gold accent carries the warmth. Nothing fights for attention — the data is the star.</p>
+  </div>
+</div>
+
+<!-- 9: Antique Gold & Dusty Rose + Steel Blue people -->
+<div class="scheme" style="background: #0f0e0e;">
+  <div class="scheme-header" style="background: #1a1818; color: #bfa058; border-bottom: 1px solid #2a2626;">
+    9. Dusty Rose + Steel Blue (from #6)
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0f0e0e;">bg</div>
+      <div class="swatch" style="background: #1a1818;">srf</div>
+      <div class="swatch" style="background: #bfa058;">acc</div>
+      <div class="swatch" style="background: #8a6070;">org</div>
+      <div class="swatch" style="background: #6a8aaa;">per</div>
+      <div class="swatch" style="background: #7a7070;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0f0e0e;">
+      <div class="navbar" style="background: #1a1818; border-color: #2a2626; color: #e0dcd8;">
+        &#9786; &#9776; <span style="color: #bfa058;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #221a1e; border-color: #3a2830; color: #e0dcd8;">
+        Disney<span class="type" style="color: #8a6070;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #221a1e; border-color: #3a2830; color: #e0dcd8;">
+        Netflix<span class="type" style="color: #8a6070;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #161e26; border-color: #243040; color: #e0dcd8;">
+        Alan Bergman<span class="type" style="color: #6a8aaa;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #1a1818; border-color: #2a2626;">
+        <div class="frame-header" style="border-color: #2a2626; color: #bfa058;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #221e1e; border-color: #2a2626; color: #e0dcd8;" placeholder="Search..." />
+          <div class="frame-result" style="background: #221e1e; color: #e0dcd8;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">#6 with steel blue people. Rose and blue are classic complements — warm orgs, cool people. The gold bridges them. Feels like a vintage movie poster palette.</p>
+  </div>
+</div>
+
+<!-- 10: Antique Gold & Dusty Rose + Warm Amber people -->
+<div class="scheme" style="background: #0f0e0e;">
+  <div class="scheme-header" style="background: #1a1818; color: #bfa058; border-bottom: 1px solid #2a2626;">
+    10. Dusty Rose + Warm Amber (from #6)
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0f0e0e;">bg</div>
+      <div class="swatch" style="background: #1a1818;">srf</div>
+      <div class="swatch" style="background: #bfa058;">acc</div>
+      <div class="swatch" style="background: #8a6070;">org</div>
+      <div class="swatch" style="background: #b89060;">per</div>
+      <div class="swatch" style="background: #7a7070;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0f0e0e;">
+      <div class="navbar" style="background: #1a1818; border-color: #2a2626; color: #e0dcd8;">
+        &#9786; &#9776; <span style="color: #bfa058;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #221a1e; border-color: #3a2830; color: #e0dcd8;">
+        Disney<span class="type" style="color: #8a6070;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #221a1e; border-color: #3a2830; color: #e0dcd8;">
+        Netflix<span class="type" style="color: #8a6070;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #241e14; border-color: #3e3220; color: #e0dcd8;">
+        Alan Bergman<span class="type" style="color: #b89060;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #1a1818; border-color: #2a2626;">
+        <div class="frame-header" style="border-color: #2a2626; color: #bfa058;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #221e1e; border-color: #2a2626; color: #e0dcd8;" placeholder="Search..." />
+          <div class="frame-result" style="background: #221e1e; color: #e0dcd8;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">#6 with amber/cognac people. Almost monochromatic warm palette — rose, gold, amber. Everything in the same warm family. Very cohesive, like candlelight on leather.</p>
+  </div>
+</div>
+
+<!-- 11: Electric Gold & Violet + Teal Blue people -->
+<div class="scheme" style="background: #0e0c12;">
+  <div class="scheme-header" style="background: #181620; color: #e0b84a; border-bottom: 1px solid #282436;">
+    11. Violet + Teal Blue (from #7)
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0e0c12;">bg</div>
+      <div class="swatch" style="background: #181620;">srf</div>
+      <div class="swatch" style="background: #e0b84a;">acc</div>
+      <div class="swatch" style="background: #8060b0;">org</div>
+      <div class="swatch" style="background: #4a9ab0;">per</div>
+      <div class="swatch" style="background: #686080;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0e0c12;">
+      <div class="navbar" style="background: #181620; border-color: #282436; color: #eae6f0;">
+        &#9786; &#9776; <span style="color: #e0b84a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Disney<span class="type" style="color: #8060b0;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Netflix<span class="type" style="color: #8060b0;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #121e26; border-color: #1c3240; color: #eae6f0;">
+        Alan Bergman<span class="type" style="color: #4a9ab0;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #181620; border-color: #282436;">
+        <div class="frame-header" style="border-color: #282436; color: #e0b84a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1e1c28; border-color: #282436; color: #eae6f0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1e1c28; color: #eae6f0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">#7 with teal blue people. Violet + teal is an analogous cool palette, with the gold cutting across as the warm wildcard. Sci-fi elegant — like a high-end data visualization.</p>
+  </div>
+</div>
+
+<!-- 12: Electric Gold & Violet + Copper people -->
+<div class="scheme" style="background: #0e0c12;">
+  <div class="scheme-header" style="background: #181620; color: #e0b84a; border-bottom: 1px solid #282436;">
+    12. Violet + Copper (from #7)
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0e0c12;">bg</div>
+      <div class="swatch" style="background: #181620;">srf</div>
+      <div class="swatch" style="background: #e0b84a;">acc</div>
+      <div class="swatch" style="background: #8060b0;">org</div>
+      <div class="swatch" style="background: #c08060;">per</div>
+      <div class="swatch" style="background: #686080;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0e0c12;">
+      <div class="navbar" style="background: #181620; border-color: #282436; color: #eae6f0;">
+        &#9786; &#9776; <span style="color: #e0b84a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Disney<span class="type" style="color: #8060b0;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Netflix<span class="type" style="color: #8060b0;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #261c16; border-color: #402e20; color: #eae6f0;">
+        Alan Bergman<span class="type" style="color: #c08060;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #181620; border-color: #282436;">
+        <div class="frame-header" style="border-color: #282436; color: #e0b84a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1e1c28; border-color: #282436; color: #eae6f0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1e1c28; color: #eae6f0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">#7 with copper/terracotta people. Warm metals (gold, copper) against cool purple — like jewelry in a velvet case. Strong visual separation between orgs and people without using green at all.</p>
+  </div>
+</div>
+
+<!-- 13: #11 with original logo gold -->
+<div class="scheme" style="background: #0e0c12;">
+  <div class="scheme-header" style="background: #181620; color: #c9a55a; border-bottom: 1px solid #282436;">
+    13. Violet + Teal + Logo Gold (#c9a55a)
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0e0c12;">bg</div>
+      <div class="swatch" style="background: #181620;">srf</div>
+      <div class="swatch" style="background: #c9a55a;">acc</div>
+      <div class="swatch" style="background: #8060b0;">org</div>
+      <div class="swatch" style="background: #4a9ab0;">per</div>
+      <div class="swatch" style="background: #686080;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0e0c12;">
+      <div class="navbar" style="background: #181620; border-color: #282436; color: #eae6f0;">
+        &#9786; &#9776; <span style="color: #c9a55a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Disney<span class="type" style="color: #8060b0;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Netflix<span class="type" style="color: #8060b0;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #121e26; border-color: #1c3240; color: #eae6f0;">
+        Alan Bergman<span class="type" style="color: #4a9ab0;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #181620; border-color: #282436;">
+        <div class="frame-header" style="border-color: #282436; color: #c9a55a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1e1c28; border-color: #282436; color: #eae6f0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1e1c28; color: #eae6f0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Your original logo gold. Warmer, more muted than #11's electric gold. Feels a touch more grounded — less "tech dashboard," more "members' club."</p>
+  </div>
+</div>
+
+<!-- 14: #11 with antique/pale gold -->
+<div class="scheme" style="background: #0e0c12;">
+  <div class="scheme-header" style="background: #181620; color: #bfa058; border-bottom: 1px solid #282436;">
+    14. Violet + Teal + Antique Gold (#bfa058)
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0e0c12;">bg</div>
+      <div class="swatch" style="background: #181620;">srf</div>
+      <div class="swatch" style="background: #bfa058;">acc</div>
+      <div class="swatch" style="background: #8060b0;">org</div>
+      <div class="swatch" style="background: #4a9ab0;">per</div>
+      <div class="swatch" style="background: #686080;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0e0c12;">
+      <div class="navbar" style="background: #181620; border-color: #282436; color: #eae6f0;">
+        &#9786; &#9776; <span style="color: #bfa058;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Disney<span class="type" style="color: #8060b0;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Netflix<span class="type" style="color: #8060b0;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #121e26; border-color: #1c3240; color: #eae6f0;">
+        Alan Bergman<span class="type" style="color: #4a9ab0;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #181620; border-color: #282436;">
+        <div class="frame-header" style="border-color: #282436; color: #bfa058;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1e1c28; border-color: #282436; color: #eae6f0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1e1c28; color: #eae6f0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Antique gold — slightly browner, more desaturated. The most "old money" of the golds. Recedes a bit more, letting the violet and teal do the talking.</p>
+  </div>
+</div>
+
+<!-- 15: #11 with warm brown gold -->
+<div class="scheme" style="background: #0e0c12;">
+  <div class="scheme-header" style="background: #181620; color: #b8944a; border-bottom: 1px solid #282436;">
+    15. Violet + Teal + Brown Gold (#b8944a)
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0e0c12;">bg</div>
+      <div class="swatch" style="background: #181620;">srf</div>
+      <div class="swatch" style="background: #b8944a;">acc</div>
+      <div class="swatch" style="background: #8060b0;">org</div>
+      <div class="swatch" style="background: #4a9ab0;">per</div>
+      <div class="swatch" style="background: #686080;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0e0c12;">
+      <div class="navbar" style="background: #181620; border-color: #282436; color: #eae6f0;">
+        &#9786; &#9776; <span style="color: #b8944a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Disney<span class="type" style="color: #8060b0;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Netflix<span class="type" style="color: #8060b0;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #121e26; border-color: #1c3240; color: #eae6f0;">
+        Alan Bergman<span class="type" style="color: #4a9ab0;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #181620; border-color: #282436;">
+        <div class="frame-header" style="border-color: #282436; color: #b8944a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1e1c28; border-color: #282436; color: #eae6f0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1e1c28; color: #eae6f0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Brownest gold — almost caramel. Very earthy, pairs well with the cool violet/teal. The warmth feels organic and understated. Whiskey neat.</p>
+  </div>
+</div>
+
+<!-- 16: #11 with champagne gold -->
+<div class="scheme" style="background: #0e0c12;">
+  <div class="scheme-header" style="background: #181620; color: #d4c080; border-bottom: 1px solid #282436;">
+    16. Violet + Teal + Champagne Gold (#d4c080)
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0e0c12;">bg</div>
+      <div class="swatch" style="background: #181620;">srf</div>
+      <div class="swatch" style="background: #d4c080;">acc</div>
+      <div class="swatch" style="background: #8060b0;">org</div>
+      <div class="swatch" style="background: #4a9ab0;">per</div>
+      <div class="swatch" style="background: #686080;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0e0c12;">
+      <div class="navbar" style="background: #181620; border-color: #282436; color: #eae6f0;">
+        &#9786; &#9776; <span style="color: #d4c080;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Disney<span class="type" style="color: #8060b0;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a1630; border-color: #2e224e; color: #eae6f0;">
+        Netflix<span class="type" style="color: #8060b0;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #121e26; border-color: #1c3240; color: #eae6f0;">
+        Alan Bergman<span class="type" style="color: #4a9ab0;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #181620; border-color: #282436;">
+        <div class="frame-header" style="border-color: #282436; color: #d4c080;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1e1c28; border-color: #282436; color: #eae6f0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1e1c28; color: #eae6f0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Palest, lightest gold — almost champagne/straw. Higher contrast against the dark purple base. Feels lighter, more airy. The gold is present but doesn't dominate.</p>
+  </div>
+</div>
+
+</div>
+
+<h1 style="margin-top: 60px;">Original Six (Round 1)</h1>
+<p class="subtitle">Gold-focused schemes from the first round</p>
+
+<div class="grid">
+
+<!-- O1: Gold & Charcoal -->
+<div class="scheme" style="background: #111111;">
+  <div class="scheme-header" style="background: #1a1714; color: #c9a55a; border-bottom: 1px solid #2a2520;">
+    O1. Gold & Charcoal
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0f0f0f;">bg</div>
+      <div class="swatch" style="background: #1a1a1a;">srf</div>
+      <div class="swatch" style="background: #c9a55a;">acc</div>
+      <div class="swatch" style="background: #3d6b5e;">org</div>
+      <div class="swatch" style="background: #8b6e4e;">per</div>
+      <div class="swatch" style="background: #7a7a7a;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0f0f0f;">
+      <div class="navbar" style="background: #1a1a1a; border-color: #333; color: #e0d5c0;">
+        &#9786; &#9776; <span style="color: #c9a55a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a2e27; border-color: #2a4a3e; color: #e0d5c0;">
+        Disney<span class="type" style="color: #7a7a7a;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a2e27; border-color: #2a4a3e; color: #e0d5c0;">
+        Netflix<span class="type" style="color: #7a7a7a;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #2a2218; border-color: #4a3a28; color: #e0d5c0;">
+        Alan Bergman<span class="type" style="color: #7a7a7a;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #1a1a1a; border-color: #333;">
+        <div class="frame-header" style="border-color: #333; color: #c9a55a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #252525; border-color: #333; color: #e0d5c0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #252525; color: #e0d5c0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Warm gold accent on deep charcoal. Earthy, refined. Forest teal orgs, warm brown people.</p>
+  </div>
+</div>
+
+<!-- O2: Gold & Midnight -->
+<div class="scheme" style="background: #0c0e14;">
+  <div class="scheme-header" style="background: #12141c; color: #d4af61; border-bottom: 1px solid #252838;">
+    O2. Gold & Midnight
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0c0e14;">bg</div>
+      <div class="swatch" style="background: #161820;">srf</div>
+      <div class="swatch" style="background: #d4af61;">acc</div>
+      <div class="swatch" style="background: #4a6fa5;">org</div>
+      <div class="swatch" style="background: #6b8f71;">per</div>
+      <div class="swatch" style="background: #6b7084;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0c0e14;">
+      <div class="navbar" style="background: #161820; border-color: #252838; color: #e0dcd4;">
+        &#9786; &#9776; <span style="color: #d4af61;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #151d2e; border-color: #253550; color: #e0dcd4;">
+        Disney<span class="type" style="color: #6b7084;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #151d2e; border-color: #253550; color: #e0dcd4;">
+        Netflix<span class="type" style="color: #6b7084;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #152018; border-color: #253a28; color: #e0dcd4;">
+        Alan Bergman<span class="type" style="color: #6b7084;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #161820; border-color: #252838;">
+        <div class="frame-header" style="border-color: #252838; color: #d4af61;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1e2028; border-color: #252838; color: #e0dcd4;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1e2028; color: #e0dcd4;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Deep navy-black with gold. Steel blue orgs, sage green people. Premium/editorial.</p>
+  </div>
+</div>
+
+<!-- O3: Burnished Gold -->
+<div class="scheme" style="background: #121110;">
+  <div class="scheme-header" style="background: #1c1916; color: #c9a55a; border-bottom: 1px solid #302a22;">
+    O3. Burnished Gold (Warm Mono)
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #121110;">bg</div>
+      <div class="swatch" style="background: #1c1916;">srf</div>
+      <div class="swatch" style="background: #c9a55a;">acc</div>
+      <div class="swatch" style="background: #b8944a;">org</div>
+      <div class="swatch" style="background: #7a9b6b;">per</div>
+      <div class="swatch" style="background: #8a7e6e;">mut</div>
+    </div>
+    <div class="canvas" style="background: #121110;">
+      <div class="navbar" style="background: #1c1916; border-color: #302a22; color: #e0d5c0;">
+        &#9786; &#9776; <span style="color: #c9a55a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #221e14; border-color: #3a3120; color: #e0d5c0;">
+        Disney<span class="type" style="color: #8a7e6e;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #221e14; border-color: #3a3120; color: #e0d5c0;">
+        Netflix<span class="type" style="color: #8a7e6e;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #182016; border-color: #283828; color: #e0d5c0;">
+        Alan Bergman<span class="type" style="color: #8a7e6e;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #1c1916; border-color: #302a22;">
+        <div class="frame-header" style="border-color: #302a22; color: #c9a55a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #242018; border-color: #302a22; color: #e0d5c0;" placeholder="Search..." />
+          <div class="frame-result" style="background: #242018; color: #e0d5c0;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Entire UI tinted warm. Gold orgs, olive green people. Aged leather.</p>
+  </div>
+</div>
+
+<!-- O4: Gold & Slate -->
+<div class="scheme" style="background: #111315;">
+  <div class="scheme-header" style="background: #181a1e; color: #c9a55a; border-bottom: 1px solid #2a2d33;">
+    O4. Gold & Slate
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #111315;">bg</div>
+      <div class="swatch" style="background: #181a1e;">srf</div>
+      <div class="swatch" style="background: #c9a55a;">acc</div>
+      <div class="swatch" style="background: #5a8a9a;">org</div>
+      <div class="swatch" style="background: #c9a55a;">per</div>
+      <div class="swatch" style="background: #6e7580;">mut</div>
+    </div>
+    <div class="canvas" style="background: #111315;">
+      <div class="navbar" style="background: #181a1e; border-color: #2a2d33; color: #ddd;">
+        &#9786; &#9776; <span style="color: #c9a55a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #14222a; border-color: #1e3540; color: #ddd;">
+        Disney<span class="type" style="color: #6e7580;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #14222a; border-color: #1e3540; color: #ddd;">
+        Netflix<span class="type" style="color: #6e7580;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #221e12; border-color: #3a3220; color: #ddd;">
+        Alan Bergman<span class="type" style="color: #6e7580;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #181a1e; border-color: #2a2d33;">
+        <div class="frame-header" style="border-color: #2a2d33; color: #c9a55a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1e2024; border-color: #2a2d33; color: #ddd;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1e2024; color: #ddd;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Cool slate background, warm gold accent. Teal orgs, gold people. Modern, editorial.</p>
+  </div>
+</div>
+
+<!-- O5: Gold & Espresso -->
+<div class="scheme" style="background: #110e0a;">
+  <div class="scheme-header" style="background: #1a1510; color: #d4b064; border-bottom: 1px solid #2e261c;">
+    O5. Gold & Espresso
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #110e0a;">bg</div>
+      <div class="swatch" style="background: #1a1510;">srf</div>
+      <div class="swatch" style="background: #d4b064;">acc</div>
+      <div class="swatch" style="background: #6b4c3a;">org</div>
+      <div class="swatch" style="background: #4a7a6a;">per</div>
+      <div class="swatch" style="background: #7a6e5e;">mut</div>
+    </div>
+    <div class="canvas" style="background: #110e0a;">
+      <div class="navbar" style="background: #1a1510; border-color: #2e261c; color: #ddd0b8;">
+        &#9786; &#9776; <span style="color: #d4b064;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1e1610; border-color: #352a1e; color: #ddd0b8;">
+        Disney<span class="type" style="color: #7a6e5e;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1e1610; border-color: #352a1e; color: #ddd0b8;">
+        Netflix<span class="type" style="color: #7a6e5e;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #121e1a; border-color: #1e3530; color: #ddd0b8;">
+        Alan Bergman<span class="type" style="color: #7a6e5e;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #1a1510; border-color: #2e261c;">
+        <div class="frame-header" style="border-color: #2e261c; color: #d4b064;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #221c14; border-color: #2e261c; color: #ddd0b8;" placeholder="Search..." />
+          <div class="frame-result" style="background: #221c14; color: #ddd0b8;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Deep espresso base. Copper-brown orgs, teal people. Private club / whiskey bar.</p>
+  </div>
+</div>
+
+<!-- O6: Gold & Obsidian -->
+<div class="scheme" style="background: #0a0a0a;">
+  <div class="scheme-header" style="background: #141414; color: #c9a55a; border-bottom: 1px solid #252525;">
+    O6. Gold & Obsidian
+  </div>
+  <div class="scheme-body">
+    <div class="swatches">
+      <div class="swatch" style="background: #0a0a0a;">bg</div>
+      <div class="swatch" style="background: #141414;">srf</div>
+      <div class="swatch" style="background: #c9a55a;">acc</div>
+      <div class="swatch" style="background: #c9a55a;">org</div>
+      <div class="swatch" style="background: #e8e8e8;">per</div>
+      <div class="swatch" style="background: #555;">mut</div>
+    </div>
+    <div class="canvas" style="background: #0a0a0a;">
+      <div class="navbar" style="background: #141414; border-color: #252525; color: #e8e8e8;">
+        &#9786; &#9776; <span style="color: #c9a55a;">Coterie</span>
+      </div>
+      <div class="node node-org" style="left: 30px; top: 60px; background: #1a1608; border-color: #332c14; color: #e8e8e8;">
+        Disney<span class="type" style="color: #555;">Studio</span>
+      </div>
+      <div class="node node-org" style="left: 200px; top: 45px; background: #1a1608; border-color: #332c14; color: #e8e8e8;">
+        Netflix<span class="type" style="color: #555;">Streamer</span>
+      </div>
+      <div class="node node-person" style="left: 70px; top: 140px; background: #181818; border-color: #333; color: #e8e8e8;">
+        Alan Bergman<span class="type" style="color: #555;">Executive</span>
+      </div>
+      <div class="frame" style="left: 10px; top: 8px; background: #141414; border-color: #252525;">
+        <div class="frame-header" style="border-color: #252525; color: #c9a55a;">Search</div>
+        <div class="frame-body">
+          <input class="frame-input" style="background: #1a1a1a; border-color: #252525; color: #e8e8e8;" placeholder="Search..." />
+          <div class="frame-result" style="background: #1a1a1a; color: #e8e8e8;">&#9679; Netflix</div>
+        </div>
+      </div>
+    </div>
+    <p class="description">Near-black, just gold + white. Maximum elegance. Black Amex minimal.</p>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>

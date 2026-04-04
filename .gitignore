@@ -31,5 +31,8 @@ dist/
 supabase/.branches
 supabase/.temp
 
+# TypeScript build cache
+*.tsbuildinfo
+
 # Claude Code
 .claude/

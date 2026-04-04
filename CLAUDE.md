@@ -128,6 +128,9 @@ Unreliable in local dev (JWT/RLS issues, GitHub #21624). **Workaround:** polling
 - `phone` must be NULL (UNIQUE constraint), `is_sso_user = false`
 - Debug: `docker logs supabase_auth_coterie`
 
+### Supabase Cloud: SECURITY DEFINER Functions Need search_path
+`SECURITY DEFINER` functions on Supabase Cloud don't default to `public` schema. Bare table names (e.g., `INSERT INTO profiles`) fail silently. Fix: always use `public.profiles` AND add `SET search_path = public` to the function definition. Discovered when `create_profile_on_signup` trigger caused "Database error saving new user" on OTP signup.
+
 ### React Flow v12 Multi-Select
 `selectionOnDrag` eats Cmd-click. Fix: `useOnSelectionChange` hook as truth for lasso, manual Cmd/Shift-click in `onNodeClick`, `clickHandledRef` (50ms) to prevent overwrite.
 
@@ -179,14 +182,18 @@ See `docs/UI_REFERENCE.md` for MapsFrame architecture, workspace persistence, co
 ## Running Locally
 
 ```bash
+# Local dev
 supabase start              # Requires Docker
 open http://127.0.0.1:54323 # Studio UI
 supabase db reset           # Reset after schema changes
 npm run dev                 # → http://localhost:5173
-# Test: matt@test.com / password123, billy@test.com / password123
+
+# Cloud: Supabase project "coterie" in Buckethead org (sbgxgveornxaxxiowwsh, us-west-1)
+# .env.local has cloud credentials (local config commented out for switching)
+# Auth: 6-digit email OTP (no passwords) — works for both signup and login
 ```
 
-Deploy: Supabase Cloud (`supabase db push`) + Vercel.
+Deploy: Supabase Cloud (`supabase db push`) + Vercel (not yet configured).
 
 ## Status
 
@@ -194,9 +201,12 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 
 ### Next Up
 - [x] "Accept and place" UX — ghost placement with drag interaction, tested and working
-- [ ] DetailPanel migration to Frame component (draggable)
-- [ ] Light mode polish
-- [ ] Map packages (store) — browse + stamp placement
+- [x] Supabase Cloud deployment + OTP auth
+- [ ] Non-user invitation flow — `/invite/:token` landing page, Edge Function for emails
+- [ ] Vercel deployment + domain
+- [ ] DetailPanel migration to Frame component (back burner)
+- [ ] Light mode polish (back burner)
+- [ ] Map packages (store) — later, possibly post-launch
 
 ### Planned (Pro)
 - [ ] Operator dedup tooling

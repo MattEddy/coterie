@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase'
 interface AuthContextType {
   user: User | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>
+  sendOtp: (email: string) => Promise<{ error: Error | null }>
+  verifyOtp: (email: string, token: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
 }
 
@@ -28,8 +29,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const sendOtp = async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({ email })
+    return { error: error as Error | null }
+  }
+
+  const verifyOtp = async (email: string, token: string) => {
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
     return { error: error as Error | null }
   }
 
@@ -38,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, sendOtp, verifyOtp, signOut }}>
       {children}
     </AuthContext.Provider>
   )

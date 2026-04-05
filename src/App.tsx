@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { WorkspaceProvider } from './contexts/WorkspaceContext'
 import Login from './pages/Login'
 import Landscape from './pages/Landscape'
+import InviteLanding from './pages/InviteLanding'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -17,6 +18,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/invite/:token" element={<InviteLanding />} />
           <Route path="/" element={
             <ProtectedRoute>
               <WorkspaceProvider>

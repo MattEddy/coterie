@@ -2,6 +2,9 @@ import { useState, useRef, useEffect } from 'react'
 import { User, Menu, Search, Map, Users, Settings, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import Tooltip from './Tooltip'
+import { useTheme } from '../contexts/ThemeContext'
+import logoNameDark from '../assets/logo-name.svg'
+import logoNameLight from '../assets/logo-name-light.svg'
 import styles from './NavBar.module.css'
 
 export type FrameType = 'search' | 'maps' | 'coteries' | 'coterie-updates' | 'settings'
@@ -19,6 +22,7 @@ interface NavBarProps {
 
 export default function NavBar({ onOpenFrame }: NavBarProps) {
   const { user, signOut } = useAuth()
+  const { resolvedTheme } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -46,7 +50,7 @@ export default function NavBar({ onOpenFrame }: NavBarProps) {
             className={`${styles.navBtn} ${accountOpen ? styles.navBtnActive : ''}`}
             onClick={() => { setAccountOpen(!accountOpen); setMenuOpen(false) }}
           >
-            <User size={18} />
+            <User size={27} />
           </button>
         </Tooltip>
 
@@ -71,7 +75,7 @@ export default function NavBar({ onOpenFrame }: NavBarProps) {
             className={`${styles.navBtn} ${menuOpen ? styles.navBtnActive : ''}`}
             onClick={() => { setMenuOpen(!menuOpen); setAccountOpen(false) }}
           >
-            <Menu size={18} />
+            <Menu size={27} />
           </button>
         </Tooltip>
 
@@ -94,7 +98,7 @@ export default function NavBar({ onOpenFrame }: NavBarProps) {
         )}
       </div>
 
-      <span className={styles.logo}>Coterie</span>
+      <img src={resolvedTheme === 'light' ? logoNameLight : logoNameDark} alt="Coterie" className={styles.logo} />
     </div>
   )
 }

@@ -2,12 +2,16 @@ import { useState, useRef, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { useTheme } from '../contexts/ThemeContext'
+import logoNameDark from '../assets/logo-name.svg'
+import logoNameLight from '../assets/logo-name-light.svg'
 import styles from './Login.module.css'
 
 type Step = 'email' | 'code' | 'name'
 
 export default function Login() {
   const { user, sendOtp, verifyOtp } = useAuth()
+  const { resolvedTheme } = useTheme()
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState(['', '', '', '', '', ''])
@@ -121,7 +125,7 @@ export default function Login() {
   return (
     <div className={styles.container}>
       <div className={styles.form}>
-        <h1 className={styles.title}>Coterie</h1>
+        <img src={resolvedTheme === 'light' ? logoNameLight : logoNameDark} alt="Coterie" className={styles.logoImg} />
         <p className={styles.subtitle}>Map your professional world.</p>
 
         {step === 'email' && (

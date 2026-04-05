@@ -83,10 +83,6 @@
 }
 
 .logo {
-
-  font-size: 15px;
-  font-weight: 600;
+  height: 27px;
   margin-left: 4px;
-  letter-spacing: 0;
-  color: var(--color-accent);
 }

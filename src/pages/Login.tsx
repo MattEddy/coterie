@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../contexts/ThemeContext'
 import { acceptInvitationByToken } from '../lib/acceptInvitation'
-import logoNameDark from '../assets/logo-name.svg'
-import logoNameLight from '../assets/logo-name-light.svg'
+import logoMottoDark from '../assets/logo-name-motto.svg'
+import logoMottoLight from '../assets/logo-name-motto-light.svg'
 import styles from './Login.module.css'
 
 type Step = 'email' | 'code' | 'name'
@@ -147,8 +147,9 @@ export default function Login() {
   return (
     <div className={styles.container}>
       <div className={styles.form}>
-        <img src={resolvedTheme === 'light' ? logoNameLight : logoNameDark} alt="Coterie" className={styles.logoImg} />
-        <p className={styles.subtitle}>Map your professional world.</p>
+        <p className={styles.welcomeText}>Welcome to</p>
+        <img src={resolvedTheme === 'light' ? logoMottoLight : logoMottoDark} alt="Coterie" className={styles.logoImg} />
+        <p className={styles.subtitle}>Please login to get started.</p>
 
         {step === 'email' && (
           <form onSubmit={handleSendCode} className={styles.stepContent}>

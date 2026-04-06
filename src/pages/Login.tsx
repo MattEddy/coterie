@@ -35,6 +35,7 @@ export default function Login() {
       setAccepting(true)
       await acceptInvitationByToken(uid, pendingToken)
       sessionStorage.removeItem('pendingInviteToken')
+      sessionStorage.setItem('showWelcomeModal', 'true')
       setAccepting(false)
     }
     // Navigate will happen via the render check below

@@ -1,3 +1,58 @@
 .container {
   height: 100%;
 }
+
+/* ── Welcome modal ──────────────────────────────────────────── */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+
+.modalCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 32px;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: var(--shadow);
+}
+
+.modalTitle {
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.modalText {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  text-align: center;
+}
+
+.modalButton {
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  background: var(--color-accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s;
+  align-self: center;
+}
+
+.modalButton:hover {
+  background: var(--color-accent-hover);
+}

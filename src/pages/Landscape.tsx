@@ -10,12 +10,16 @@ import SettingsFrame from '../components/SettingsFrame'
 import CoterieUpdatesFrame from '../components/CoterieUpdatesFrame'
 import NotificationBoxes from '../components/NotificationBoxes'
 import PlacementBar from '../components/PlacementBar'
+import { useAuth } from '../contexts/AuthContext'
+import { acceptInvitationByToken } from '../lib/acceptInvitation'
 import type { PlacementCluster } from '../types'
 import styles from './Landscape.module.css'
 
 export default function Landscape() {
+  const { user } = useAuth()
   const canvasRef = useRef<CanvasRef>(null)
   const [openFrames, setOpenFrames] = useState<Set<FrameType>>(new Set())
+  const [welcomeModal, setWelcomeModal] = useState<{ senderName: string } | null>(null)
   const [activeMapId, setActiveMapId] = useState<string | null>(null)
   const [highlightedObjectIds, setHighlightedObjectIds] = useState<string[] | null>(null)
   const [mapEditMode, setMapEditMode] = useState(false)
@@ -131,6 +135,81 @@ export default function Landscape() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [toggleFrame])
 
+  // Check for pending invite (logged-in user from invite flow) or welcome modal flag (from Login)
+  useEffect(() => {
+    if (!user) return
+
+    // Case 1: Already-logged-in user with a pending invite token
+    const pendingToken = sessionStorage.getItem('pendingInviteToken')
+    if (pendingToken) {
+      sessionStorage.removeItem('pendingInviteToken')
+
+      async function acceptPending() {
+        const { supabase } = await import('../lib/supabase')
+        const { data: inv } = await supabase
+          .from('coterie_invitations')
+          .select('invited_by, status')
+          .eq('token', pendingToken)
+          .single()
+
+        if (!inv || inv.status !== 'pending') return
+
+        const { data: sender } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('user_id', inv.invited_by)
+          .single()
+
+        const accepted = await acceptInvitationByToken(user.id, pendingToken!)
+        if (accepted) {
+          document.dispatchEvent(new Event('coterie:refresh-canvas'))
+          setWelcomeModal({ senderName: sender?.display_name || 'Your coterie' })
+        }
+      }
+      acceptPending()
+      return
+    }
+
+    // Case 2: User just came through Login which already accepted the invite
+    const showWelcome = sessionStorage.getItem('showWelcomeModal')
+    if (showWelcome) {
+      sessionStorage.removeItem('showWelcomeModal')
+      // Fetch the most recent coterie membership to get the sender name
+      async function showWelcomeFromLogin() {
+        const { supabase } = await import('../lib/supabase')
+        const { data: membership } = await supabase
+          .from('coteries_members')
+          .select('coterie_id')
+          .eq('user_id', user!.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (!membership) {
+          setWelcomeModal({ senderName: 'Your coterie' })
+          return
+        }
+
+        const { data: coterie } = await supabase
+          .from('coteries')
+          .select('owner_id')
+          .eq('id', membership.coterie_id)
+          .single()
+
+        const { data: sender } = coterie
+          ? await supabase
+              .from('profiles')
+              .select('display_name')
+              .eq('user_id', coterie.owner_id)
+              .single()
+          : { data: null }
+
+        setWelcomeModal({ senderName: sender?.display_name || 'Your coterie' })
+      }
+      showWelcomeFromLogin()
+    }
+  }, [user])
+
   return (
     <div className={styles.container}>
       <Canvas ref={canvasRef} activeMapId={activeMapId} highlightedObjectIds={highlightedObjectIds} mapEditMode={mapEditMode} onMapEditClick={handleMapEditClick} placementCluster={placementCluster} />
@@ -176,6 +255,25 @@ export default function Landscape() {
       )}
       {openFrames.has('settings') && (
         <SettingsFrame onClose={() => closeFrame('settings')} />
+      )}
+
+      {welcomeModal && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalCard}>
+            <h2 className={styles.modalTitle}>Welcome to Coterie</h2>
+            <p className={styles.modalText}>
+              This is your Landscape. Everything you add, change, or note is
+              yours — {welcomeModal.senderName} and your coterie will see shared
+              notes, but your Landscape is your own.
+            </p>
+            <button
+              className={styles.modalButton}
+              onClick={() => setWelcomeModal(null)}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

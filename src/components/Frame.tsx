@@ -8,6 +8,14 @@ function getNextZ() { return ++zCounter }
 
 const MIN_W = 200
 const MIN_H = 100
+function clampToViewport(x: number, y: number, w: number): { x: number; y: number } {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  return {
+    x: Math.max(0, Math.min(x, vw - w)),
+    y: Math.max(0, Math.min(y, vh - MIN_H)),
+  }
+}
 
 const CURSORS: Record<string, string> = {
   n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize',
@@ -33,19 +41,19 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
   externalRef
 ) {
   const { getLayout, saveLayout } = useWorkspace()
-  const [position, setPosition] = useState(() => {
-    if (persistKey) {
-      const saved = getLayout(persistKey)
-      if (saved) return { x: saved.x, y: saved.y }
-    }
-    return initialPosition
-  })
   const [size, setSize] = useState<{ w: number; h?: number }>(() => {
     if (persistKey) {
       const saved = getLayout(persistKey)
       if (saved) return { w: saved.w || width }
     }
     return { w: width }
+  })
+  const [position, setPosition] = useState(() => {
+    if (persistKey) {
+      const saved = getLayout(persistKey)
+      if (saved) return clampToViewport(saved.x, saved.y, saved.w || width)
+    }
+    return initialPosition
   })
   // Track whether the user explicitly resized (so we only persist h from resize)
   const userResized = useRef(false)

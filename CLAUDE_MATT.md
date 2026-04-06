@@ -5,40 +5,43 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-04-03
+**Date:** 2026-04-03 through 2026-04-06
 **Branch:** main
 
 ### Narrative
 
-Big session: DetailPanel refactor, UI redesign, coterie map protections, cross-frame refresh, Supabase Cloud deployment, and passwordless auth.
+Major session spanning multiple days: built the complete non-user invitation flow (landing page → join/pricing page → auth handoff → welcome modal), added logo branding, subscriptions schema, and invite email Edge Function.
 
-**DetailPanel refactor.** Extracted `TagInput` (153 lines) and `ObjectSearch` (114 lines) into their own files. Created `src/lib/connections.ts` with `getEffectiveConnections()` helper that replaces the repeated 3-query pattern (canon + user + deactivated connections) used in `loadConnectedItems`, `loadLinkedObjects`, and `initiateDelete`. Removed debug `console.log`s from `executeDelete`. Added `resetCreateForm()` helper (replaced 7 copy-pasted reset blocks) and `todayDateString()` helper. DetailPanel went from 2181 → 1787 lines.
+**Logo branding.** Matt created SVG logos in a design tool. Five variants saved to `src/assets/`: `logo-name.svg` (dark), `logo-name-light.svg` (light), `logo-icon.svg`/`logo-icon-light.svg`, `logo-name-motto.svg` (includes "Map your professional world" — marketing pages only). The two golds in the logo (`#d4b468` lighter, `#a68830` darker) became the only accent colors: dark mode uses lighter as primary/darker as hover, light mode reverses them. Logo replaced text "Coterie" in NavBar (27px, theme-aware) and Login page. NavBar icons also bumped 18→27.
 
-**DetailPanel header redesign.** Header is now a colored "subcard" matching the object card — rose (`--color-org-dim`) for companies, teal (`--color-person-dim`) for people. Type chips use class-specific colors with `color-mix` tinted backgrounds. Divider line between header and tabs removed. Panel padding tightened from 16px → 10px, subcard internal padding 6px.
+**Muted text brightened again.** `--color-text-muted`: dark `#918888` → `#a89e9e`, light `#736b68` → `#635b58`. Matt's MacBook Pro screen was making it too faint.
 
-**Tab action buttons.** Moved edit/add buttons from a dedicated row (wasted vertical space) to floating overlays in the top-right corner of tab content, visible on hover only. `.tabFloatingAction` with `opacity: 0` → `1` on `.tabSection:hover`.
+**Invite landing page** (`src/pages/InviteLanding.tsx`, route `/invite/:token`). Validates token against `coterie_invitations`, fetches coterie name + sender name. Layout: sender invitation line → motto logo → two-paragraph pitch text → interactive demo canvas → coterie blurb → "Learn More / Join" CTA. Dev shortcut: `/invite/demo` shows sample data. The pitch copy went through several iterations — Matt landed on: "Intuitively and visually array people, organizations, and information — so you can truly understand and harness your interpersonal landscape. Then link up with trusted collaborators to share and sync your Coterie information, keeping each other up to date and in the loop."
 
-**Brighter muted text.** `--color-text-muted` bumped up: dark `#7a7070` → `#918888`, light `#8a8280` → `#736b68`.
+**Interactive demo canvas.** Standalone React Flow instance (not the full Canvas component — too coupled to auth/Supabase). Uses real `ObjectNode` and `RoleEdge` components. Five demo nodes: Netflix, Ted Sarandos, 21 Laps Entertainment, Shawn Levy, WME — mix of orgs (rounded rect) and people (pill shape). Straight lines with role labels (Employer/Employee, Overall Deal, Company/Founder, Client/Rep). Edge click highlights + shows roles. Node click opens a demo detail card (top-right of canvas) with 4 clickable tabs: Contact, Notes, Projects, Events — populated with realistic demo data (Stranger Things 5, Deadpool & Wolverine, CinemaCon Keynote, etc.). Framed label at top: "Try it out – drag, click, explore:". Page designed for laptop screens (900px max-width).
 
-**Coterie map protections.** Maps linked to coteries now show a `Users` icon badge in the map list (size 13, gold accent) and a persistent "Linked to **[coterie name]**" banner in the map detail card. Delete is blocked on coterie-linked maps — clicking trash shows the banner expanding to "Leave the **[coterie name]** coterie before deleting this map." Both sender maps (via `coteries_maps` join table) and recipient maps (via `source_coterie_id`) are detected. `loadMaps` resolves coterie names from both paths.
+**Join/pricing page** (`src/pages/InviteJoin.tsx`, route `/invite/:token/join`). Four horizontal feature cards with custom thumbnail SVGs Matt designed: Landscape, Details, Maps, Coteries. Each has gold-bordered thumbnail + title + description. Pricing section: "Start free. No card needed. Try Coterie free for 2 months — then continue for $3.99/month or $39/year." CTA: "Start Free Trial" button. Below: coterie-specific blurb + offline fallback note ("After your trial, you can continue using Coterie Free offline...").
 
-**Cross-frame refresh.** CustomEvent pattern for live updates:
-- `maps:refresh` — fired after sharing a map as a coterie and after accepting a coterie invite. MapsFrame reloads and syncs `coterie_name` into open detail card.
-- `coteries:refresh` — fired by NotificationBoxes when invite count changes. CoteriesFrame reloads invitations and coteries.
+**Subscriptions schema** (`supabase/migrations/20260406000000_subscriptions.sql`). New `subscriptions` table: `status` (trialing/active/past_due/canceled/free/vip), `plan_id` (future-proof for `pro_monthly_399` style IDs), `trial_ends_at`, `trial_duration_days` (default 60), `coupon_code`, `stripe_customer_id`/`stripe_subscription_id`, `metadata` JSONB. `user_tier(uid)` function returns `'pro'`/`'trial'`/`'free'` with lazy trial expiry downgrade. Signup trigger creates both profile + subscription row. Existing users backfilled as VIP. Pricing: $3.99/mo or $39/year (2 months free on annual). VIP status = billing-exempt full access for company owners/employees.
 
-**Detail card switching.** Single-clicking a different item in Maps or Coteries list while a detail card is open now switches to the clicked item (previously required double-click to open, single-click only selected).
+**Auth handoff** (`src/pages/Login.tsx`). Login reads `?invite=TOKEN&email=ADDRESS` params. Pre-fills email from invitation with "We'll send a code to **email**" + "Use a different email to join Coterie" link below. After OTP verification: existing users auto-accept invitation immediately, new users go through name step first then accept. `acceptInvitationByToken` utility (`src/lib/acceptInvitation.ts`) extracted from CoteriesFrame's acceptance logic — handles all steps: mark accepted, add to members, create aggregated map, fetch owner positions, compute centroid, create overrides with relative layout, copy owner's user-created connections. Sets `showWelcomeModal` flag in sessionStorage.
 
-**Supabase Cloud deployment.** Created `coterie` project in Buckethead org (`sbgxgveornxaxxiowwsh`, us-west-1). Pushed schema via `supabase db push`. Fixed `create_profile_on_signup` trigger — needed `SET search_path = public` for cloud compatibility (separate migration `20260403000000_fix_profile_trigger.sql`). `.env.local` updated to cloud credentials (local config commented out for easy switching).
+**Logged-in acceptance path** (`src/pages/Landscape.tsx`). On mount, checks sessionStorage for `pendingInviteToken` (already-logged-in user from invite flow) or `showWelcomeModal` flag (user who just came through Login). Accepts the invitation and shows the welcome modal.
 
-**Passwordless OTP auth.** Replaced email/password login with 6-digit email OTP via `supabase.auth.signInWithOtp` / `verifyOtp`. Three-step flow: enter email → enter code (6 individual inputs with auto-advance, paste support, auto-submit) → enter name (new users only, checks `profiles.display_name`). AuthContext exports `sendOtp`/`verifyOtp` instead of `signIn`. Works for both signup and login. Tested successfully — Matt's first real object (Netflix) created on cloud.
+**Welcome modal.** Centered overlay on Landscape: "Welcome to Coterie / This is your Landscape. Everything you add, change, or note is yours — [Sender] and your coterie will see shared notes, but your Landscape is your own. / [Got it]". Styled with `--color-surface` card, `--color-accent` button.
+
+**Invite email Edge Function** (`supabase/functions/send-invite-email/index.ts`). Receives database webhook payload on `coterie_invitations` INSERT. Fetches coterie name + sender name from DB. Sends styled HTML email via Resend API with "View Invitation" CTA button. Graceful fallback: logs email content if `RESEND_API_KEY` not set. Not yet deployed — needs `supabase functions deploy`, secrets configuration, and webhook setup in Dashboard.
+
+**Searched conversation history.** Matt asked to find prior design discussion about the landing page. Discovered that session transcripts are stored as JSONL files at `~/.claude/projects/<project-path>/`. Added a "Conversation History" section to the global `~/.claude/CLAUDE.md` documenting this. Found the original March 24-25 brainstorm with the full landing page wireframe, demo canvas concept, and welcome modal copy.
 
 ### Open Items / Next Steps
-1. **`/invite/:token` landing page** — public route, validates token, shows coterie name + sender + canvas preview, CTA to sign up
-2. **Edge Function for invitation emails** — triggered on `coterie_invitations` insert, sends email with invite link
-3. **Vercel deployment** — deploy web app, get a domain, configure DNS + Supabase redirect URLs
-4. **RLS policies** — real policies before wider access (permissive placeholders currently)
-5. **Trial/payment system** — deferred until invite flow works end-to-end
-6. **DetailPanel → Frame migration** — back burner, wants to use the app first
-7. **Light mode polish** — back burner
-8. **Map packages (store)** — later, possibly post-launch
-9. **Delete AccountFrame files** — unused cleanup
+1. **RLS policies** — Matt wants to test the flow first, then lock down. Needed before any real users. Permissive placeholders currently.
+2. **Test full invite flow** — create a real invitation in cloud DB, walk through landing → join → signup → acceptance → welcome modal
+3. **Deploy Edge Function** — `supabase functions deploy send-invite-email`, set RESEND_API_KEY + APP_URL secrets, configure webhook in Dashboard
+4. **Vercel deployment** — deploy web app, get a domain, configure DNS + Supabase redirect URLs
+5. **Stripe integration** — wire up Checkout, webhooks to update subscription status
+6. **Light-mode motto logo** — Matt needs to create the reversed-gold variant of `logo-name-motto.svg`
+7. **DetailPanel → Frame migration** — back burner
+8. **Light mode polish** — back burner
+9. **Map packages (store)** — later, possibly post-launch
+10. **Delete AccountFrame files** — unused cleanup

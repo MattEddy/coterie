@@ -115,7 +115,9 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 - **Coterie intel is a query pattern** — join members' overrides, exclude `private_notes`
 - **Maps are catalogs, not canvases** — collections with optional relative positioning
 - **All FKs reference `profiles(user_id)`** not `auth.users(id)`
-- **Auto-create profile on signup** via trigger
+- **Auto-create profile + subscription on signup** via trigger
+- **Subscriptions table** tracks trial/payment status per user — `user_tier(uid)` returns `'pro'`/`'trial'`/`'free'`
+- **VIP status** for internal users (billing-exempt, full Pro access) — just a subscription status value, not a separate role
 
 ## Known Gotchas
 
@@ -166,7 +168,10 @@ When accepting a shared map, the recipient's `objects_overrides` must include `n
 ### Frame System
 All UI panels use a shared `Frame` component: draggable, resizable, z-index-on-click (starts at 100, NavBar at 200). Key props: `actions`, `headerContent`, `titleClassName`, `resizable`, `persistKey` (localStorage + Supabase), `titleTooltip`. Double-click title bar to collapse/expand. `forwardRef` support.
 
-NavBar: fixed top-right (account dropdown, hamburger menu, "Coterie" wordmark). Hotkeys: N/S/M/C/, (toggle, suppressed in inputs).
+NavBar: fixed top-right (account dropdown, hamburger menu, logo SVG). Hotkeys: N/S/M/C/, (toggle, suppressed in inputs).
+
+### Logo Assets
+SVG logos in `src/assets/`: `logo-name.svg` (dark), `logo-name-light.svg` (light), `logo-icon.svg`/`logo-icon-light.svg`, `logo-name-motto.svg` (with "Map your professional world" — marketing pages only). Two golds from the logo ARE the accent colors: `#d4b468` (lighter, dark-mode primary) and `#a68830` (darker, light-mode primary). Theme-aware via `useTheme().resolvedTheme`.
 
 Canvas exposes `zoomToNode(nodeId)`, `clearSelection()`, `triggerCreate()` via `forwardRef`.
 
@@ -202,8 +207,12 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 ### Next Up
 - [x] "Accept and place" UX — ghost placement with drag interaction, tested and working
 - [x] Supabase Cloud deployment + OTP auth
-- [ ] Non-user invitation flow — `/invite/:token` landing page, Edge Function for emails
+- [x] Non-user invitation flow — landing page, join page, auth handoff, welcome modal
+- [x] Subscriptions table + `user_tier()` function
+- [x] Edge Function for invite emails (Resend, not yet deployed/configured)
+- [ ] RLS policies — needed before testing with real users
 - [ ] Vercel deployment + domain
+- [ ] Stripe integration for subscription billing
 - [ ] DetailPanel migration to Frame component (back burner)
 - [ ] Light mode polish (back burner)
 - [ ] Map packages (store) — later, possibly post-launch
@@ -211,7 +220,6 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 ### Planned (Pro)
 - [ ] Operator dedup tooling
 - [ ] Canon check / diff-merge UI
-- [ ] RLS policies (before deploy)
 - [ ] Contact sync (Google/Microsoft APIs)
 
 ### Future Tiers

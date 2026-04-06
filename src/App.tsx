@@ -4,6 +4,7 @@ import { WorkspaceProvider } from './contexts/WorkspaceContext'
 import Login from './pages/Login'
 import Landscape from './pages/Landscape'
 import InviteLanding from './pages/InviteLanding'
+import InviteJoin from './pages/InviteJoin'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -19,6 +20,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/invite/:token" element={<InviteLanding />} />
+          <Route path="/invite/:token/join" element={<InviteJoin />} />
           <Route path="/" element={
             <ProtectedRoute>
               <WorkspaceProvider>

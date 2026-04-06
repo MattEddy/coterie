@@ -13,7 +13,6 @@ import ObjectNode from '../components/ObjectNode'
 import type { ObjectNodeData } from '../components/ObjectNode'
 import RoleEdge from '../components/RoleEdge'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
 import logoMottoDark from '../assets/logo-name-motto.svg'
 import styles from './InviteLanding.module.css'
 
@@ -267,7 +266,6 @@ function DemoCanvas() {
 export default function InviteLanding() {
   const { token } = useParams<{ token: string }>()
   const navigate = useNavigate()
-  const { user } = useAuth()
   const [invite, setInvite] = useState<InviteData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -324,16 +322,8 @@ export default function InviteLanding() {
   }, [token])
 
   const handleJoin = useCallback(() => {
-    // Stash token for post-auth pickup
-    if (token) sessionStorage.setItem('pendingInviteToken', token)
-
-    if (user) {
-      // Already logged in — go straight to landscape (acceptance handled there)
-      navigate('/')
-    } else {
-      navigate(`/login?invite=${token}`)
-    }
-  }, [token, user, navigate])
+    navigate(`/invite/${token}/join`)
+  }, [token, navigate])
 
   if (loading) {
     return (

@@ -1,0 +1,162 @@
+.container {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  height: 100%;
+  background: var(--color-bg);
+  overflow-y: auto;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 960px;
+  padding: 32px 40px 64px;
+}
+
+/* ── Logo ────────────────────────────────────────────────────── */
+
+.logo {
+  height: 67px;
+}
+
+/* ── Feature cards ──────────────────────────────────────────── */
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  width: 100%;
+}
+
+.featureCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.featureThumb {
+  width: 100%;
+  border-radius: 4px;
+  border: 1px solid var(--color-accent);
+}
+
+.featureTitle {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.featureDesc {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+/* ── Pricing ────────────────────────────────────────────────── */
+
+.pricingSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.pricingHeadline {
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pricingSubtext {
+  font-size: 15px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.pricingNote {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-align: center;
+  max-width: 480px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+/* ── CTA ────────────────────────────────────────────────────── */
+
+.ctaSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-top: -24px;
+}
+
+.ctaBlurb {
+  font-size: 15px;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.ctaBlurb em {
+  color: var(--color-accent);
+  font-style: normal;
+  font-weight: 500;
+}
+
+.primaryBtn {
+  padding: 14px 48px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  background: var(--color-accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.primaryBtn:hover {
+  background: var(--color-accent-hover);
+  transform: translateY(-1px);
+}
+
+.primaryBtn:active {
+  transform: translateY(0);
+}
+
+/* ── States ─────────────────────────────────────────────────── */
+
+.loading {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  padding: 48px;
+}
+
+.errorCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  margin-top: 48px;
+}
+
+.errorText {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  text-align: center;
+}

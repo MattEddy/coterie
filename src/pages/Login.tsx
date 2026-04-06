@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../contexts/ThemeContext'
+import { acceptInvitationByToken } from '../lib/acceptInvitation'
 import logoNameDark from '../assets/logo-name.svg'
 import logoNameLight from '../assets/logo-name-light.svg'
 import styles from './Login.module.css'
@@ -12,14 +13,32 @@ type Step = 'email' | 'code' | 'name'
 export default function Login() {
   const { user, sendOtp, verifyOtp } = useAuth()
   const { resolvedTheme } = useTheme()
+  const [searchParams] = useSearchParams()
+  const inviteEmail = searchParams.get('email')
+  const inviteToken = searchParams.get('invite')
   const [step, setStep] = useState<Step>('email')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(inviteEmail || '')
+  const [usingInviteEmail, setUsingInviteEmail] = useState(!!inviteEmail)
   const [code, setCode] = useState(['', '', '', '', '', ''])
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const codeRefs = useRef<(HTMLInputElement | null)[]>([])
   const pendingUserId = useRef<string | null>(null)
+
+  const [accepting, setAccepting] = useState(false)
+
+  // Accept pending invitation, then redirect
+  const acceptAndRedirect = useCallback(async (uid: string) => {
+    const pendingToken = inviteToken || sessionStorage.getItem('pendingInviteToken')
+    if (pendingToken) {
+      setAccepting(true)
+      await acceptInvitationByToken(uid, pendingToken)
+      sessionStorage.removeItem('pendingInviteToken')
+      setAccepting(false)
+    }
+    // Navigate will happen via the render check below
+  }, [inviteToken])
 
   // After OTP verification, check if profile needs a display name
   useEffect(() => {
@@ -29,19 +48,20 @@ export default function Login() {
       .select('display_name')
       .eq('user_id', user.id)
       .single()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (data?.display_name) {
-          // Already has a name — done
+          // Existing user — accept invitation if pending, then redirect
           pendingUserId.current = null
+          await acceptAndRedirect(user.id)
         } else {
-          // New user — ask for name
+          // New user — ask for name first
           pendingUserId.current = user.id
           setStep('name')
         }
       })
-  }, [user])
+  }, [user, acceptAndRedirect])
 
-  if (user && step !== 'name') return <Navigate to="/" replace />
+  if (user && step !== 'name' && !accepting) return <Navigate to="/" replace />
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -117,6 +137,7 @@ export default function Login() {
       .from('profiles')
       .update({ display_name: displayName.trim() })
       .eq('user_id', user.id)
+    await acceptAndRedirect(user.id)
     setLoading(false)
     pendingUserId.current = null
     setStep('email') // triggers the Navigate redirect
@@ -130,19 +151,40 @@ export default function Login() {
 
         {step === 'email' && (
           <form onSubmit={handleSendCode} className={styles.stepContent}>
-            <input
-              className={styles.input}
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              autoFocus
-            />
-            {error && <p className={styles.error}>{error}</p>}
-            <button className={styles.button} type="submit" disabled={loading}>
-              {loading ? 'Sending...' : 'Continue'}
-            </button>
+            {usingInviteEmail ? (
+              <>
+                <p className={styles.hint}>
+                  We'll send a code to <strong>{email}</strong>
+                </p>
+                {error && <p className={styles.error}>{error}</p>}
+                <button className={styles.button} type="submit" disabled={loading}>
+                  {loading ? 'Sending...' : 'Send Code'}
+                </button>
+                <button
+                  className={styles.linkButton}
+                  type="button"
+                  onClick={() => { setUsingInviteEmail(false); setEmail(''); setError('') }}
+                >
+                  Use a different email to join Coterie
+                </button>
+              </>
+            ) : (
+              <>
+                <input
+                  className={styles.input}
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                />
+                {error && <p className={styles.error}>{error}</p>}
+                <button className={styles.button} type="submit" disabled={loading}>
+                  {loading ? 'Sending...' : 'Continue'}
+                </button>
+              </>
+            )}
           </form>
         )}
 

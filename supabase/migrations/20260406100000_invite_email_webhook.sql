@@ -1,0 +1,13 @@
+-- Database webhook trigger for sending invite emails
+-- Note: The actual webhook is configured in Supabase Dashboard > Database > Webhooks
+-- pointing to the send-invite-email Edge Function.
+--
+-- This migration is a placeholder documenting the webhook configuration:
+--   Table: coterie_invitations
+--   Events: INSERT
+--   Method: POST
+--   URL: <project-url>/functions/v1/send-invite-email
+--   Headers: Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>
+--
+-- Webhooks cannot be created via SQL migrations in Supabase — they must be
+-- configured via the Dashboard or Management API.

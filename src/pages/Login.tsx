@@ -4,8 +4,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../contexts/ThemeContext'
 import { acceptInvitationByToken } from '../lib/acceptInvitation'
-import logoMottoDark from '../assets/logo-name-motto.svg'
-import logoMottoLight from '../assets/logo-name-motto-light.svg'
+import logoNameDark from '../assets/logo-name.svg'
+import logoNameLight from '../assets/logo-name-light.svg'
 import styles from './Login.module.css'
 
 type Step = 'email' | 'code' | 'name'
@@ -27,6 +27,7 @@ export default function Login() {
   const pendingUserId = useRef<string | null>(null)
 
   const [accepting, setAccepting] = useState(false)
+  const [checkingProfile, setCheckingProfile] = useState(false)
 
   // Accept pending invitation, then redirect
   const acceptAndRedirect = useCallback(async (uid: string) => {
@@ -44,6 +45,7 @@ export default function Login() {
   // After OTP verification, check if profile needs a display name
   useEffect(() => {
     if (!user) return
+    setCheckingProfile(true)
     supabase
       .from('profiles')
       .select('display_name')
@@ -59,10 +61,11 @@ export default function Login() {
           pendingUserId.current = user.id
           setStep('name')
         }
+        setCheckingProfile(false)
       })
   }, [user, acceptAndRedirect])
 
-  if (user && step !== 'name' && !accepting) return <Navigate to="/" replace />
+  if (user && step !== 'name' && !accepting && !checkingProfile) return <Navigate to="/" replace />
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -148,7 +151,7 @@ export default function Login() {
     <div className={styles.container}>
       <div className={styles.form}>
         <p className={styles.welcomeText}>Welcome to</p>
-        <img src={resolvedTheme === 'light' ? logoMottoLight : logoMottoDark} alt="Coterie" className={styles.logoImg} />
+        <img src={resolvedTheme === 'light' ? logoNameLight : logoNameDark} alt="Coterie" className={styles.logoImg} />
         <p className={styles.subtitle}>Please login to get started.</p>
 
         {step === 'email' && (

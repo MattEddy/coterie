@@ -12,20 +12,12 @@ import { supabase } from './supabase'
  * using the owner's relative layout centered at (0, 0).
  */
 export async function acceptInvitationByToken(userId: string, token: string): Promise<boolean> {
-  // Fetch invitation
-  const { data: inv } = await supabase
-    .from('coteries_invitations')
-    .select('id, coterie_id, status')
-    .eq('token', token)
-    .single()
+  // Accept invitation via SECURITY DEFINER RPC (RLS-safe: user is not yet a member)
+  const { data: accepted } = await supabase
+    .rpc('accept_invitation_by_token', { p_token: token, p_user_id: userId })
 
-  if (!inv || inv.status !== 'pending') return false
-
-  // Mark accepted
-  await supabase
-    .from('coteries_invitations')
-    .update({ status: 'accepted', user_id: userId })
-    .eq('id', inv.id)
+  const inv = accepted?.[0]
+  if (!inv) return false
 
   // Add user as member
   await supabase.from('coteries_members').insert({

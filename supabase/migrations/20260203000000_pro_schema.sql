@@ -396,13 +396,8 @@ CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION create_profile_on_signup();
 
--- Deferred FK: types.created_by → profiles (types created before profiles)
-ALTER TABLE types ADD CONSTRAINT types_created_by_fkey
-    FOREIGN KEY (created_by) REFERENCES profiles(user_id);
-
--- Deferred FK: roles.created_by → profiles (roles created before profiles)
-ALTER TABLE roles ADD CONSTRAINT roles_created_by_fkey
-    FOREIGN KEY (created_by) REFERENCES profiles(user_id);
+-- created_by columns are informational provenance — no FK constraint.
+-- NULL = platform-seeded, UUID = user-created (UUID preserved even if user is deleted).
 
 -- =============================================================================
 -- MAPS (unified: store packages, user maps, shared maps)
@@ -566,7 +561,7 @@ CREATE INDEX idx_connections_overrides_deactivated ON connections_overrides(deac
 CREATE TABLE coteries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
-    owner_id UUID NOT NULL REFERENCES profiles(user_id),
+    owner_id UUID REFERENCES profiles(user_id) ON DELETE SET NULL,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -594,9 +589,9 @@ CREATE TABLE coteries_maps (
 CREATE TABLE coteries_invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     coterie_id UUID NOT NULL REFERENCES coteries(id) ON DELETE CASCADE,
-    invited_by UUID NOT NULL REFERENCES profiles(user_id),
+    invited_by UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
     email TEXT NOT NULL,
-    user_id UUID REFERENCES profiles(user_id),  -- set if email matches an existing user
+    user_id UUID REFERENCES profiles(user_id) ON DELETE SET NULL,  -- set if email matches an existing user
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
     token UUID DEFAULT gen_random_uuid(),         -- for invite links (non-users)
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -638,9 +633,6 @@ CREATE INDEX idx_coteries_reviews_source ON coteries_reviews(source_user_id);
 -- =============================================================================
 -- DEFERRED FOREIGN KEYS
 -- =============================================================================
--- objects.created_by references profiles, but objects is created before profiles.
-ALTER TABLE objects ADD CONSTRAINT fk_objects_created_by
-    FOREIGN KEY (created_by) REFERENCES profiles(user_id);
 
 -- maps.source_coterie_id references coteries, but maps is created before coteries.
 ALTER TABLE maps ADD CONSTRAINT fk_maps_source_coterie

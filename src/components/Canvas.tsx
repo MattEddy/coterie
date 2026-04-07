@@ -784,6 +784,9 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
 
     if (existing) return existing.id
 
+    // Don't create junk roles from accidental short input
+    if (value.trim().length < 2) return null
+
     // Create a new custom role (UUID auto-generated)
     const { data: newRole, error } = await supabase
       .from('roles')

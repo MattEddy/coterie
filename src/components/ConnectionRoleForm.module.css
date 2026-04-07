@@ -68,7 +68,9 @@
 }
 
 .suggestion {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
   padding: 4px 8px;
   border: none;
@@ -83,6 +85,23 @@
 .suggestion:hover,
 .highlighted {
   background: var(--color-surface-2);
+}
+
+.deleteRole {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+  padding: 2px;
+}
+
+.suggestion:hover .deleteRole {
+  opacity: 1;
+}
+
+.deleteRole:hover {
+  color: var(--color-danger, #e05252);
 }
 
 .divider {

@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import styles from './ConnectionRoleForm.module.css'
 
 interface RoleOption {
   id: string
   display_name: string
+  is_canon: boolean
+  created_by: string | null
 }
 
 interface ConnectionRoleFormProps {
@@ -48,7 +51,7 @@ function RoleInput({ userId, value, onChange, onSubmit, autoFocus }: {
 
       const { data } = await supabase
         .from('roles')
-        .select('id, display_name')
+        .select('id, display_name, is_canon, created_by')
         .ilike('display_name', `%${value}%`)
         .or(`is_canon.eq.true,created_by.eq.${userId}`)
         .order('is_canon', { ascending: false })
@@ -112,7 +115,21 @@ function RoleInput({ userId, value, onChange, onSubmit, autoFocus }: {
               onMouseEnter={() => setHighlightIndex(i)}
               type="button"
             >
-              {s.display_name}
+              <span>{s.display_name}</span>
+              {!s.is_canon && s.created_by === userId && (
+                <span
+                  className={styles.deleteRole}
+                  onMouseDown={async e => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    const { error } = await supabase.from('roles').delete().eq('id', s.id)
+                    if (!error) setSuggestions(prev => prev.filter(r => r.id !== s.id))
+                  }}
+                  title="Delete this role"
+                >
+                  <Trash2 size={10} />
+                </span>
+              )}
             </button>
           ))}
         </div>

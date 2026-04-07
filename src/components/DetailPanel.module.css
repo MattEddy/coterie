@@ -641,6 +641,30 @@
   background: var(--color-surface-2);
 }
 
+.suggestionActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.deleteType {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.suggestion:hover .deleteType {
+  opacity: 1;
+}
+
+.deleteType:hover {
+  color: var(--color-danger, #e05252);
+}
+
 .canonBadge {
   font-size: 9px;
   font-weight: 600;

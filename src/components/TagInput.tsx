@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
+import { X, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import styles from './DetailPanel.module.css'
 
@@ -15,7 +15,7 @@ export interface TagInputProps {
 
 export default function TagInput({ tags, onChange, objectClass, placeholder, userId, autoFocus: shouldAutoFocus = true, onCancel }: TagInputProps) {
   const [inputValue, setInputValue] = useState('')
-  const [suggestions, setSuggestions] = useState<{ id: string; display_name: string; is_canon: boolean }[]>([])
+  const [suggestions, setSuggestions] = useState<{ id: string; display_name: string; is_canon: boolean; created_by: string | null }[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -34,7 +34,7 @@ export default function TagInput({ tags, onChange, objectClass, placeholder, use
     const query = inputValue.toLowerCase().trim()
     supabase
       .from('types')
-      .select('id, display_name, is_canon')
+      .select('id, display_name, is_canon, created_by')
       .eq('class', objectClass)
       .ilike('display_name', `%${query}%`)
       .or(`is_canon.eq.true,created_by.eq.${userId}`)
@@ -62,9 +62,18 @@ export default function TagInput({ tags, onChange, objectClass, placeholder, use
     onChange(tags.filter(t => t !== displayName))
   }
 
+  async function deleteType(typeId: string) {
+    const { error } = await supabase.from('types').delete().eq('id', typeId)
+    if (error) {
+      console.error('Failed to delete type (may be in use):', error)
+      return
+    }
+    setSuggestions(prev => prev.filter(s => s.id !== typeId))
+  }
+
   async function createAndAddTag(name: string) {
     const trimmed = name.trim()
-    if (!trimmed || tags.includes(trimmed)) return
+    if (!trimmed || trimmed.length < 2 || tags.includes(trimmed)) return
 
     const { data: existing } = await supabase
       .from('types')
@@ -150,7 +159,18 @@ export default function TagInput({ tags, onChange, objectClass, placeholder, use
               type="button"
             >
               <span>{s.display_name}</span>
-              {s.is_canon && <span className={styles.canonBadge}>canon</span>}
+              <span className={styles.suggestionActions}>
+                {s.is_canon && <span className={styles.canonBadge}>canon</span>}
+                {!s.is_canon && s.created_by === userId && (
+                  <span
+                    className={styles.deleteType}
+                    onMouseDown={e => { e.stopPropagation(); deleteType(s.id) }}
+                    title="Delete this type"
+                  >
+                    <Trash2 size={10} />
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </div>

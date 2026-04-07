@@ -102,18 +102,19 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
       .select('map_id, maps(name)')
       .eq('coterie_id', coterie.id)
     if (mapData) {
-      const mapRows: CoterieMap[] = []
-      for (const m of mapData as any[]) {
-        const { count } = await supabase
-          .from('maps_objects')
-          .select('*', { count: 'exact', head: true })
-          .eq('map_id', m.map_id)
-        mapRows.push({
-          map_id: m.map_id,
-          name: m.maps?.name ?? 'Unknown',
-          object_count: count ?? 0,
+      const mapRows = await Promise.all(
+        (mapData as any[]).map(async (m) => {
+          const { count } = await supabase
+            .from('maps_objects')
+            .select('*', { count: 'exact', head: true })
+            .eq('map_id', m.map_id)
+          return {
+            map_id: m.map_id,
+            name: m.maps?.name ?? 'Unknown',
+            object_count: count ?? 0,
+          }
         })
-      }
+      )
       setMaps(mapRows)
     }
   }, [coterie.id])
@@ -127,7 +128,8 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
   }, [coterie.id, loadDetail])
 
   const handleDelete = async () => {
-    await supabase.from('coteries').update({ is_active: false }).eq('id', coterie.id)
+    const { error } = await supabase.from('coteries').update({ is_active: false }).eq('id', coterie.id)
+    if (error) { console.error('Failed to delete coterie:', error); return }
     onCoterieDeleted(coterie.id)
   }
 
@@ -136,12 +138,15 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
 
     // If owner, transfer ownership first
     if (isOwner && transferTargetId) {
-      await supabase.from('coteries').update({ owner_id: transferTargetId }).eq('id', coterie.id)
-      await supabase.from('coteries_members').update({ role: 'owner' }).eq('coterie_id', coterie.id).eq('user_id', transferTargetId)
+      const { error: ownerError } = await supabase.from('coteries').update({ owner_id: transferTargetId }).eq('id', coterie.id)
+      if (ownerError) { console.error('Failed to transfer ownership:', ownerError); return }
+      const { error: roleError } = await supabase.from('coteries_members').update({ role: 'owner' }).eq('coterie_id', coterie.id).eq('user_id', transferTargetId)
+      if (roleError) { console.error('Failed to update member role:', roleError); return }
     }
 
     // Remove self from members
-    await supabase.from('coteries_members').delete().eq('coterie_id', coterie.id).eq('user_id', user.id)
+    const { error: leaveError } = await supabase.from('coteries_members').delete().eq('coterie_id', coterie.id).eq('user_id', user.id)
+    if (leaveError) { console.error('Failed to leave coterie:', leaveError); return }
 
     // Detach aggregated map (becomes personal map)
     await supabase.from('maps').update({ source_coterie_id: null }).eq('user_id', user.id).eq('source_coterie_id', coterie.id)
@@ -345,14 +350,15 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
         .eq('is_active', true)
         .order('name')
       if (!data) return
-      const withCounts: MapOption[] = []
-      for (const m of data) {
-        const { count } = await supabase
-          .from('maps_objects')
-          .select('*', { count: 'exact', head: true })
-          .eq('map_id', m.id)
-        withCounts.push({ id: m.id, name: m.name, object_count: count ?? 0 })
-      }
+      const withCounts = await Promise.all(
+        data.map(async (m) => {
+          const { count } = await supabase
+            .from('maps_objects')
+            .select('*', { count: 'exact', head: true })
+            .eq('map_id', m.id)
+          return { id: m.id, name: m.name, object_count: count ?? 0 }
+        })
+      )
       setMaps(withCounts)
     }
     load()
@@ -537,22 +543,15 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
       .order('name')
     if (!coterieData) return
 
-    const rows: CoterieRow[] = []
-    for (const c of coterieData) {
-      const { count: memberCount } = await supabase
-        .from('coteries_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('coterie_id', c.id)
-      const { count: mapCount } = await supabase
-        .from('coteries_maps')
-        .select('*', { count: 'exact', head: true })
-        .eq('coterie_id', c.id)
-      rows.push({
-        ...c,
-        member_count: memberCount ?? 0,
-        map_count: mapCount ?? 0,
+    const rows = await Promise.all(
+      coterieData.map(async (c) => {
+        const [{ count: memberCount }, { count: mapCount }] = await Promise.all([
+          supabase.from('coteries_members').select('*', { count: 'exact', head: true }).eq('coterie_id', c.id),
+          supabase.from('coteries_maps').select('*', { count: 'exact', head: true }).eq('coterie_id', c.id),
+        ])
+        return { ...c, member_count: memberCount ?? 0, map_count: mapCount ?? 0 }
       })
-    }
+    )
     setCoteries(rows)
   }, [user])
 

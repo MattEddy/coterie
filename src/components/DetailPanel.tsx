@@ -294,7 +294,9 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
       const peerIds = [...new Set(peers.map(p => p.user_id))]
 
-      // Get their overrides for this object (shared_notes + contacts only, never private_notes)
+      // IMPORTANT: Only select shared_notes + data — NEVER private_notes.
+      // RLS grants full-row SELECT for coterie intel (column filtering is app-side).
+      // Using select('*') here would leak private_notes to coterie members.
       const { data: overrides } = await supabase
         .from('objects_overrides')
         .select('user_id, shared_notes, data')
@@ -378,11 +380,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   async function linkObjectToItem(itemId: string, targetObj: { id: string; name: string; class: string }, _itemClass: 'project' | 'event') {
     if (!user) return
 
-    await supabase.from('connections_overrides').insert({
+    const { error } = await supabase.from('connections_overrides').insert({
       user_id: user.id,
       object_a_id: targetObj.id,
       object_b_id: itemId,
     })
+    if (error) { console.error('Failed to link object:', error); return }
 
     loadLinkedObjects(itemId)
     onObjectUpdated?.()
@@ -393,11 +396,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (!user) return
     setSaving(true)
 
-    await supabase.from('connections_overrides').insert({
+    const { error: connError } = await supabase.from('connections_overrides').insert({
       user_id: user.id,
       object_a_id: object.id,
       object_b_id: existingId,
     })
+    if (connError) { console.error('Failed to link item:', connError); setSaving(false); return }
 
     // Ensure override row exists so it shows up in user_objects
     const { data: existing } = await supabase
@@ -476,7 +480,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
   async function saveHeader() {
     if (!user) return
-    await supabase
+    const { error } = await supabase
       .from('objects_overrides')
       .update({
         name: headerValues.name.trim() || null,
@@ -484,6 +488,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       })
       .eq('object_id', object.id)
       .eq('user_id', user.id)
+    if (error) { console.error('Failed to save header:', error); return }
     if (showTagInput) await saveTypes()
     setHeaderEditing(false)
     setShowTagInput(false)
@@ -524,11 +529,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     const cleaned = editContacts.filter(c => c.value.trim())
     const existingData = object.data || {}
     const data = { ...existingData, contacts: cleaned.length > 0 ? cleaned : undefined }
-    await supabase
+    const { error } = await supabase
       .from('objects_overrides')
       .update({ data: Object.keys(data).length > 0 ? data : null })
       .eq('object_id', object.id)
       .eq('user_id', user.id)
+    if (error) { console.error('Failed to save contacts:', error); return }
     setContactEditing(false)
     onObjectUpdated?.()
   }
@@ -543,17 +549,18 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     const contacts: ContactEntry[] = [...(existingData.contacts ?? []), { ...contact }]
     const adopted: string[] = [...((existingData as any).adopted_intel ?? []), intelContactFingerprint(sourceUserId, contact)]
     const data = { ...existingData, contacts, adopted_intel: adopted }
-    await supabase
+    const { error } = await supabase
       .from('objects_overrides')
       .update({ data })
       .eq('object_id', object.id)
       .eq('user_id', user.id)
+    if (error) { console.error('Failed to adopt contact:', error); return }
     onObjectUpdated?.()
   }
 
   async function saveNotes() {
     if (!user) return
-    await supabase
+    const { error } = await supabase
       .from('objects_overrides')
       .update({
         shared_notes: notesValues.shared_notes.trim() || null,
@@ -561,6 +568,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       })
       .eq('object_id', object.id)
       .eq('user_id', user.id)
+    if (error) { console.error('Failed to save notes:', error); return }
     setNotesEditing(false)
     onObjectUpdated?.()
   }
@@ -789,7 +797,8 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (targetClass === 'event' && newItemValues.event_date) {
       overridePayload.event_date = newItemValues.event_date
     }
-    await supabase.from('objects_overrides').insert(overridePayload)
+    const { error: ovError } = await supabase.from('objects_overrides').insert(overridePayload)
+    if (ovError) { console.error('Failed to create override:', ovError); setSaving(false); return }
 
     // 3. Create types overrides (resolve display_names to UUIDs)
     if (newItemTypes.length > 0) {
@@ -807,19 +816,23 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     }
 
     // 4. Create connection to current node
-    await supabase.from('connections_overrides').insert({
+    const { error: connErr } = await supabase.from('connections_overrides').insert({
       user_id: user.id,
       object_a_id: object.id,
       object_b_id: newObj.id,
     })
+    if (connErr) console.error('Failed to create connection:', connErr)
 
     // 5. Create additional connections from the link picker
-    for (const link of newItemLinks) {
-      await supabase.from('connections_overrides').insert({
-        user_id: user.id,
-        object_a_id: link.id,
-        object_b_id: newObj.id,
-      })
+    if (newItemLinks.length > 0) {
+      const { error: linksErr } = await supabase.from('connections_overrides').insert(
+        newItemLinks.map(link => ({
+          user_id: user.id,
+          object_a_id: link.id,
+          object_b_id: newObj.id,
+        }))
+      )
+      if (linksErr) console.error('Failed to create link connections:', linksErr)
     }
 
     // Reset and reload

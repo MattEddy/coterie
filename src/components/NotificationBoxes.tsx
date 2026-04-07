@@ -45,10 +45,8 @@ export default function NotificationBoxes({ onOpenCoteries, onOpenUpdates }: Not
   useEffect(() => {
     loadCounts()
 
-    // Poll every 3s for cross-user changes
-    // (Supabase Realtime postgres_changes doesn't work reliably in local dev;
-    //  swap to Broadcast or postgres_changes when deploying to Supabase Cloud)
-    const interval = setInterval(() => loadCountsRef.current?.(), 3000)
+    // Poll for cross-user changes (swap to Supabase Realtime when feasible)
+    const interval = setInterval(() => loadCountsRef.current?.(), 30000)
 
     // Direct count push from CoterieUpdatesFrame (instant for own actions)
     const handleCountPush = (e: Event) => {

@@ -16,6 +16,7 @@ type WorkspaceLayout = Record<string, FrameLayout>
 // In-memory cache shared across all hook instances
 let layoutCache: WorkspaceLayout = {}
 let cacheLoaded = false
+let cacheUserId: string | null = null
 
 function readLocal(): WorkspaceLayout {
   try {
@@ -35,11 +36,19 @@ export function useWorkspaceLayout() {
 
   // Load from localStorage on first use, hydrate from Supabase
   useEffect(() => {
-    if (cacheLoaded || !user) return
+    if (!user) return
+
+    // Reset cache when user changes (e.g., logout → login as different user)
+    if (cacheUserId && cacheUserId !== user.id) {
+      cacheLoaded = false
+      layoutCache = {}
+    }
+    if (cacheLoaded) return
 
     // Instant: load from localStorage
     layoutCache = readLocal()
     cacheLoaded = true
+    cacheUserId = user.id
 
     // Background: hydrate from Supabase (source of truth)
     supabase
@@ -71,7 +80,9 @@ export function useWorkspaceLayout() {
         .from('profiles')
         .update({ workspace_layout: layoutCache })
         .eq('user_id', user.id)
-        .then()
+        .then(({ error }) => {
+          if (error) console.error('Failed to save workspace layout:', error)
+        })
     }, 500)
   }, [user])
 

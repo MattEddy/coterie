@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const WEBHOOK_SECRET = Deno.env.get("SUPABASE_WEBHOOK_SECRET");
 
 // App URL for invite links (set in Supabase Edge Function secrets)
 const APP_URL = Deno.env.get("APP_URL") || "http://localhost:5173";
@@ -21,9 +22,39 @@ interface WebhookPayload {
   };
 }
 
+async function verifyWebhookSignature(req: Request, body: string): Promise<boolean> {
+  if (!WEBHOOK_SECRET) return true; // Skip verification if secret not configured
+  const signature = req.headers.get("x-supabase-signature");
+  if (!signature) return false;
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(WEBHOOK_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const expectedSig = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
+  const expectedHex = Array.from(new Uint8Array(expectedSig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  return signature === expectedHex;
+}
+
 serve(async (req) => {
   try {
-    const payload: WebhookPayload = await req.json();
+    const body = await req.text();
+
+    // Verify webhook signature
+    if (!(await verifyWebhookSignature(req, body))) {
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        status: 401,
+      });
+    }
+
+    const payload: WebhookPayload = JSON.parse(body);
 
     // Only handle new pending invitations
     if (payload.record.status !== "pending") {
@@ -33,11 +64,19 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Fetch coterie name
-    const { data: coterie } = await supabase
+    const { data: coterie, error: coterieError } = await supabase
       .from("coteries")
       .select("name")
       .eq("id", payload.record.coterie_id)
       .single();
+
+    if (coterieError) {
+      console.error("Coterie not found:", coterieError);
+      return new Response(
+        JSON.stringify({ error: "Coterie not found" }),
+        { status: 404 },
+      );
+    }
 
     // Fetch sender name
     const { data: sender } = await supabase
@@ -54,7 +93,9 @@ serve(async (req) => {
     if (!RESEND_API_KEY) {
       console.log("RESEND_API_KEY not set — logging email instead:");
       console.log(`To: ${payload.record.email}`);
-      console.log(`Subject: ${senderName} invited you to join ${coterieName} on Coterie`);
+      console.log(
+        `Subject: ${senderName} invited you to join ${coterieName} on Coterie`,
+      );
       console.log(`Link: ${inviteUrl}`);
       return new Response(JSON.stringify({ logged: true }), { status: 200 });
     }
@@ -100,6 +141,15 @@ serve(async (req) => {
       }),
     });
 
+    if (!emailResponse.ok) {
+      const errorBody = await emailResponse.text();
+      console.error("Resend API error:", emailResponse.status, errorBody);
+      return new Response(
+        JSON.stringify({ error: `Email send failed: ${emailResponse.status}` }),
+        { status: 500 },
+      );
+    }
+
     const emailResult = await emailResponse.json();
 
     return new Response(JSON.stringify({ sent: true, result: emailResult }), {
@@ -109,7 +159,7 @@ serve(async (req) => {
     console.error("Error sending invite email:", error);
     return new Response(
       JSON.stringify({ error: (error as Error).message }),
-      { status: 500 }
+      { status: 500 },
     );
   }
 });

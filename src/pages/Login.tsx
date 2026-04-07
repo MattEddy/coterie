@@ -49,7 +49,8 @@ export default function Login() {
       .select('display_name')
       .eq('user_id', user.id)
       .single()
-      .then(async ({ data }) => {
+      .then(async ({ data, error }) => {
+        if (error) console.error('Failed to check profile:', error)
         if (!data?.display_name) {
           sessionStorage.setItem('needsDisplayName', 'true')
         }

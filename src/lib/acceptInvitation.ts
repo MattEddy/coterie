@@ -13,45 +13,69 @@ import { supabase } from './supabase'
  */
 export async function acceptInvitationByToken(userId: string, token: string): Promise<boolean> {
   // Accept invitation via SECURITY DEFINER RPC (RLS-safe: user is not yet a member)
-  const { data: accepted } = await supabase
+  const { data: accepted, error: acceptError } = await supabase
     .rpc('accept_invitation_by_token', { p_token: token, p_user_id: userId })
+
+  if (acceptError) {
+    console.error('Failed to accept invitation:', acceptError)
+    return false
+  }
 
   const inv = accepted?.[0]
   if (!inv) return false
 
   // Add user as member
-  await supabase.from('coteries_members').insert({
+  const { error: memberError } = await supabase.from('coteries_members').insert({
     coterie_id: inv.coterie_id,
     user_id: userId,
     role: 'member',
   })
+  if (memberError) {
+    console.error('Failed to add coterie member:', memberError)
+    return false
+  }
 
   // Collect all objects from coterie's maps
-  const { data: coterieMaps } = await supabase
+  const { data: coterieMaps, error: mapsError } = await supabase
     .from('coteries_maps')
     .select('map_id')
     .eq('coterie_id', inv.coterie_id)
 
+  if (mapsError) {
+    console.error('Failed to load coterie maps:', mapsError)
+    return false
+  }
+
   const allObjectIds = new Set<string>()
   if (coterieMaps) {
-    for (const cm of coterieMaps) {
-      const { data: mapObjs } = await supabase
-        .from('maps_objects')
-        .select('object_ref_id')
-        .eq('map_id', cm.map_id)
+    const mapObjResults = await Promise.all(
+      coterieMaps.map(cm =>
+        supabase.from('maps_objects').select('object_ref_id').eq('map_id', cm.map_id)
+      )
+    )
+    for (const { data: mapObjs, error } of mapObjResults) {
+      if (error) {
+        console.error('Failed to load map objects:', error)
+        continue
+      }
       if (mapObjs) mapObjs.forEach(o => allObjectIds.add(o.object_ref_id))
     }
   }
 
   // Get coterie name for recipient map
-  const { data: coterie } = await supabase
+  const { data: coterie, error: coterieError } = await supabase
     .from('coteries')
     .select('name, owner_id')
     .eq('id', inv.coterie_id)
     .single()
 
+  if (coterieError) {
+    console.error('Failed to load coterie:', coterieError)
+    return false
+  }
+
   // Create aggregated recipient map
-  const { data: newMap } = await supabase
+  const { data: newMap, error: mapCreateError } = await supabase
     .from('maps')
     .insert({
       name: coterie?.name ?? 'Shared Map',
@@ -61,20 +85,34 @@ export async function acceptInvitationByToken(userId: string, token: string): Pr
     .select('id')
     .single()
 
+  if (mapCreateError) {
+    console.error('Failed to create recipient map:', mapCreateError)
+    return false
+  }
+
   if (newMap && allObjectIds.size > 0) {
-    await supabase.from('maps_objects').insert(
+    const { error: mapObjError } = await supabase.from('maps_objects').insert(
       Array.from(allObjectIds).map(objId => ({
         map_id: newMap.id,
         object_ref_id: objId,
       }))
     )
+    if (mapObjError) {
+      console.error('Failed to populate recipient map:', mapObjError)
+    }
   }
 
   // Find objects the user doesn't already have
-  const { data: existingOverrides } = await supabase
+  const { data: existingOverrides, error: existingError } = await supabase
     .from('objects_overrides')
     .select('object_id')
     .eq('user_id', userId)
+
+  if (existingError) {
+    console.error('Failed to check existing overrides:', existingError)
+    return false
+  }
+
   const existingIds = new Set(existingOverrides?.map(o => o.object_id) ?? [])
   const newObjectIds = Array.from(allObjectIds).filter(id => !existingIds.has(id))
 
@@ -131,7 +169,11 @@ export async function acceptInvitationByToken(userId: string, token: string): Pr
       ...(oo?.status && { status: oo.status }),
     }
   })
-  await supabase.from('objects_overrides').insert(overrides)
+  const { error: overridesError } = await supabase.from('objects_overrides').insert(overrides)
+  if (overridesError) {
+    console.error('Failed to create object overrides:', overridesError)
+    return false
+  }
 
   // Copy owner's type overrides so recipient starts with the same effective types
   if (ownerId) {
@@ -141,7 +183,7 @@ export async function acceptInvitationByToken(userId: string, token: string): Pr
       .eq('user_id', ownerId)
       .in('object_id', newObjectIds)
     if (ownerTypes && ownerTypes.length > 0) {
-      await supabase.from('objects_types_overrides').insert(
+      const { error: typesError } = await supabase.from('objects_types_overrides').insert(
         ownerTypes.map(t => ({
           user_id: userId,
           object_id: t.object_id,
@@ -149,6 +191,9 @@ export async function acceptInvitationByToken(userId: string, token: string): Pr
           is_primary: t.is_primary,
         }))
       )
+      if (typesError) {
+        console.error('Failed to copy type overrides:', typesError)
+      }
     }
   }
 
@@ -164,7 +209,7 @@ export async function acceptInvitationByToken(userId: string, token: string): Pr
       .in('object_b_id', newObjectIds)
 
     if (ownerConns && ownerConns.length > 0) {
-      await supabase.from('connections_overrides').insert(
+      const { error: connsError } = await supabase.from('connections_overrides').insert(
         ownerConns.map(c => ({
           user_id: userId,
           object_a_id: c.object_a_id,
@@ -174,6 +219,9 @@ export async function acceptInvitationByToken(userId: string, token: string): Pr
           deactivated: false,
         }))
       )
+      if (connsError) {
+        console.error('Failed to copy connections:', connsError)
+      }
     }
   }
 

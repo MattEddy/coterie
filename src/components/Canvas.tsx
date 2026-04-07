@@ -99,6 +99,8 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   onMapEditClickRef.current = onMapEditClick || null
   const highlightedIdsRef = useRef<string[] | null>(null)
   highlightedIdsRef.current = highlightedObjectIds ?? null
+  const placementClusterRef = useRef<PlacementCluster | null>(null)
+  placementClusterRef.current = placementCluster ?? null
 
   useImperativeHandle(ref, () => ({
     zoomToNode(nodeId: string) {
@@ -372,35 +374,37 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       return
     }
 
-    // Load canonical connections
-    const { data: canonConns } = await supabase
-      .from('connections')
-      .select('id, object_a_id, object_b_id, role_a, role_b')
-      .eq('is_active', true)
-      .in('object_a_id', objectIds)
-      .in('object_b_id', objectIds)
-
-    // Load user-created connections
-    const { data: userConns } = await supabase
-      .from('connections_overrides')
-      .select('id, object_a_id, object_b_id, role_a, role_b')
-      .eq('user_id', user.id)
-      .is('connection_id', null)
-      .eq('deactivated', false)
+    // Load connections in parallel: canonical, user-created, and deactivations
+    const [
+      { data: canonConns },
+      { data: userConns },
+      { data: deactivated },
+    ] = await Promise.all([
+      supabase
+        .from('connections')
+        .select('id, object_a_id, object_b_id, role_a, role_b')
+        .eq('is_active', true)
+        .in('object_a_id', objectIds)
+        .in('object_b_id', objectIds),
+      supabase
+        .from('connections_overrides')
+        .select('id, object_a_id, object_b_id, role_a, role_b')
+        .eq('user_id', user.id)
+        .is('connection_id', null)
+        .eq('deactivated', false),
+      supabase
+        .from('connections_overrides')
+        .select('connection_id')
+        .eq('user_id', user.id)
+        .eq('deactivated', true)
+        .not('connection_id', 'is', null),
+    ])
 
     // Filter user connections to only those between visible objects
     const objectIdSet = new Set(objectIds)
     const visibleUserConns = (userConns || []).filter(
       c => c.object_a_id && c.object_b_id && objectIdSet.has(c.object_a_id) && objectIdSet.has(c.object_b_id)
     )
-
-    // Exclude deactivated canonical connections
-    const { data: deactivated } = await supabase
-      .from('connections_overrides')
-      .select('connection_id')
-      .eq('user_id', user.id)
-      .eq('deactivated', true)
-      .not('connection_id', 'is', null)
 
     const deactivatedIds = new Set((deactivated || []).map(d => d.connection_id))
     const visibleCanon = (canonConns || []).filter(c => !deactivatedIds.has(c.id))
@@ -462,7 +466,9 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
               .update({ map_x: change.position.x, map_y: change.position.y })
               .eq('object_id', change.id)
               .eq('user_id', user!.id)
-              .then()
+              .then(({ error }) => {
+                if (error) console.error('Failed to save node position:', error)
+              })
           }
         }
       }
@@ -482,7 +488,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   // Click-based selection: normal click replaces, Cmd/Shift-click toggles
   const handleNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
-      if (placementCluster) return
+      if (placementClusterRef.current) return
       edgeClickedRef.current = false
 
       // Map edit mode: toggle object membership instead of selecting

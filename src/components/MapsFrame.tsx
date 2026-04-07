@@ -124,26 +124,32 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     if (error || !coterie) { console.error('Coterie create error:', error); return }
 
     // Add owner as member
-    await supabase.from('coteries_members').insert({
+    const { error: memberError } = await supabase.from('coteries_members').insert({
       coterie_id: coterie.id,
       user_id: user.id,
       role: 'owner',
     })
+    if (memberError) { console.error('Failed to add coterie member:', memberError); return }
 
     // Link this map
-    await supabase.from('coteries_maps').insert({
+    const { error: linkError } = await supabase.from('coteries_maps').insert({
       coterie_id: coterie.id,
       map_id: map.id,
     })
+    if (linkError) { console.error('Failed to link map to coterie:', linkError); return }
 
     // Create invitations
-    for (const email of shareEmails) {
-      await supabase.from('coteries_invitations').insert({
-        coterie_id: coterie.id,
-        invited_by: user.id,
-        email,
-      })
-    }
+    await Promise.all(
+      shareEmails.map(email =>
+        supabase.from('coteries_invitations').insert({
+          coterie_id: coterie.id,
+          invited_by: user.id,
+          email,
+        }).then(({ error }) => {
+          if (error) console.error('Failed to create invitation for', email, error)
+        })
+      )
+    )
 
     setSharing(false)
     // Notify maps list to refresh (coterie linkage changed)
@@ -160,27 +166,30 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
 
   const saveEdit = async () => {
     if (!editName.trim()) return
-    await supabase
+    const { error } = await supabase
       .from('maps')
       .update({ name: editName.trim(), description: editDesc.trim() || null, auto_add: editAutoAdd })
       .eq('id', map.id)
+    if (error) { console.error('Failed to save map:', error); return }
     onMapUpdated({ ...map, name: editName.trim(), description: editDesc.trim() || null, auto_add: editAutoAdd })
     setEditing(false)
   }
 
   const handleDelete = async () => {
     if (activeMapId === map.id) onActivateMap(null)
-    await supabase.from('maps').update({ is_active: false }).eq('id', map.id)
+    const { error } = await supabase.from('maps').update({ is_active: false }).eq('id', map.id)
+    if (error) { console.error('Failed to delete map:', error); return }
     setConfirmDelete(false)
     onMapDeleted(map.id)
   }
 
   const handleRemoveObject = async (objectRefId: string) => {
-    await supabase
+    const { error } = await supabase
       .from('maps_objects')
       .delete()
       .eq('map_id', map.id)
       .eq('object_ref_id', objectRefId)
+    if (error) { console.error('Failed to remove object from map:', error); return }
     setMapObjects(prev => prev.filter(o => o.object_ref_id !== objectRefId))
     onMapUpdated({ ...map, object_count: map.object_count - 1 })
   }
@@ -210,9 +219,10 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   }, [searchQuery, user, mapObjects])
 
   const handleAddObject = async (obj: SearchResult) => {
-    await supabase
+    const { error } = await supabase
       .from('maps_objects')
       .insert({ map_id: map.id, object_ref_id: obj.id })
+    if (error) { console.error('Failed to add object to map:', error); return }
     setMapObjects(prev => [...prev, {
       object_ref_id: obj.id,
       name: obj.name,
@@ -483,14 +493,13 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
       .eq('is_active', true)
       .order('name')
     if (!data) return
-    const counts = new Map<string, number>()
-    for (const m of data) {
-      const { count } = await supabase
-        .from('maps_objects')
-        .select('*', { count: 'exact', head: true })
-        .eq('map_id', m.id)
-      counts.set(m.id, count ?? 0)
-    }
+    const countResults = await Promise.all(
+      data.map(m =>
+        supabase.from('maps_objects').select('*', { count: 'exact', head: true }).eq('map_id', m.id)
+          .then(({ count }) => [m.id, count ?? 0] as const)
+      )
+    )
+    const counts = new Map<string, number>(countResults)
 
     // Resolve coterie names for linked maps (recipient: source_coterie_id, sender: coteries_maps)
     const coterieNames = new Map<string, string>()
@@ -643,10 +652,12 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
 
     // Persist
     if (isInMap) {
-      await supabase.from('maps_objects').delete()
+      const { error } = await supabase.from('maps_objects').delete()
         .eq('map_id', selectedMapId).eq('object_ref_id', objectId)
+      if (error) console.error('Failed to remove object from map:', error)
     } else {
-      await supabase.from('maps_objects').insert({ map_id: selectedMapId, object_ref_id: objectId })
+      const { error } = await supabase.from('maps_objects').insert({ map_id: selectedMapId, object_ref_id: objectId })
+      if (error) console.error('Failed to add object to map:', error)
     }
   }, [selectedMapId])
 

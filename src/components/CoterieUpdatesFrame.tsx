@@ -45,14 +45,15 @@ export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: Coter
 
   const loadDissonances = useCallback(async () => {
     if (!user) return
-    const { data } = await supabase.rpc('get_dissonances', { p_user_id: user.id })
+    const { data, error } = await supabase.rpc('get_dissonances', { p_user_id: user.id })
+    if (error) { console.error('Failed to load dissonances:', error); return }
     if (data) setDissonances((data as Dissonance[]).filter(d => !d.is_dismissed))
   }, [user])
 
   useEffect(() => {
     loadDissonances()
-    // Poll for cross-user changes (same rationale as NotificationBoxes)
-    const interval = setInterval(loadDissonances, 3000)
+    // Poll for cross-user changes (swap to Supabase Realtime when feasible)
+    const interval = setInterval(loadDissonances, 30000)
     return () => clearInterval(interval)
   }, [loadDissonances])
 
@@ -255,12 +256,13 @@ export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: Coter
 
   const handleIgnore = async (d: Dissonance) => {
     if (!user) return
-    await supabase.from('coteries_reviews').insert({
+    const { error } = await supabase.from('coteries_reviews').insert({
       user_id: user.id,
       source_user_id: d.source_user_id,
       ref_type: d.ref_type,
       ref_id: d.ref_id,
     })
+    if (error) { console.error('Failed to dismiss dissonance:', error); return }
     removeDissonance(d)
   }
 

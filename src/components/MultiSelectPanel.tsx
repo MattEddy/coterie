@@ -136,18 +136,19 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
 
   const handleCreateMap = async () => {
     if (!user || !newMapName.trim()) return
-    const { data: map } = await supabase
+    const { data: map, error: mapError } = await supabase
       .from('maps')
       .insert({ name: newMapName.trim(), user_id: user.id })
       .select('id')
       .single()
 
-    if (!map) return
+    if (mapError || !map) { console.error('Failed to create map:', mapError); return }
 
     // Add all selected objects
-    await supabase
+    const { error: objError } = await supabase
       .from('maps_objects')
       .insert(objectIds.map(id => ({ map_id: map.id, object_ref_id: id })))
+    if (objError) console.error('Failed to add objects to map:', objError)
 
     setNewMapName('')
     // Notify MapsFrame to refresh and select the new map, then clear selection
@@ -157,12 +158,13 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
 
   const handleAddToMap = async (mapId: string, mapName: string) => {
     // Upsert to avoid duplicate key errors if some are already in the map
-    await supabase
+    const { error } = await supabase
       .from('maps_objects')
       .upsert(
         objectIds.map(id => ({ map_id: mapId, object_ref_id: id })),
         { onConflict: 'map_id,object_ref_id' }
       )
+    if (error) { console.error('Failed to add objects to map:', error); return }
 
     setMode('default')
     setFeedback(`Added to "${mapName}"`)

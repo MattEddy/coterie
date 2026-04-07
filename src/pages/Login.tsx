@@ -55,7 +55,12 @@ export default function Login() {
       .eq('user_id', user.id)
       .single()
       .then(async ({ data, error }) => {
-        if (error) console.error('Failed to check profile:', error)
+        if (error) {
+          console.error('Failed to check profile:', error)
+          // Don't block on profile query failure — let them through
+          setCheckingProfile(false)
+          return
+        }
 
         const isExistingUser = !!data?.display_name
         const hasInviteToken = !!pendingToken

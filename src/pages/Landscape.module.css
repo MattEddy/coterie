@@ -39,6 +39,33 @@
   text-align: center;
 }
 
+.modalForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modalInput {
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color 0.15s;
+  text-align: center;
+}
+
+.modalInput:focus {
+  border-color: var(--color-accent);
+}
+
+.modalInput::placeholder {
+  color: var(--color-text-muted);
+}
+
 .modalButton {
   padding: 10px 24px;
   font-size: 14px;

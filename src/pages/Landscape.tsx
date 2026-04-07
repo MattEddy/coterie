@@ -11,15 +11,24 @@ import CoterieUpdatesFrame from '../components/CoterieUpdatesFrame'
 import NotificationBoxes from '../components/NotificationBoxes'
 import PlacementBar from '../components/PlacementBar'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 import { acceptInvitationByToken } from '../lib/acceptInvitation'
 import type { PlacementCluster } from '../types'
 import styles from './Landscape.module.css'
+
+interface WelcomeState {
+  senderName: string
+  needsName: boolean
+  step: 'name' | 'intro'
+}
 
 export default function Landscape() {
   const { user } = useAuth()
   const canvasRef = useRef<CanvasRef>(null)
   const [openFrames, setOpenFrames] = useState<Set<FrameType>>(new Set())
-  const [welcomeModal, setWelcomeModal] = useState<{ senderName: string } | null>(null)
+  const [welcomeModal, setWelcomeModal] = useState<WelcomeState | null>(null)
+  const [welcomeName, setWelcomeName] = useState('')
+  const [welcomeSaving, setWelcomeSaving] = useState(false)
   const [activeMapId, setActiveMapId] = useState<string | null>(null)
   const [highlightedObjectIds, setHighlightedObjectIds] = useState<string[] | null>(null)
   const [mapEditMode, setMapEditMode] = useState(false)
@@ -139,13 +148,15 @@ export default function Landscape() {
   useEffect(() => {
     if (!user) return
 
+    const needsName = sessionStorage.getItem('needsDisplayName') === 'true'
+    sessionStorage.removeItem('needsDisplayName')
+
     // Case 1: Already-logged-in user with a pending invite token
     const pendingToken = sessionStorage.getItem('pendingInviteToken')
     if (pendingToken) {
       sessionStorage.removeItem('pendingInviteToken')
 
       async function acceptPending() {
-        const { supabase } = await import('../lib/supabase')
         const { data: inv } = await supabase
           .from('coteries_invitations')
           .select('invited_by, status')
@@ -163,7 +174,8 @@ export default function Landscape() {
         const accepted = await acceptInvitationByToken(user.id, pendingToken!)
         if (accepted) {
           document.dispatchEvent(new Event('coterie:refresh-canvas'))
-          setWelcomeModal({ senderName: sender?.display_name || 'Your coterie' })
+          const senderName = sender?.display_name || 'Your coterie'
+          setWelcomeModal({ senderName, needsName, step: needsName ? 'name' : 'intro' })
         }
       }
       acceptPending()
@@ -174,9 +186,7 @@ export default function Landscape() {
     const showWelcome = sessionStorage.getItem('showWelcomeModal')
     if (showWelcome) {
       sessionStorage.removeItem('showWelcomeModal')
-      // Fetch the most recent coterie membership to get the sender name
       async function showWelcomeFromLogin() {
-        const { supabase } = await import('../lib/supabase')
         const { data: membership } = await supabase
           .from('coteries_members')
           .select('coterie_id')
@@ -186,7 +196,7 @@ export default function Landscape() {
           .single()
 
         if (!membership) {
-          setWelcomeModal({ senderName: 'Your coterie' })
+          setWelcomeModal({ senderName: 'Your coterie', needsName, step: needsName ? 'name' : 'intro' })
           return
         }
 
@@ -204,9 +214,16 @@ export default function Landscape() {
               .single()
           : { data: null }
 
-        setWelcomeModal({ senderName: sender?.display_name || 'Your coterie' })
+        const senderName = sender?.display_name || 'Your coterie'
+        setWelcomeModal({ senderName, needsName, step: needsName ? 'name' : 'intro' })
       }
       showWelcomeFromLogin()
+      return
+    }
+
+    // Case 3: New user who signed up directly (no invite) — still needs name
+    if (needsName) {
+      setWelcomeModal({ senderName: '', needsName: true, step: 'name' })
     }
   }, [user])
 
@@ -260,18 +277,61 @@ export default function Landscape() {
       {welcomeModal && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalCard}>
-            <h2 className={styles.modalTitle}>Welcome to Coterie</h2>
-            <p className={styles.modalText}>
-              This is your Landscape. Everything you add, change, or note is
-              yours — {welcomeModal.senderName} and your coterie will see shared
-              notes, but your Landscape is your own.
-            </p>
-            <button
-              className={styles.modalButton}
-              onClick={() => setWelcomeModal(null)}
-            >
-              Got it
-            </button>
+            {welcomeModal.step === 'name' ? (
+              <>
+                <h2 className={styles.modalTitle}>Welcome to Coterie</h2>
+                <p className={styles.modalText}>
+                  Please enter your name to get started.
+                </p>
+                <form onSubmit={async (e) => {
+                  e.preventDefault()
+                  if (!welcomeName.trim() || !user) return
+                  setWelcomeSaving(true)
+                  await supabase
+                    .from('profiles')
+                    .update({ display_name: welcomeName.trim() })
+                    .eq('user_id', user.id)
+                  setWelcomeSaving(false)
+                  setWelcomeModal({ ...welcomeModal, step: 'intro' })
+                }} className={styles.modalForm}>
+                  <input
+                    className={styles.modalInput}
+                    type="text"
+                    placeholder="Your name"
+                    value={welcomeName}
+                    onChange={e => setWelcomeName(e.target.value)}
+                    autoFocus
+                  />
+                  <button
+                    className={styles.modalButton}
+                    type="submit"
+                    disabled={welcomeSaving || !welcomeName.trim()}
+                  >
+                    {welcomeSaving ? 'Saving...' : 'Continue'}
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                <h2 className={styles.modalTitle}>This is your Landscape</h2>
+                <p className={styles.modalText}>
+                  It's private and unique to you. Change it, add to it, make it your own.
+                </p>
+                <p className={styles.modalText}>
+                  For objects shared in Coteries, collaborators are notified of each
+                  other's updates. You'll have the option to synchronize each change.
+                </p>
+                <p className={styles.modalText}>
+                  Double click on an empty spot to create a new object.
+                </p>
+                <button
+                  className={styles.modalButton}
+                  onClick={() => setWelcomeModal(null)}
+                >
+                  Got it
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

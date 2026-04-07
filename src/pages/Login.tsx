@@ -8,7 +8,7 @@ import logoNameDark from '../assets/logo-name.svg'
 import logoNameLight from '../assets/logo-name-light.svg'
 import styles from './Login.module.css'
 
-type Step = 'email' | 'code' | 'name'
+type Step = 'email' | 'code'
 
 export default function Login() {
   const { user, sendOtp, verifyOtp } = useAuth()
@@ -20,11 +20,9 @@ export default function Login() {
   const [email, setEmail] = useState(inviteEmail || '')
   const [usingInviteEmail, setUsingInviteEmail] = useState(!!inviteEmail)
   const [code, setCode] = useState(['', '', '', '', '', ''])
-  const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const codeRefs = useRef<(HTMLInputElement | null)[]>([])
-  const pendingUserId = useRef<string | null>(null)
 
   const [accepting, setAccepting] = useState(false)
   const [checkingProfile, setCheckingProfile] = useState(false)
@@ -42,7 +40,7 @@ export default function Login() {
     // Navigate will happen via the render check below
   }, [inviteToken])
 
-  // After OTP verification, check if profile needs a display name
+  // After OTP verification, accept invite if pending and redirect
   useEffect(() => {
     if (!user) return
     setCheckingProfile(true)
@@ -52,20 +50,15 @@ export default function Login() {
       .eq('user_id', user.id)
       .single()
       .then(async ({ data }) => {
-        if (data?.display_name) {
-          // Existing user — accept invitation if pending, then redirect
-          pendingUserId.current = null
-          await acceptAndRedirect(user.id)
-        } else {
-          // New user — ask for name first
-          pendingUserId.current = user.id
-          setStep('name')
+        if (!data?.display_name) {
+          sessionStorage.setItem('needsDisplayName', 'true')
         }
+        await acceptAndRedirect(user.id)
         setCheckingProfile(false)
       })
   }, [user, acceptAndRedirect])
 
-  if (user && step !== 'name' && !accepting && !checkingProfile) return <Navigate to="/" replace />
+  if (user && !accepting && !checkingProfile) return <Navigate to="/" replace />
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -131,20 +124,6 @@ export default function Login() {
     } else {
       codeRefs.current[Math.min(pasted.length, 5)]?.focus()
     }
-  }
-
-  const handleSaveName = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!displayName.trim() || !user) return
-    setLoading(true)
-    await supabase
-      .from('profiles')
-      .update({ display_name: displayName.trim() })
-      .eq('user_id', user.id)
-    await acceptAndRedirect(user.id)
-    setLoading(false)
-    pendingUserId.current = null
-    setStep('email') // triggers the Navigate redirect
   }
 
   return (
@@ -224,23 +203,7 @@ export default function Login() {
           </div>
         )}
 
-        {step === 'name' && (
-          <form onSubmit={handleSaveName} className={styles.stepContent}>
-            <p className={styles.hint}>What should people call you?</p>
-            <input
-              className={styles.input}
-              type="text"
-              placeholder="Your name"
-              value={displayName}
-              onChange={e => setDisplayName(e.target.value)}
-              required
-              autoFocus
-            />
-            <button className={styles.button} type="submit" disabled={loading || !displayName.trim()}>
-              {loading ? 'Saving...' : 'Get Started'}
-            </button>
-          </form>
-        )}
+
       </div>
     </div>
   )

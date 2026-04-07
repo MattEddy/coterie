@@ -105,8 +105,11 @@ export default function Login() {
     // Check if email is allowed before sending OTP
     const pendingToken = inviteToken || sessionStorage.getItem('pendingInviteToken')
     if (!pendingToken) {
-      const { data: allowed } = await supabase.rpc('is_email_allowed', { p_email: email.trim().toLowerCase() })
-      if (!allowed) {
+      const { data: allowed, error: rpcError } = await supabase.rpc('is_email_allowed', { p_email: email.trim().toLowerCase() })
+      if (rpcError) {
+        console.error('Email gate check failed:', rpcError)
+        // Don't block on error — let them through, post-auth check is the safety net
+      } else if (allowed === false) {
         setInviteOnly(true)
         setLoading(false)
         return

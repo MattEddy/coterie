@@ -69,8 +69,60 @@
   background: var(--color-surface-2);
 }
 
+.accountName {
+  padding: 8px 12px 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nameEditRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nameInput {
+  font-size: 13px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  width: 100%;
+}
+
+.nameInput:focus {
+  border-color: var(--color-accent);
+}
+
+.nameEditBtn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.nameEditBtn:hover {
+  color: var(--color-text);
+}
+
 .accountEmail {
-  padding: 8px 12px;
+  padding: 4px 12px 8px;
   font-size: 12px;
   color: var(--color-text-muted);
   font-family: var(--font-sans);

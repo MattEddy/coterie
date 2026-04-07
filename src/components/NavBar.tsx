@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
-import { User, Menu, Search, Map, Users, Settings, LogOut } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { User, Menu, Search, Map, Users, Settings, LogOut, Pencil, Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 import Tooltip from './Tooltip'
 import { useTheme } from '../contexts/ThemeContext'
 import logoNameDark from '../assets/logo-name.svg'
@@ -25,8 +26,42 @@ export default function NavBar({ onOpenFrame }: NavBarProps) {
   const { resolvedTheme } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+  const [displayName, setDisplayName] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const accountRef = useRef<HTMLDivElement>(null)
+
+  // Load display name
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('user_id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.display_name) setDisplayName(data.display_name)
+      })
+  }, [user])
+
+  const saveName = useCallback(async () => {
+    const trimmed = nameInput.trim()
+    if (!trimmed || !user) { setEditingName(false); return }
+    await supabase
+      .from('profiles')
+      .update({ display_name: trimmed })
+      .eq('user_id', user.id)
+    setDisplayName(trimmed)
+    setEditingName(false)
+  }, [nameInput, user])
+
+  const startEditing = useCallback(() => {
+    setNameInput(displayName || '')
+    setEditingName(true)
+    setTimeout(() => nameInputRef.current?.focus(), 0)
+  }, [displayName])
 
   useEffect(() => {
     if (!menuOpen && !accountOpen) return
@@ -56,6 +91,26 @@ export default function NavBar({ onOpenFrame }: NavBarProps) {
 
         {accountOpen && (
           <div className={styles.popover}>
+            <div className={styles.accountName}>
+              {editingName ? (
+                <form className={styles.nameEditRow} onSubmit={e => { e.preventDefault(); saveName() }}>
+                  <input
+                    ref={nameInputRef}
+                    className={styles.nameInput}
+                    value={nameInput}
+                    onChange={e => setNameInput(e.target.value)}
+                    onBlur={saveName}
+                    placeholder="Your name"
+                  />
+                  <button type="submit" className={styles.nameEditBtn}><Check size={13} /></button>
+                </form>
+              ) : (
+                <div className={styles.nameRow}>
+                  <span>{displayName || 'Set your name'}</span>
+                  <button className={styles.nameEditBtn} onClick={startEditing}><Pencil size={12} /></button>
+                </div>
+              )}
+            </div>
             <div className={styles.accountEmail}>{user?.email}</div>
             <div className={styles.menuDivider} />
             <button

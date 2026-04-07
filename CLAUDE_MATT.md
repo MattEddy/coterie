@@ -5,43 +5,48 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-04-03 through 2026-04-06
+**Date:** 2026-04-06
 **Branch:** main
 
 ### Narrative
 
-Major session spanning multiple days: built the complete non-user invitation flow (landing page → join/pricing page → auth handoff → welcome modal), added logo branding, subscriptions schema, and invite email Edge Function.
+End-to-end testing session for the invite/share flow. Fixed a chain of bugs, upgraded logos, redesigned the signup welcome experience, and solved user deletion constraints.
 
-**Logo branding.** Matt created SVG logos in a design tool. Five variants saved to `src/assets/`: `logo-name.svg` (dark), `logo-name-light.svg` (light), `logo-icon.svg`/`logo-icon-light.svg`, `logo-name-motto.svg` (includes "Map your professional world" — marketing pages only). The two golds in the logo (`#d4b468` lighter, `#a68830` darker) became the only accent colors: dark mode uses lighter as primary/darker as hover, light mode reverses them. Logo replaced text "Coterie" in NavBar (27px, theme-aware) and Login page. NavBar icons also bumped 18→27.
+**Login blank screen fix.** `useCallback` was imported in the welcome modal commit but never added to the React import line in `Login.tsx`. Vite's dev server threw a runtime ReferenceError, rendering the login page blank black.
 
-**Muted text brightened again.** `--color-text-muted`: dark `#918888` → `#a89e9e`, light `#736b68` → `#635b58`. Matt's MacBook Pro screen was making it too faint.
+**Logo V2 upgrade.** Matt provided 6 new SVG files (icon/name/motto × dark/light). Copied into `src/assets/` replacing V1 versions. New file: `logo-name-motto-light.svg` (didn't exist before). All three pages using the motto logo (Login, InviteLanding, InviteJoin) now theme-switch between dark/light variants via `useTheme`. NavBar was already theme-aware so file copy handled it.
 
-**Invite landing page** (`src/pages/InviteLanding.tsx`, route `/invite/:token`). Validates token against `coteries_invitations`, fetches coterie name + sender name. Layout: sender invitation line → motto logo → two-paragraph pitch text → interactive demo canvas → coterie blurb → "Learn More / Join" CTA. Dev shortcut: `/invite/demo` shows sample data. The pitch copy went through several iterations — Matt landed on: "Intuitively and visually array people, organizations, and information — so you can truly understand and harness your interpersonal landscape. Then link up with trusted collaborators to share and sync your Coterie information, keeping each other up to date and in the loop."
+**Login page redesign.** Added "Welcome to" text above logo, doubled logo height (28→56px), changed subtitle to "Please login to get started." Later switched from motto logo back to name-only logo — "a little busy with the motto, and we don't need to sell at this point."
 
-**Interactive demo canvas.** Standalone React Flow instance (not the full Canvas component — too coupled to auth/Supabase). Uses real `ObjectNode` and `RoleEdge` components. Five demo nodes: Netflix, Ted Sarandos, 21 Laps Entertainment, Shawn Levy, WME — mix of orgs (rounded rect) and people (pill shape). Straight lines with role labels (Employer/Employee, Overall Deal, Company/Founder, Client/Rep). Edge click highlights + shows roles. Node click opens a demo detail card (top-right of canvas) with 4 clickable tabs: Contact, Notes, Projects, Events — populated with realistic demo data (Stranger Things 5, Deadpool & Wolverine, CinemaCon Keynote, etc.). Framed label at top: "Try it out – drag, click, explore:". Page designed for laptop screens (900px max-width).
+**Frame viewport clamping fix.** Settings menu appeared to not open — the Frame was rendering off-screen at a persisted position. Added `clampToViewport()` that ensures the full frame stays within viewport bounds when restoring saved positions. Applies to all Frame-based panels. Started at 40px margin, Matt bumped to 100px, then asked for full frame clamping — no reason not to.
 
-**Join/pricing page** (`src/pages/InviteJoin.tsx`, route `/invite/:token/join`). Four horizontal feature cards with custom thumbnail SVGs Matt designed: Landscape, Details, Maps, Coteries. Each has gold-bordered thumbnail + title + description. Pricing section: "Start free. No card needed. Try Coterie free for 2 months — then continue for $3.99/month or $39/year." CTA: "Start Free Trial" button. Below: coterie-specific blurb + offline fallback note ("After your trial, you can continue using Coterie Free offline...").
+**Invite flow "not found" bug.** Anonymous visitors couldn't look up invitations because the `coteries_invitations` RLS policy only granted access to `authenticated`. Instead of adding a blanket anon SELECT (would expose emails), created `get_invitation_by_token()` SECURITY DEFINER RPC callable by anon. InviteLanding and InviteJoin now use this single RPC instead of 3 separate queries.
 
-**Subscriptions schema** (`supabase/migrations/20260406000000_subscriptions.sql`). New `subscriptions` table: `status` (trialing/active/past_due/canceled/free/vip), `plan_id` (future-proof for `pro_monthly_399` style IDs), `trial_ends_at`, `trial_duration_days` (default 60), `coupon_code`, `stripe_customer_id`/`stripe_subscription_id`, `metadata` JSONB. `user_tier(uid)` function returns `'pro'`/`'trial'`/`'free'` with lazy trial expiry downgrade. Signup trigger creates both profile + subscription row. Existing users backfilled as VIP. Pricing: $3.99/mo or $39/year (2 months free on annual). VIP status = billing-exempt full access for company owners/employees.
+**Table rename.** `coterie_invitations` → `coteries_invitations` for naming consistency. Renamed across 10 files (schema, components, docs). Cloud migration uses guarded `DO $$ IF EXISTS` block since local schema already has the new name. Fixed subscriptions migration idempotency (`IF NOT EXISTS`) that was breaking `db reset`.
 
-**Auth handoff** (`src/pages/Login.tsx`). Login reads `?invite=TOKEN&email=ADDRESS` params. Pre-fills email from invitation with "We'll send a code to **email**" + "Use a different email to join Coterie" link below. After OTP verification: existing users auto-accept invitation immediately, new users go through name step first then accept. `acceptInvitationByToken` utility (`src/lib/acceptInvitation.ts`) extracted from CoteriesFrame's acceptance logic — handles all steps: mark accepted, add to members, create aggregated map, fetch owner positions, compute centroid, create overrides with relative layout, copy owner's user-created connections. Sets `showWelcomeModal` flag in sessionStorage.
+**Display name bug.** Members showed as UUIDs in coterie panel because `profiles.display_name` was null. Root cause: the Login page's name step was being skipped — the `<Navigate>` guard fired synchronously before `useEffect` could check the profile and switch to the name step.
 
-**Logged-in acceptance path** (`src/pages/Landscape.tsx`). On mount, checks sessionStorage for `pendingInviteToken` (already-logged-in user from invite flow) or `showWelcomeModal` flag (user who just came through Login). Accepts the invitation and shows the welcome modal.
+**Two-step welcome modal.** Replaced the Login page name step + separate Landscape welcome modal with a unified two-step modal on Landscape: (1) "Welcome to Coterie. Please enter your name to get started." with name input, (2) "This is your Landscape. It's private and unique to you..." with coterie/double-click guidance. Login now always redirects after auth, signals `needsDisplayName` via sessionStorage. Non-invite signups also get both steps.
 
-**Welcome modal.** Centered overlay on Landscape: "Welcome to Coterie / This is your Landscape. Everything you add, change, or note is yours — [Sender] and your coterie will see shared notes, but your Landscape is your own. / [Got it]". Styled with `--color-surface` card, `--color-accent` button.
+**Editable display name in account dropdown.** NavBar account popover now shows display name above email with pencil icon to edit. Loads from profiles, saves on enter/blur. Shows "Set your name" prompt if unset.
 
-**Invite email Edge Function** (`supabase/functions/send-invite-email/index.ts`). Receives database webhook payload on `coteries_invitations` INSERT. Fetches coterie name + sender name from DB. Sends styled HTML email via Resend API with "View Invitation" CTA button. Graceful fallback: logs email content if `RESEND_API_KEY` not set. Not yet deployed — needs `supabase functions deploy`, secrets configuration, and webhook setup in Dashboard.
+**Type overrides missing on share.** When a coterie was shared, the recipient's objects didn't get the owner's `objects_types_overrides`, so types surfaced as `type_change` dissonances. Added type override copying to both `acceptInvitation.ts` and all three placement paths in `CoteriesFrame.tsx`.
 
-**Searched conversation history.** Matt asked to find prior design discussion about the landing page. Discovered that session transcripts are stored as JSONL files at `~/.claude/projects/<project-path>/`. Added a "Conversation History" section to the global `~/.claude/CLAUDE.md` documenting this. Found the original March 24-25 brainstorm with the full landing page wireframe, demo canvas concept, and welcome modal copy.
+**Account deletion FK cascade.** Deleting a user from Supabase Auth failed due to FK constraints. Design discussion:
+- `created_by` columns (types, roles, objects) — dropped FK entirely. These are provenance/audit, not structural. `is_canon` is the real signal. UUID preserved after deletion.
+- `coteries.owner_id` — nullable + `ON DELETE SET NULL`. "Ownerless coteries" model: all remaining members get admin privileges. No forced ownership transfer, no surprise notifications. Apple 5.1.1(v) compliant.
+- `coteries_invitations.invited_by` — CASCADE (clean up orphaned invites).
+- `coteries_invitations.user_id` — SET NULL.
+- Cloud migration needed dynamic constraint name lookup (table rename didn't update FK names). First migration used static names that missed; second migration (`20260406400000`) used `pg_constraint` lookup.
+
+**CoteriesFrame admin logic.** Added `isAdmin = isOwner || !coterie.owner_id` — ownerless coteries grant all members delete/invite privileges. `owner_id` type updated to `string | null`.
 
 ### Open Items / Next Steps
-1. **RLS policies** — Matt wants to test the flow first, then lock down. Needed before any real users. Permissive placeholders currently.
-2. **Test full invite flow** — create a real invitation in cloud DB, walk through landing → join → signup → acceptance → welcome modal
-3. **Deploy Edge Function** — `supabase functions deploy send-invite-email`, set RESEND_API_KEY + APP_URL secrets, configure webhook in Dashboard
-4. **Vercel deployment** — deploy web app, get a domain, configure DNS + Supabase redirect URLs
-5. **Stripe integration** — wire up Checkout, webhooks to update subscription status
-6. **Light-mode motto logo** — Matt needs to create the reversed-gold variant of `logo-name-motto.svg`
-7. **DetailPanel → Frame migration** — back burner
-8. **Light mode polish** — back burner
-9. **Map packages (store)** — later, possibly post-launch
-10. **Delete AccountFrame files** — unused cleanup
+1. **RLS policies** — needed before any real users. Permissive placeholders currently.
+2. **Deploy Edge Function** — `supabase functions deploy send-invite-email`, set RESEND_API_KEY + APP_URL secrets, configure webhook in Dashboard
+3. **Vercel deployment** — deploy web app, get a domain, configure DNS + Supabase redirect URLs
+4. **Stripe integration** — wire up Checkout, webhooks to update subscription status
+5. **Matt had "two things to work out"** — only got to the first (type overrides bug + welcome modal). Second item not yet discussed.
+6. **DetailPanel → Frame migration** — back burner
+7. **Light mode polish** — back burner
+8. **Map packages (store)** — later, possibly post-launch

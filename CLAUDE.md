@@ -113,8 +113,12 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 - **UUID PKs for vocabulary** — `types` and `roles` prevent slug collisions; views join to `display_name`
 - **Coterie sharing is diff-based** — self-correcting when changes reversed
 - **Coterie intel is a query pattern** — join members' overrides, exclude `private_notes`
+- **Ownerless coteries** — when owner deletes their account, `owner_id` → NULL. All remaining members get admin privileges (invite, delete, manage maps). No forced ownership transfer. Coterie keeps working as a co-op.
 - **Maps are catalogs, not canvases** — collections with optional relative positioning
 - **All FKs reference `profiles(user_id)`** not `auth.users(id)`
+- **`created_by` is provenance, not a FK** — `types.created_by`, `roles.created_by`, `objects.created_by` have no FK constraint. NULL = platform-seeded, UUID = user-created (preserved after user deletion). `is_canon` is the authoritative flag, not `created_by`.
+- **Account deletion** — must cascade cleanly through `auth.users` → `profiles` → all user data. `coteries.owner_id` SET NULL, `coteries_invitations.invited_by` CASCADE, `created_by` columns have no FK (provenance preserved). Apple 5.1.1(v) compliant.
+- **Invite lookup for anonymous users** — `get_invitation_by_token()` SECURITY DEFINER RPC, callable by anon. No anon SELECT policy on `coteries_invitations` (would expose emails).
 - **Auto-create profile + subscription on signup** via trigger
 - **Subscriptions table** tracks trial/payment status per user — `user_tier(uid)` returns `'pro'`/`'trial'`/`'free'`
 - **VIP status** for internal users (billing-exempt, full Pro access) — just a subscription status value, not a separate role

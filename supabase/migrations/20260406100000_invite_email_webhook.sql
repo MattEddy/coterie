@@ -3,7 +3,7 @@
 -- pointing to the send-invite-email Edge Function.
 --
 -- This migration is a placeholder documenting the webhook configuration:
---   Table: coterie_invitations
+--   Table: coteries_invitations
 --   Events: INSERT
 --   Method: POST
 --   URL: <project-url>/functions/v1/send-invite-email

@@ -131,7 +131,7 @@ Complete build history for Coterie. For current priorities, see `CLAUDE.md` → 
 - [x] CoteriesFrame: full UI — list coteries, pending invitations, create coterie (name + map picker + email tags), detail card (members, maps, invite, delete)
 - [x] Coterie creation from map detail card (Share2 icon → name pre-filled as "[Map Name] Coterie" + email invites)
 - [x] Coterie creation from CoteriesFrame (Create Coterie button → name + map picker + email tags)
-- [x] `coterie_invitations` table + `maps.source_coterie_id` schema additions
+- [x] `coteries_invitations` table + `maps.source_coterie_id` schema additions
 - [x] Invitation acceptance: aggregated recipient map (source_coterie_id), object placement from owner's layout (centroid-relative)
 - [x] Canvas refresh via `coterie:refresh-canvas` DOM event (triggered after invite acceptance)
 - [x] Edge unhighlighting on selection clear (was missing — edges stayed highlighted)
@@ -145,7 +145,7 @@ Complete build history for Coterie. For current priorities, see `CLAUDE.md` → 
 - [x] Coterie Intel (Channel 1): shared_notes + contacts from coterie members displayed in DetailPanel Notes + Contact tabs, attributed
 - [x] Contact adopt: "+" button on coterie intel contacts, copies to user's `data.contacts`, fingerprint tracking in `data.adopted_intel` hides adopted entries
 - [x] `type_change` dissonance: compares effective type arrays, accept copies member's types to `objects_types_overrides`
-- [x] RLS enabled (permissive) on `objects_overrides`, `connections_overrides`, `coterie_invitations` for future Realtime
+- [x] RLS enabled (permissive) on `objects_overrides`, `connections_overrides`, `coteries_invitations` for future Realtime
 - [x] Frame: only persist height on explicit resize (not drag) — fixes stale height locking
 - [x] DetailPanel: types `+` button hidden until header edit mode active
 - [x] MapsFrame: single close button during map detail edit (Frame × becomes cancel-edit)

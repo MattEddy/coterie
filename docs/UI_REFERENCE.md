@@ -143,7 +143,7 @@ connections_overrides   -- per-user: overrides + user-created connections
 
 **Social:**
 ```
-coteries, coteries_members, coteries_maps, coterie_invitations, coteries_reviews
+coteries, coteries_members, coteries_maps, coteries_invitations, coteries_reviews
 maps.source_coterie_id -- recipient's aggregated coterie view
 ```
 

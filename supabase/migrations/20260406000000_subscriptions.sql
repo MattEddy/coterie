@@ -2,7 +2,7 @@
 -- Subscriptions table — tracks trial, payment, and access tier per user
 -- =============================================================================
 
-CREATE TABLE subscriptions (
+CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL UNIQUE REFERENCES profiles(user_id) ON DELETE CASCADE,
     status TEXT NOT NULL DEFAULT 'trialing'
@@ -19,9 +19,9 @@ CREATE TABLE subscriptions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_subscriptions_user ON subscriptions(user_id);
-CREATE INDEX idx_subscriptions_status ON subscriptions(status);
-CREATE INDEX idx_subscriptions_stripe_customer ON subscriptions(stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer ON subscriptions(stripe_customer_id);
 
 -- =============================================================================
 -- user_tier() — returns 'pro' | 'trial' | 'free' for access gating

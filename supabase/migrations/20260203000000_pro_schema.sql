@@ -16,7 +16,7 @@
 
 DROP VIEW IF EXISTS user_objects CASCADE;
 DROP VIEW IF EXISTS objects_with_types CASCADE;
-DROP TABLE IF EXISTS coterie_invitations CASCADE;
+DROP TABLE IF EXISTS coteries_invitations CASCADE;
 DROP TABLE IF EXISTS coteries_reviews CASCADE;
 DROP TABLE IF EXISTS coteries_maps CASCADE;
 DROP TABLE IF EXISTS coteries_members CASCADE;
@@ -591,7 +591,7 @@ CREATE TABLE coteries_maps (
 );
 
 -- Coterie invitations (pending invites, including non-users)
-CREATE TABLE coterie_invitations (
+CREATE TABLE coteries_invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     coterie_id UUID NOT NULL REFERENCES coteries(id) ON DELETE CASCADE,
     invited_by UUID NOT NULL REFERENCES profiles(user_id),
@@ -606,9 +606,9 @@ CREATE TABLE coterie_invitations (
     UNIQUE(coterie_id, email)
 );
 
-CREATE INDEX idx_coterie_invitations_email ON coterie_invitations(email);
-CREATE INDEX idx_coterie_invitations_user ON coterie_invitations(user_id);
-CREATE INDEX idx_coterie_invitations_coterie ON coterie_invitations(coterie_id);
+CREATE INDEX idx_coteries_invitations_email ON coteries_invitations(email);
+CREATE INDEX idx_coteries_invitations_user ON coteries_invitations(user_id);
+CREATE INDEX idx_coteries_invitations_coterie ON coteries_invitations(coterie_id);
 
 -- Coterie dissonance review states (diff-based updates channel)
 -- Tracks how a user has responded to each structural dissonance.
@@ -741,8 +741,8 @@ CREATE TRIGGER coteries_updated_at
     BEFORE UPDATE ON coteries
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE TRIGGER coterie_invitations_updated_at
-    BEFORE UPDATE ON coterie_invitations
+CREATE TRIGGER coteries_invitations_updated_at
+    BEFORE UPDATE ON coteries_invitations
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 
@@ -1043,7 +1043,7 @@ $$;
 
 ALTER PUBLICATION supabase_realtime ADD TABLE objects_overrides;
 ALTER PUBLICATION supabase_realtime ADD TABLE connections_overrides;
-ALTER PUBLICATION supabase_realtime ADD TABLE coterie_invitations;
+ALTER PUBLICATION supabase_realtime ADD TABLE coteries_invitations;
 
 -- RLS must be enabled for Realtime postgres_changes to fire.
 -- Permissive policies for now — proper RLS deferred until deploy.
@@ -1053,8 +1053,36 @@ CREATE POLICY "objects_overrides_all" ON objects_overrides FOR ALL TO authentica
 ALTER TABLE connections_overrides ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "connections_overrides_all" ON connections_overrides FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-ALTER TABLE coterie_invitations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "coterie_invitations_all" ON coterie_invitations FOR ALL TO authenticated USING (true) WITH CHECK (true);
+ALTER TABLE coteries_invitations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "coteries_invitations_all" ON coteries_invitations FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Public invite lookup — callable by anon (no table-level anon policy needed)
+CREATE OR REPLACE FUNCTION public.get_invitation_by_token(invite_token UUID)
+RETURNS TABLE(
+  invitation_id UUID,
+  coterie_id UUID,
+  status TEXT,
+  email TEXT,
+  coterie_name TEXT,
+  sender_name TEXT
+)
+LANGUAGE sql SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT
+    ci.id,
+    ci.coterie_id,
+    ci.status::text,
+    ci.email,
+    c.name,
+    p.display_name
+  FROM coteries_invitations ci
+  JOIN coteries c ON c.id = ci.coterie_id
+  JOIN profiles p ON p.user_id = ci.invited_by
+  WHERE ci.token = invite_token
+  LIMIT 1;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_invitation_by_token(UUID) TO anon, authenticated;
 
 -- =============================================================================
 -- TODO: Row Level Security (RLS)

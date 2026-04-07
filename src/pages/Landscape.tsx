@@ -147,7 +147,7 @@ export default function Landscape() {
       async function acceptPending() {
         const { supabase } = await import('../lib/supabase')
         const { data: inv } = await supabase
-          .from('coterie_invitations')
+          .from('coteries_invitations')
           .select('invited_by, status')
           .eq('token', pendingToken)
           .single()

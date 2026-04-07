@@ -80,14 +80,14 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
     if (memberData) {
       setMembers(memberData.map((m: any) => ({
         user_id: m.user_id,
-        display_name: m.profiles?.display_name ?? m.user_id,
+        display_name: m.profiles?.display_name ?? 'Unknown',
         role: m.role,
       })))
     }
 
     // Load pending invitations for this coterie
     const { data: inviteData } = await supabase
-      .from('coterie_invitations')
+      .from('coteries_invitations')
       .select('email')
       .eq('coterie_id', coterie.id)
       .eq('status', 'pending')
@@ -157,7 +157,7 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
     if (existingPending) return
 
     // Create the invitation (user_id resolved on acceptance)
-    const { error } = await supabase.from('coterie_invitations').insert({
+    const { error } = await supabase.from('coteries_invitations').insert({
       coterie_id: coterie.id,
       invited_by: user.id,
       email,
@@ -411,7 +411,7 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
     for (const email of emails) {
       // Try to find existing user by checking auth (for local dev, match against profiles)
       // In production this would use a server function
-      await supabase.from('coterie_invitations').insert({
+      await supabase.from('coteries_invitations').insert({
         coterie_id: coterie.id,
         invited_by: user.id,
         email,
@@ -563,7 +563,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
     if (!authUser?.email) return
 
     const { data: inviteData } = await supabase
-      .from('coterie_invitations')
+      .from('coteries_invitations')
       .select('id, coterie_id, created_at, invited_by, coteries(name)')
       .eq('email', authUser.email)
       .eq('status', 'pending')
@@ -627,7 +627,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
 
     // Mark invitation as accepted
     await supabase
-      .from('coterie_invitations')
+      .from('coteries_invitations')
       .update({ status: 'accepted', user_id: user.id })
       .eq('id', invite.id)
 
@@ -859,7 +859,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
 
   const handleDeclineInvite = async (invite: PendingInvite) => {
     await supabase
-      .from('coterie_invitations')
+      .from('coteries_invitations')
       .update({ status: 'declined' })
       .eq('id', invite.id)
     await loadInvitations()

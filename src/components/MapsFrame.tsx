@@ -138,7 +138,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
 
     // Create invitations
     for (const email of shareEmails) {
-      await supabase.from('coterie_invitations').insert({
+      await supabase.from('coteries_invitations').insert({
         coterie_id: coterie.id,
         invited_by: user.id,
         email,

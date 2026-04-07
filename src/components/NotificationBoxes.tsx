@@ -22,7 +22,7 @@ export default function NotificationBoxes({ onOpenCoteries, onOpenUpdates }: Not
     const { data: { user: authUser } } = await supabase.auth.getUser()
     if (authUser?.email) {
       const { count } = await supabase
-        .from('coterie_invitations')
+        .from('coteries_invitations')
         .select('*', { count: 'exact', head: true })
         .eq('email', authUser.email)
         .eq('status', 'pending')

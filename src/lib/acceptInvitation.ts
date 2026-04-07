@@ -141,6 +141,25 @@ export async function acceptInvitationByToken(userId: string, token: string): Pr
   })
   await supabase.from('objects_overrides').insert(overrides)
 
+  // Copy owner's type overrides so recipient starts with the same effective types
+  if (ownerId) {
+    const { data: ownerTypes } = await supabase
+      .from('objects_types_overrides')
+      .select('object_id, type_id, is_primary')
+      .eq('user_id', ownerId)
+      .in('object_id', newObjectIds)
+    if (ownerTypes && ownerTypes.length > 0) {
+      await supabase.from('objects_types_overrides').insert(
+        ownerTypes.map(t => ({
+          user_id: userId,
+          object_id: t.object_id,
+          type_id: t.type_id,
+          is_primary: t.is_primary,
+        }))
+      )
+    }
+  }
+
   // Copy owner's user-created connections between these objects
   if (ownerId) {
     const { data: ownerConns } = await supabase

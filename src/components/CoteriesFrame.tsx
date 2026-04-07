@@ -12,7 +12,7 @@ import type { PlacementCluster } from '../types'
 interface CoterieRow {
   id: string
   name: string
-  owner_id: string
+  owner_id: string | null
   member_count: number
   map_count: number
 }
@@ -70,6 +70,7 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
   const [transferTargetId, setTransferTargetId] = useState<string | null>(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const isOwner = coterie.owner_id === user?.id
+  const isAdmin = isOwner || !coterie.owner_id  // ownerless coteries: all members are admins
 
   const loadDetail = useCallback(async () => {
     // Load members
@@ -180,7 +181,7 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
           </button>
         </Tooltip>
       )}
-      {isOwner && (
+      {isAdmin && (
         <Tooltip text="Delete coterie">
           <button className={styles.iconBtn} onClick={() => setConfirmDelete(true)}>
             <Trash2 size={14} className={styles.iconBtnDanger} />
@@ -276,7 +277,7 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
       </div>
 
       {/* Invite member */}
-      {isOwner && (
+      {isAdmin && (
         <div className={styles.detailSection}>
           <div className={styles.emailTags} onClick={() => document.getElementById(`invite-${coterie.id}`)?.focus()}>
             <input
@@ -738,6 +739,14 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
       .in('object_id', newObjectIds) : { data: [] }
     const ownerOverrides = new Map((ownerOverrideRows ?? []).map(o => [o.object_id, o]))
 
+    // Fetch owner's type overrides for these objects
+    const { data: ownerTypeRows } = coterieRow ? await supabase
+      .from('objects_types_overrides')
+      .select('object_id, type_id, is_primary')
+      .eq('user_id', coterieRow.owner_id)
+      .in('object_id', newObjectIds) : { data: [] }
+    const ownerTypeOverrides = ownerTypeRows ?? []
+
     // Fetch canonical connections between these objects
     const { data: connRows } = await supabase
       .from('connections')
@@ -788,6 +797,19 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
       await supabase.from('connections_overrides').insert(connOverrides)
     }
 
+    // Copy owner's type overrides so recipient starts with matching types
+    const insertTypeOverrides = async () => {
+      if (ownerTypeOverrides.length === 0) return
+      await supabase.from('objects_types_overrides').insert(
+        ownerTypeOverrides.map(t => ({
+          user_id: user.id,
+          object_id: t.object_id,
+          type_id: t.type_id,
+          is_primary: t.is_primary,
+        }))
+      )
+    }
+
     // Enter placement mode
     if (onEnterPlacement) {
       onEnterPlacement({
@@ -809,6 +831,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
           })
           await supabase.from('objects_overrides').insert(overrides)
           await insertUserConnections()
+          await insertTypeOverrides()
           await loadCoteries()
           await loadInvitations()
           document.dispatchEvent(new CustomEvent('maps:refresh'))
@@ -829,6 +852,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
           })
           supabase.from('objects_overrides').insert(overrides).then(async () => {
             await insertUserConnections()
+            await insertTypeOverrides()
             document.dispatchEvent(new Event('coterie:refresh-canvas'))
           })
         },
@@ -851,6 +875,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
         await supabase.from('objects_overrides').insert(overrides)
       }
       await insertUserConnections()
+      await insertTypeOverrides()
       await loadCoteries()
       await loadInvitations()
       document.dispatchEvent(new Event('coterie:refresh-canvas'))

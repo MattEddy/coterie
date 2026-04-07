@@ -122,6 +122,9 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 - **Auto-create profile + subscription on signup** via trigger
 - **Subscriptions table** tracks trial/payment status per user — `user_tier(uid)` returns `'pro'`/`'trial'`/`'free'`
 - **VIP status** for internal users (billing-exempt, full Pro access) — just a subscription status value, not a separate role
+- **RLS helper functions** — `is_coterie_admin(coterie_id)` handles ownerless coterie logic; `is_shared_via_coterie(object_id, target_user_id)` checks coterie intel scope. Both SECURITY DEFINER.
+- **Invite acceptance RPC** — `accept_invitation_by_token(p_token, p_user_id)` SECURITY DEFINER, because the accepting user isn't a member yet and can't read/update invitations through member-based RLS policies.
+- **`get_dissonances()` is SECURITY DEFINER** — reads across multiple users' overrides; RLS would be prohibitively complex. Function already scopes to calling user's coteries.
 
 ## Known Gotchas
 
@@ -164,6 +167,9 @@ Import as `{ Map as MapIcon }`.
 ### React Flow Edge Click + `useOnSelectionChange` Race
 `onEdgeClick` → `setSelectedItems([])` triggers the selection-change effect which clears edge highlights. `useOnSelectionChange` fires asynchronously after the initial render, so a boolean ref guard gets consumed too early. Fix: use a persistent `edgeClickedRef` that stays true until explicitly cleared in `handleNodeClick` or `handlePaneClick` — don't reset it inside the effect.
 
+### Login `<Navigate>` Races useEffect
+`<Navigate>` renders synchronously, but `useEffect` runs after render. If a guard state like `checkingProfile` starts `false`, the `<Navigate>` fires before the effect can set it `true`. Fix: initialize guard states to `true` and let the effect clear them. Discovered when the welcome modal name step was being skipped entirely.
+
 ### Coterie Acceptance Must Copy Override Data
 When accepting a shared map, the recipient's `objects_overrides` must include `name`, `title`, `status` from the owner's overrides — not just `map_x`/`map_y`. User-created objects have `objects.name = NULL` (skeleton row), so without copying, they render as blank shapes. Same for `connections_overrides`: owner's user-created connections (`connection_id IS NULL`) must be duplicated for the recipient to avoid spurious `new_connection` dissonances.
 
@@ -202,7 +208,9 @@ npm run dev                 # → http://localhost:5173
 # Auth: 6-digit email OTP (no passwords) — works for both signup and login
 ```
 
-Deploy: Supabase Cloud (`supabase db push`) + Vercel (not yet configured).
+Deploy: Supabase Cloud (`supabase db push`) + Vercel (`vercel --prod`).
+Production: `https://coteriepro.com` (Vercel) + Supabase Cloud (sbgxgveornxaxxiowwsh, us-west-1).
+Domain DNS: Porkbun → A record `76.76.21.21` + CNAME `www` → `cname.vercel-dns.com`.
 
 ## Status
 
@@ -214,8 +222,8 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [x] Non-user invitation flow — landing page, join page, auth handoff, welcome modal
 - [x] Subscriptions table + `user_tier()` function
 - [x] Edge Function for invite emails (Resend, not yet deployed/configured)
-- [ ] RLS policies — needed before testing with real users
-- [ ] Vercel deployment + domain
+- [x] RLS policies — 65 policies across 20 tables, helper functions, SECURITY DEFINER RPCs
+- [x] Vercel deployment + domain — coteriepro.com, SPA rewrites, env vars configured
 - [ ] Stripe integration for subscription billing
 - [ ] DetailPanel migration to Frame component (back burner)
 - [ ] Light mode polish (back burner)

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'

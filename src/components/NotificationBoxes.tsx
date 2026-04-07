@@ -13,7 +13,7 @@ export default function NotificationBoxes({ onOpenCoteries, onOpenUpdates }: Not
   const { user } = useAuth()
   const [inviteCount, setInviteCount] = useState(0)
   const [dissonanceCount, setDissonanceCount] = useState(0)
-  const loadCountsRef = useRef<() => Promise<void>>()
+  const loadCountsRef = useRef<() => Promise<void>>(undefined)
   const prevInviteCountRef = useRef(0)
 
   const loadCounts = useCallback(async () => {

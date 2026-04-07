@@ -13,7 +13,7 @@ export default function Tooltip({ text, children, delay = 400, disabled = false 
   const [visible, setVisible] = useState(false)
   const [coords, setCoords] = useState({ x: 0, y: 0, placement: 'above' as 'above' | 'below' })
   const triggerRef = useRef<HTMLSpanElement>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const show = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)

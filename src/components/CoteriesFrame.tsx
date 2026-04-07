@@ -916,7 +916,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
     setCoteries(prev => prev.map(c => c.id === updated.id ? updated : c))
   }
 
-  const handleCoterieDeleted = (coterieId: string) => {
+  const handleCoterieDeleted = (_coterieId: string) => {
     setOpenedCoterie(null)
     setSelectedCoterieId(null)
     loadCoteries()

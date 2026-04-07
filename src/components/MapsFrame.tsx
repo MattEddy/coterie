@@ -225,10 +225,6 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     searchInputRef.current?.focus()
   }
 
-  const toggleActive = () => {
-    onActivateMap(activeMapId === map.id ? null : map.id)
-  }
-
   const headerActions = editing ? (
     <Tooltip text="Save"><button className={styles.iconBtn} onClick={saveEdit}><Check size={14} /></button></Tooltip>
   ) : (

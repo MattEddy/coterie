@@ -157,24 +157,18 @@ export default function Landscape() {
       sessionStorage.removeItem('pendingInviteToken')
 
       async function acceptPending() {
-        const { data: inv } = await supabase
-          .from('coteries_invitations')
-          .select('invited_by, status')
-          .eq('token', pendingToken)
-          .single()
+        // Use SECURITY DEFINER RPC to look up invitation by token (RLS-safe)
+        const { data: invData } = await supabase
+          .rpc('get_invitation_by_token', { invite_token: pendingToken })
 
+        const inv = invData?.[0]
         if (!inv || inv.status !== 'pending') return
 
-        const { data: sender } = await supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('user_id', inv.invited_by)
-          .single()
+        const senderName = inv.sender_name || 'Your coterie'
 
-        const accepted = await acceptInvitationByToken(user.id, pendingToken!)
+        const accepted = await acceptInvitationByToken(user!.id, pendingToken!)
         if (accepted) {
           document.dispatchEvent(new Event('coterie:refresh-canvas'))
-          const senderName = sender?.display_name || 'Your coterie'
           setWelcomeModal({ senderName, needsName, step: needsName ? 'name' : 'intro' })
         }
       }

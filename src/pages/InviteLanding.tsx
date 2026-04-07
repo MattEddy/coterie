@@ -148,7 +148,7 @@ interface InviteData {
 /* ── Demo Canvas (inner component, needs ReactFlowProvider) ──── */
 
 function DemoCanvas() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(DEMO_NODES)
+  const [nodes, , onNodesChange] = useNodesState(DEMO_NODES)
   const [edges, setEdges, onEdgesChange] = useEdgesState(DEMO_EDGES)
   const [detail, setDetail] = useState<DemoDetail | null>(null)
 
@@ -238,7 +238,7 @@ export default function InviteLanding() {
     async function load() {
       const { data, error: rpcErr } = await supabase
         .rpc('get_invitation_by_token', { invite_token: token })
-        .single()
+        .single<{ status: string; coterie_name: string; sender_name: string; coterie_id: string; invitation_id: string }>()
 
       if (rpcErr || !data) { setError('This invitation was not found.'); setLoading(false); return }
       if (data.status !== 'pending') { setError('This invitation has already been used.'); setLoading(false); return }

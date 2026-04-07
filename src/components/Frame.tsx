@@ -158,7 +158,7 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
         const rect = frameRef.current.getBoundingClientRect()
         saveLayoutRef.current(persistKeyRef.current, {
           x: rect.left, y: rect.top, w: rect.width,
-          ...(wasResizing ? { h: rect.height } : {}),
+          ...(wasResizing ? { h: rect.height } : { h: null }),
         })
       }
     }

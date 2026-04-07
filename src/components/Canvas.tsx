@@ -581,7 +581,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
 
   // Handle edge selection — show label + turn white when selected
   const handleEdgeClick = useCallback(
-    (event: React.MouseEvent, edge: Edge) => {
+    (_event: React.MouseEvent, edge: Edge) => {
       const now = Date.now()
       const last = lastEdgeClickRef.current
 
@@ -984,7 +984,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         zoomOnPinch
         selectionOnDrag={!mapEditMode}
         selectionMode={SelectionMode.Partial}
-        nodesSelectable={!mapEditMode}
+        elementsSelectable={!mapEditMode}
         multiSelectionKeyCode="Meta"
         proOptions={{ hideAttribution: true }}
       >

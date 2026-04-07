@@ -72,7 +72,7 @@ export default function InviteJoin() {
     async function load() {
       const { data, error: rpcErr } = await supabase
         .rpc('get_invitation_by_token', { invite_token: token })
-        .single()
+        .single<{ status: string; coterie_name: string; sender_name: string; email: string }>()
 
       if (rpcErr || !data) { setError('Invitation not found.'); setLoading(false); return }
       if (data.status !== 'pending') { setError('This invitation has already been used.'); setLoading(false); return }

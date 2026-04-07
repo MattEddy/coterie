@@ -73,6 +73,14 @@ export default function CreateObjectForm({ screenPosition, onSubmit, onCancel }:
         onChange={e => setName(e.target.value)}
         autoComplete="off"
       />
+      <button
+        className={styles.createBtn}
+        type="button"
+        disabled={!name.trim()}
+        onClick={() => name.trim() && onSubmit(selectedClass, name.trim())}
+      >
+        Create
+      </button>
     </div>
   )
 }

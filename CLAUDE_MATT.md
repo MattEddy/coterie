@@ -5,48 +5,50 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-04-06 (evening)
+**Date:** 2026-04-06 (evening, continued)
 **Branch:** main
 
 ### Narrative
 
-Deployment session — took Coterie from local-only to production at `coteriepro.com`. Also landed RLS policies and fixed the welcome modal race condition.
+Major deployment session — took Coterie from local-only to production at `coteriepro.com`, added RLS policies, fixed bugs, and built the public landing page. Two sub-sessions in one evening.
 
-**Auth token question.** Matt asked about testing the invite flow with two Chrome windows logged in as different users. Confirmed Supabase stores auth in localStorage with default key — two regular windows share a token (last login wins), but separate Chrome profiles or incognito are fully isolated.
+**Part 1 — Invite flow fixes + deployment prep.**
 
-**Invite landing page copy.** Trimmed explainer text: "Intuitively and visually" → "Visually", "Then link up with" → "Connect with". Replaced fake demo data (project/event lists with real names like "Stranger Things 5") with one-line descriptor text in each tab, matching the existing contact/notes pattern: "Track projects associated with contacts." and "Keep a log of contacts' key meetings and events."
+- Auth token question: confirmed Supabase localStorage-based auth means two regular Chrome windows share one session (last login wins). Separate Chrome profiles or incognito for multi-user testing.
+- Invite landing copy trimmed: "Intuitively and visually" → "Visually", "Then link up with" → "Connect with". Fake demo data (Stranger Things, etc.) replaced with one-line descriptors matching contact/notes pattern.
+- Welcome modal name step was being skipped. Root cause: `checkingProfile` in `Login.tsx` started `false`, so `<Navigate>` fired before `useEffect` could set `needsDisplayName`. Fix: initialize `checkingProfile` to `true`. The intro screen still showed via a different path (`pendingInviteToken` in Landscape Case 1).
 
-**Welcome modal name step skipped.** Matt reported the "enter your name" screen was missing during invite flow — went straight to "This is your landscape." Root cause: `checkingProfile` in Login.tsx started as `false`. When `user` state updated, `<Navigate>` rendered synchronously before the `useEffect` could fire to check the profile and set `needsDisplayName`. Fix: initialize `checkingProfile` to `true`, set it `false` in the effect when no user. The intro screen still showed because the `pendingInviteToken` (set by InviteJoin) was still in sessionStorage — Landscape picked it up via Case 1, but without `needsDisplayName` set, it skipped to `step: 'intro'`.
+**Part 2 — Vercel + domain + RLS.**
 
-**Vercel deployment.** Linked repo via `vercel link`, added `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as production env vars. First `vercel --prod` failed on TypeScript errors — 18 pre-existing TS errors that weren't caught because Matt runs dev mode (no `tsc`). Fixed all: unused vars (`_event` prefix or removal), React 19 `useRef` requires explicit initial arg, React Flow v12 renamed `nodesSelectable` → `elementsSelectable`, `FrameLayout.h` type mismatch (`undefined` vs `null`), RPC return types needed explicit generics on `.single<{...}>()`. Second deploy succeeded.
+- Vercel deployment: linked repo, added env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`). First deploy failed on 18 pre-existing TS errors (unused vars, React 19 `useRef` args, React Flow `nodesSelectable` → `elementsSelectable`, `FrameLayout.h` type, RPC return types). All fixed.
+- `vercel.json` created with SPA rewrite rule for React Router.
+- Domain: `coteriepro.com` on Porkbun. Wildcard CNAME → `www` CNAME (conflict resolution), A record → `76.76.21.21`. Supabase Auth Site URL and redirect URLs updated.
+- RLS: background agent wrote `supabase/migrations/20260407000000_rls_policies.sql` — 65 policies, 20 tables, helper functions (`is_coterie_admin`, `is_shared_via_coterie`), `accept_invitation_by_token` RPC. `acceptInvitation.ts` and `Landscape.tsx` updated for RLS-safe flows. Pushed to cloud.
 
-**SPA routing.** Created `vercel.json` with rewrite rule `/(.*) → /index.html` so React Router routes don't 404 on direct access/refresh.
+**Part 3 — Landing page.**
 
-**Domain setup.** `coteriepro.com` on Porkbun. Had to change existing wildcard (`*`) CNAME to `www` before the root A record would save (CNAME/A conflict). Final DNS: A `coteriepro.com` → `76.76.21.21`, CNAME `www.coteriepro.com` → `cname.vercel-dns.com`. Added domain in Vercel, updated Supabase Auth Site URL to `https://coteriepro.com`, added `https://coteriepro.com/**` to redirect URLs.
+- Built `src/pages/Home.tsx` + `Home.module.css` — public landing page at `/home` combining content from InviteLanding (overview + interactive demo) and InviteJoin (feature cards + pricing CTA).
+- Structure: sticky header (logo left, nav right) → hero icon + headline + explainer → interactive ReactFlow demo → 4 feature cards → pricing/CTA footer.
+- Router updated: unauthenticated `/` redirects to `/home` instead of `/login`. Nav links: Overview | Features | Plans | Login.
+- ReactFlow canvas needed `min-height: 350px` — `aspect-ratio` alone gave zero height inside flex column.
+- `global.css` has `overflow: hidden` on `html, body, #root` (for the canvas app). Landing page uses `overflow-y: auto` on its container to scroll.
 
-**RLS policies.** Ran as background agent while doing Vercel setup. Agent produced `supabase/migrations/20260407000000_rls_policies.sql` — 65 policies across all 20 tables. Two SECURITY DEFINER helper functions: `is_coterie_admin()` (handles ownerless coterie logic) and `is_shared_via_coterie()` (coterie intel scope check). `get_dissonances()` upgraded to SECURITY DEFINER (reads across users' data). New `accept_invitation_by_token()` RPC for RLS-safe invite acceptance. Client-side: `acceptInvitation.ts` updated to use the new RPC, `Landscape.tsx` uses `get_invitation_by_token` RPC for invite lookup. Pushed to cloud via `supabase db push`.
-
-**Files modified:**
-- `src/pages/InviteLanding.tsx` — trimmed copy, replaced demo data with descriptors, RPC type annotations
-- `src/pages/Login.tsx` — `checkingProfile` race condition fix
-- `src/components/Canvas.tsx` — unused `event` param, `nodesSelectable` → `elementsSelectable`
-- `src/components/CoteriesFrame.tsx` — unused `coterieId` param
-- `src/components/CoterieUpdatesFrame.tsx` — removed unused `X` import
-- `src/components/Frame.tsx` — FrameLayout `h` type fix
-- `src/components/MapsFrame.tsx` — removed unused `toggleActive`
-- `src/components/NotificationBoxes.tsx` — React 19 `useRef` arg
-- `src/components/Tooltip.tsx` — React 19 `useRef` arg
-- `src/pages/InviteJoin.tsx` — RPC type annotation
-- `src/pages/Landscape.tsx` — `user!` non-null assertion, RPC-based invite lookup
-- `src/lib/acceptInvitation.ts` — uses `accept_invitation_by_token` RPC
-- `supabase/migrations/20260407000000_rls_policies.sql` — full RLS migration
-- `vercel.json` — SPA rewrite config
-- `.gitignore` — added `.vercel`
+**Files modified/created:**
+- `src/pages/Home.tsx` + `Home.module.css` — new landing page
+- `src/App.tsx` — added `/home` route, redirect unauthenticated to `/home`
+- `src/pages/Login.tsx` — `checkingProfile` race fix
+- `src/pages/InviteLanding.tsx` — copy trim, demo descriptors, RPC types
+- `src/components/Canvas.tsx`, `CoteriesFrame.tsx`, `CoterieUpdatesFrame.tsx`, `Frame.tsx`, `MapsFrame.tsx`, `NotificationBoxes.tsx`, `Tooltip.tsx`, `InviteJoin.tsx`, `Landscape.tsx` — TS fixes
+- `src/lib/acceptInvitation.ts` — RLS-safe RPC
+- `supabase/migrations/20260407000000_rls_policies.sql` — full RLS
+- `vercel.json` — SPA rewrite
+- `.gitignore` — `.vercel`
 
 ### Open Items / Next Steps
-1. **Deploy Edge Function** — `supabase functions deploy send-invite-email`, set RESEND_API_KEY + APP_URL secrets. Without this, invites require manually sharing links.
-2. **Stripe integration** — wire up Checkout, webhooks to update subscription status
-3. **Test RLS end-to-end** — the policies were generated by an agent and applied to cloud. Should verify the full invite→accept→share→intel flow works under RLS.
-4. **DetailPanel → Frame migration** — back burner
-5. **Light mode polish** — back burner
-6. **Map packages (store)** — later, possibly post-launch
+1. **Test RLS end-to-end** — Matt is testing the flow on production tonight. Policies were agent-generated — verify invite→accept→share→intel works under RLS.
+2. **Deploy Edge Function** — `supabase functions deploy send-invite-email`, set RESEND_API_KEY + APP_URL secrets. Without this, invites require manually sharing links.
+3. **Stripe integration** — wire up Checkout, webhooks to update subscription status
+4. **Charlotte coding setup** — Matt's 12-year-old daughter wants to start coding with Claude Code. Discussed isolation options: separate folder on same Mac vs. separate computer. Matt leaning toward the old computer. No action yet.
+5. **DetailPanel → Frame migration** — back burner
+6. **Light mode polish** — back burner
+7. **Map packages (store)** — later, possibly post-launch

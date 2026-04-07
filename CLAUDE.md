@@ -224,6 +224,7 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [x] Edge Function for invite emails (Resend, not yet deployed/configured)
 - [x] RLS policies — 65 policies across 20 tables, helper functions, SECURITY DEFINER RPCs
 - [x] Vercel deployment + domain — coteriepro.com, SPA rewrites, env vars configured
+- [x] Landing page (`/home`) — hero, interactive demo, features, pricing CTA
 - [ ] Stripe integration for subscription billing
 - [ ] DetailPanel migration to Frame component (back burner)
 - [ ] Light mode polish (back burner)

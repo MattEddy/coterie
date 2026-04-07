@@ -290,35 +290,18 @@ export default function InviteLanding() {
     }
 
     async function load() {
-      // Fetch invitation by token
-      const { data: inv, error: invErr } = await supabase
-        .from('coterie_invitations')
-        .select('id, coterie_id, invited_by, status')
-        .eq('token', token)
+      const { data, error: rpcErr } = await supabase
+        .rpc('get_invitation_by_token', { invite_token: token })
         .single()
 
-      if (invErr || !inv) { setError('This invitation was not found.'); setLoading(false); return }
-      if (inv.status !== 'pending') { setError('This invitation has already been used.'); setLoading(false); return }
-
-      // Fetch coterie name
-      const { data: coterie } = await supabase
-        .from('coteries')
-        .select('name')
-        .eq('id', inv.coterie_id)
-        .single()
-
-      // Fetch sender name
-      const { data: sender } = await supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('user_id', inv.invited_by)
-        .single()
+      if (rpcErr || !data) { setError('This invitation was not found.'); setLoading(false); return }
+      if (data.status !== 'pending') { setError('This invitation has already been used.'); setLoading(false); return }
 
       setInvite({
-        coterieName: coterie?.name || 'a coterie',
-        senderName: sender?.display_name || 'Someone',
-        coterieId: inv.coterie_id,
-        invitationId: inv.id,
+        coterieName: data.coterie_name || 'a coterie',
+        senderName: data.sender_name || 'Someone',
+        coterieId: data.coterie_id,
+        invitationId: data.invitation_id,
       })
       setLoading(false)
     }

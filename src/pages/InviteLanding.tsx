@@ -75,40 +75,6 @@ interface DemoDetail {
   cls: string
 }
 
-const DEMO_PROJECTS: Record<string, { name: string; type: string }[]> = {
-  netflix: [
-    { name: 'Stranger Things 5', type: 'tv series' },
-    { name: 'Glass Onion 2', type: 'feature' },
-  ],
-  ted: [
-    { name: 'Squid Game S3', type: 'tv series' },
-  ],
-  '21laps': [
-    { name: 'Stranger Things 5', type: 'tv series' },
-    { name: 'All the Light We Cannot See', type: 'limited series' },
-  ],
-  shawn: [
-    { name: 'Deadpool & Wolverine', type: 'feature' },
-    { name: 'Stranger Things 5', type: 'tv series' },
-  ],
-  wme: [],
-}
-
-const DEMO_EVENTS: Record<string, { name: string; date: string }[]> = {
-  netflix: [
-    { name: 'Q1 Earnings Call', date: '2026-04-15' },
-  ],
-  ted: [
-    { name: 'CinemaCon Keynote', date: '2026-04-01' },
-  ],
-  '21laps': [],
-  shawn: [
-    { name: 'DGA Awards', date: '2026-03-08' },
-  ],
-  wme: [
-    { name: 'Upfronts Week', date: '2026-05-12' },
-  ],
-}
 
 function DemoDetailCard({ detail, onClose }: { detail: DemoDetail; onClose: () => void }) {
   const [tab, setTab] = useState<DemoTabId>('contact')
@@ -118,8 +84,6 @@ function DemoDetailCard({ detail, onClose }: { detail: DemoDetail; onClose: () =
     { id: 'projects', label: 'Projects' },
     { id: 'events', label: 'Events' },
   ]
-  const projects = DEMO_PROJECTS[detail.id] || []
-  const events = DEMO_EVENTS[detail.id] || []
 
   return (
     <div className={styles.detailCard}>
@@ -156,32 +120,14 @@ function DemoDetailCard({ detail, onClose }: { detail: DemoDetail; onClose: () =
             </p>
           )}
           {tab === 'projects' && (
-            projects.length > 0 ? (
-              <ul className={styles.detailList}>
-                {projects.map(p => (
-                  <li key={p.name} className={styles.detailListItem}>
-                    <span className={styles.detailListName}>{p.name}</span>
-                    <span className={styles.detailListType}>{p.type}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.detailMuted}>No linked projects.</p>
-            )
+            <p className={styles.detailMuted}>
+              Track projects associated with contacts.
+            </p>
           )}
           {tab === 'events' && (
-            events.length > 0 ? (
-              <ul className={styles.detailList}>
-                {events.map(e => (
-                  <li key={e.name} className={styles.detailListItem}>
-                    <span className={styles.detailListName}>{e.name}</span>
-                    <span className={styles.detailListType}>{e.date}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.detailMuted}>No linked events.</p>
-            )
+            <p className={styles.detailMuted}>
+              Keep a log of contacts' key meetings and events.
+            </p>
           )}
         </div>
       </div>
@@ -345,12 +291,11 @@ export default function InviteLanding() {
 
         {/* Explainer */}
         <p className={styles.explainer}>
-          Intuitively and visually array people, organizations, and
-          information — so you can truly understand and harness your
-          interpersonal landscape.
+          Visually array people, organizations, and information — so
+          you can truly understand and harness your interpersonal landscape.
         </p>
         <p className={styles.explainer}>
-          Then link up with trusted collaborators to share and sync your
+          Connect with trusted collaborators to share and sync your
           Coterie information, keeping each other up to date and in the loop.
         </p>
 

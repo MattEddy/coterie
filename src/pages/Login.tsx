@@ -25,7 +25,7 @@ export default function Login() {
   const codeRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const [accepting, setAccepting] = useState(false)
-  const [checkingProfile, setCheckingProfile] = useState(false)
+  const [checkingProfile, setCheckingProfile] = useState(true)
 
   // Accept pending invitation, then redirect
   const acceptAndRedirect = useCallback(async (uid: string) => {
@@ -42,7 +42,7 @@ export default function Login() {
 
   // After OTP verification, accept invite if pending and redirect
   useEffect(() => {
-    if (!user) return
+    if (!user) { setCheckingProfile(false); return }
     setCheckingProfile(true)
     supabase
       .from('profiles')

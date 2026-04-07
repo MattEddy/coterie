@@ -99,7 +99,20 @@ export default function Login() {
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setInviteOnly(false)
     setLoading(true)
+
+    // Check if email is allowed before sending OTP
+    const pendingToken = inviteToken || sessionStorage.getItem('pendingInviteToken')
+    if (!pendingToken) {
+      const { data: allowed } = await supabase.rpc('is_email_allowed', { p_email: email.trim().toLowerCase() })
+      if (!allowed) {
+        setInviteOnly(true)
+        setLoading(false)
+        return
+      }
+    }
+
     const { error } = await sendOtp(email.trim())
     if (error) {
       setError(error.message)

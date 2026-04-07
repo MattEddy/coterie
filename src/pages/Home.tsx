@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useCallback, useRef } from 'react'
+import { createClient } from '@supabase/supabase-js'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -234,10 +234,36 @@ function DemoCanvas() {
 
 /* ── Home page ─────────────────────────────────────────────────── */
 
+// Anon client for waitlist inserts (no auth needed)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const anonClient = createClient(supabaseUrl, supabaseAnonKey)
+
 export default function Home() {
-  const navigate = useNavigate()
   const { resolvedTheme } = useTheme()
   const logo = resolvedTheme === 'light' ? logoNameLight : logoNameDark
+  const [waitlistEmail, setWaitlistEmail] = useState('')
+  const [waitlistStatus, setWaitlistStatus] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
+  const waitlistRef = useRef<HTMLInputElement>(null)
+
+  const handleWaitlist = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const email = waitlistEmail.trim().toLowerCase()
+    if (!email) return
+    setWaitlistStatus('sending')
+    const { error } = await anonClient.from('waitlist').insert({ email })
+    if (error) {
+      // Duplicate = already on the list, treat as success
+      if (error.code === '23505') {
+        setWaitlistStatus('done')
+      } else {
+        console.error('Waitlist error:', error)
+        setWaitlistStatus('error')
+      }
+    } else {
+      setWaitlistStatus('done')
+    }
+  }
 
   return (
     <div className={styles.container}>
@@ -248,7 +274,6 @@ export default function Home() {
           <a href="#overview" className={styles.navLink}>Overview</a>
           <a href="#features" className={styles.navLink}>Features</a>
           <a href="#pricing" className={styles.navLink}>Plans</a>
-          <a href="/login" className={styles.navLink}>Login</a>
         </nav>
       </header>
 
@@ -288,20 +313,34 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Pricing / CTA */}
+        {/* Waitlist CTA */}
         <section id="pricing" className={styles.ctaSection}>
-          <h2 className={styles.ctaHeadline}>Start free. No card needed.</h2>
+          <h2 className={styles.ctaHeadline}>Coterie is invite-only — for now.</h2>
           <p className={styles.ctaSubtext}>
-            Try Coterie free for 2 months — then continue for $3.99/month or $39/year.
+            We're rolling out access gradually. Join the waitlist
+            and we'll let you know when it's your turn.
           </p>
-          <button className={styles.ctaButton} onClick={() => navigate('/login')}>
-            Start Free Trial
-          </button>
-          <p className={styles.ctaNote}>
-            After your trial, you can continue using Coterie Free offline — you
-            keep all your information, with no cloud backup or coterie sharing.
-            Upgrade anytime to reconnect.
-          </p>
+          {waitlistStatus === 'done' ? (
+            <p className={styles.ctaSuccess}>You're on the list. We'll be in touch.</p>
+          ) : (
+            <form onSubmit={handleWaitlist} className={styles.waitlistForm}>
+              <input
+                ref={waitlistRef}
+                className={styles.waitlistInput}
+                type="email"
+                placeholder="you@email.com"
+                value={waitlistEmail}
+                onChange={e => setWaitlistEmail(e.target.value)}
+                required
+              />
+              <button className={styles.ctaButton} type="submit" disabled={waitlistStatus === 'sending'}>
+                {waitlistStatus === 'sending' ? 'Joining...' : 'Join the Waitlist'}
+              </button>
+            </form>
+          )}
+          {waitlistStatus === 'error' && (
+            <p className={styles.ctaError}>Something went wrong. Please try again.</p>
+          )}
         </section>
       </div>
     </div>

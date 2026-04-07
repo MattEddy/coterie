@@ -11,7 +11,7 @@ import styles from './Login.module.css'
 type Step = 'email' | 'code'
 
 export default function Login() {
-  const { user, sendOtp, verifyOtp } = useAuth()
+  const { user, sendOtp, verifyOtp, signOut } = useAuth()
   const { resolvedTheme } = useTheme()
   const [searchParams] = useSearchParams()
   const inviteEmail = searchParams.get('email')
@@ -26,6 +26,7 @@ export default function Login() {
 
   const [accepting, setAccepting] = useState(false)
   const [checkingProfile, setCheckingProfile] = useState(true)
+  const [inviteOnly, setInviteOnly] = useState(false)
 
   // Accept pending invitation, then redirect
   const acceptAndRedirect = useCallback(async (uid: string) => {
@@ -40,10 +41,14 @@ export default function Login() {
     // Navigate will happen via the render check below
   }, [inviteToken])
 
-  // After OTP verification, accept invite if pending and redirect
+  // After OTP verification, check if user is allowed (existing user or has invite)
   useEffect(() => {
     if (!user) { setCheckingProfile(false); return }
     setCheckingProfile(true)
+    setInviteOnly(false)
+
+    const pendingToken = inviteToken || sessionStorage.getItem('pendingInviteToken')
+
     supabase
       .from('profiles')
       .select('display_name')
@@ -51,13 +56,43 @@ export default function Login() {
       .single()
       .then(async ({ data, error }) => {
         if (error) console.error('Failed to check profile:', error)
-        if (!data?.display_name) {
+
+        const isExistingUser = !!data?.display_name
+        const hasInviteToken = !!pendingToken
+
+        // New user without an invite → block access
+        if (!isExistingUser && !hasInviteToken) {
+          await signOut()
+          setInviteOnly(true)
+          setCheckingProfile(false)
+          return
+        }
+
+        if (!isExistingUser) {
           sessionStorage.setItem('needsDisplayName', 'true')
         }
         await acceptAndRedirect(user.id)
         setCheckingProfile(false)
       })
-  }, [user, acceptAndRedirect])
+  }, [user, acceptAndRedirect, inviteToken, signOut])
+
+  if (inviteOnly) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.form}>
+          <p className={styles.welcomeText}>Welcome to</p>
+          <img src={resolvedTheme === 'light' ? logoNameLight : logoNameDark} alt="Coterie" className={styles.logoImg} />
+          <div className={styles.stepContent}>
+            <p className={styles.subtitle}>Coterie is invite-only right now.</p>
+            <p className={styles.hint}>
+              You'll need an invitation from an existing member to join.
+              Visit <a href="/home" style={{ color: 'var(--color-accent)' }}>coteriepro.com</a> to join the waitlist.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (user && !accepting && !checkingProfile) return <Navigate to="/" replace />
 

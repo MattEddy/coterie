@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ReactFlow,
@@ -15,6 +15,7 @@ import RoleEdge from '../components/RoleEdge'
 import { useTheme } from '../contexts/ThemeContext'
 import logoNameDark from '../assets/logo-name.svg'
 import logoNameLight from '../assets/logo-name-light.svg'
+import logoIcon from '../assets/logo-icon.svg'
 import thumbLandscape from '../assets/thumb-landscape.svg'
 import thumbDetails from '../assets/thumb-details.svg'
 import thumbMaps from '../assets/thumb-maps.svg'
@@ -67,8 +68,6 @@ const nodeTypes = { object: ObjectNode }
 const edgeTypes = { role: RoleEdge }
 
 /* ── Demo detail card ──────────────────────────────────────────── */
-
-import { useState } from 'react'
 
 type DemoTabId = 'contact' | 'notes' | 'projects' | 'events'
 
@@ -246,14 +245,17 @@ export default function Home() {
       <header className={styles.header}>
         <img src={logo} alt="Coterie" className={styles.headerLogo} />
         <nav className={styles.headerNav}>
+          <a href="#overview" className={styles.navLink}>Overview</a>
           <a href="#features" className={styles.navLink}>Features</a>
-          <a href="#pricing" className={styles.navLink}>Pricing</a>
+          <a href="#pricing" className={styles.navLink}>Plans</a>
+          <a href="/login" className={styles.navLink}>Login</a>
         </nav>
       </header>
 
       <div className={styles.page}>
         {/* Overview */}
-        <section className={styles.overview}>
+        <section id="overview" className={styles.overview}>
+          <img src={logoIcon} alt="" className={styles.heroIcon} />
           <h1 className={styles.headline}>Map your professional world.</h1>
           <p className={styles.explainer}>
             Visually array people, organizations, and information — so

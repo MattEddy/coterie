@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
 import { useReactFlow, useStore, useViewport } from '@xyflow/react'
-import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, CalendarCheck, Plus, ChevronDown, ChevronRight, Link, Trash2 } from 'lucide-react'
+import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, CalendarCheck, Plus, ChevronDown, ChevronRight, Link, Trash2, Map as MapIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getEffectiveConnections, otherObjectId } from '../lib/connections'
 import { useAuth } from '../contexts/AuthContext'
@@ -169,6 +169,85 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     orphanedProjects: number
     orphanedEvents: number
   } | null>(null)
+
+  // Maps popover
+  const [showMapsPopover, setShowMapsPopover] = useState(false)
+  const [objectMaps, setObjectMaps] = useState<{ id: string; name: string }[]>([])
+  const [allMaps, setAllMaps] = useState<{ id: string; name: string }[]>([])
+  const [mapSearchQuery, setMapSearchQuery] = useState('')
+  const mapsPopoverRef = useRef<HTMLDivElement>(null)
+  const mapSearchInputRef = useRef<HTMLInputElement>(null)
+
+  const loadObjectMaps = useCallback(async () => {
+    if (!user) return
+    const { data: moData } = await supabase
+      .from('maps_objects')
+      .select('map_id')
+      .eq('object_ref_id', object.id)
+    if (!moData) return
+    const mapIds = moData.map(d => d.map_id)
+    if (mapIds.length === 0) { setObjectMaps([]); return }
+    const { data } = await supabase
+      .from('maps')
+      .select('id, name')
+      .in('id', mapIds)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('name')
+    setObjectMaps(data ?? [])
+  }, [user, object.id])
+
+  const loadAllMaps = useCallback(async () => {
+    if (!user) return
+    const { data } = await supabase
+      .from('maps')
+      .select('id, name')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('name')
+    setAllMaps(data ?? [])
+  }, [user])
+
+  useEffect(() => {
+    if (showMapsPopover) {
+      loadObjectMaps()
+      loadAllMaps()
+      setTimeout(() => mapSearchInputRef.current?.focus(), 0)
+    }
+  }, [showMapsPopover, loadObjectMaps, loadAllMaps])
+
+  // Close maps popover on outside click
+  useEffect(() => {
+    if (!showMapsPopover) return
+    const handler = (e: MouseEvent) => {
+      if (mapsPopoverRef.current && !mapsPopoverRef.current.contains(e.target as Node)) {
+        setShowMapsPopover(false)
+        setMapSearchQuery('')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showMapsPopover])
+
+  const toggleObjectMap = async (mapId: string) => {
+    const isMember = objectMaps.some(m => m.id === mapId)
+    if (isMember) {
+      const { error } = await supabase.from('maps_objects').delete()
+        .eq('map_id', mapId).eq('object_ref_id', object.id)
+      if (error) { console.error('Failed to remove from map:', error); return }
+      setObjectMaps(prev => prev.filter(m => m.id !== mapId))
+    } else {
+      const { error } = await supabase.from('maps_objects').insert({ map_id: mapId, object_ref_id: object.id })
+      if (error) { console.error('Failed to add to map:', error); return }
+      const map = allMaps.find(m => m.id === mapId)
+      if (map) setObjectMaps(prev => [...prev, map].sort((a, b) => a.name.localeCompare(b.name)))
+    }
+    document.dispatchEvent(new Event('maps:refresh'))
+  }
+
+  const filteredMaps = mapSearchQuery.trim()
+    ? allMaps.filter(m => m.name.toLowerCase().includes(mapSearchQuery.toLowerCase()))
+    : allMaps
 
   // Check if a connection to the peer object already exists
   const [peerConnected, setPeerConnected] = useState(false)
@@ -1480,6 +1559,41 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                   <Pencil size={12} />
                 </button>
               </Tooltip>
+              <div style={{ position: 'relative' }}>
+                <Tooltip text="Maps">
+                  <button className={styles.iconButton} onClick={() => setShowMapsPopover(prev => !prev)}>
+                    <MapIcon size={12} />
+                  </button>
+                </Tooltip>
+                {showMapsPopover && (
+                  <div ref={mapsPopoverRef} className={styles.mapsPopover}>
+                    <input
+                      ref={mapSearchInputRef}
+                      className={styles.mapsSearch}
+                      type="text"
+                      placeholder="Search maps..."
+                      value={mapSearchQuery}
+                      onChange={e => setMapSearchQuery(e.target.value)}
+                      autoComplete="off"
+                    />
+                    <div className={styles.mapsList}>
+                      {filteredMaps.length === 0 && (
+                        <div className={styles.mapsEmpty}>No maps found</div>
+                      )}
+                      {filteredMaps.map(m => (
+                        <button
+                          key={m.id}
+                          className={styles.mapsItem}
+                          onClick={() => toggleObjectMap(m.id)}
+                        >
+                          <span className={styles.mapsCheck}>{objectMaps.some(om => om.id === m.id) ? '✓' : ''}</span>
+                          <span className={styles.mapsName}>{m.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <Tooltip text="Remove from Landscape">
                 <button className={styles.iconButton} onClick={initiateDelete}>
                   <Trash2 size={12} />

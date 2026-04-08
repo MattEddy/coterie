@@ -186,6 +186,82 @@
   cursor: not-allowed;
 }
 
+/* ===== MAPS POPOVER ===== */
+
+.mapsPopover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  width: 200px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  z-index: 40;
+  overflow: hidden;
+}
+
+.mapsSearch {
+  width: 100%;
+  padding: 7px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  background: var(--color-surface-2);
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  outline: none;
+}
+
+.mapsSearch::placeholder {
+  color: var(--color-text-muted);
+}
+
+.mapsList {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.mapsItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mapsItem:hover {
+  background: var(--color-surface-2);
+}
+
+.mapsCheck {
+  width: 14px;
+  font-size: 11px;
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.mapsName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mapsEmpty {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
 .iconButtonSm {
   display: flex;
   align-items: center;

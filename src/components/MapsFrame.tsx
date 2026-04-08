@@ -120,7 +120,12 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   }
 
   const handleShare = async () => {
-    if (!user || !shareName.trim() || shareEmails.length === 0) return
+    // Scoop up any email typed but not yet added
+    const pendingEmail = shareEmailInput.trim().toLowerCase()
+    const finalEmails = pendingEmail && !shareEmails.includes(pendingEmail)
+      ? [...shareEmails, pendingEmail]
+      : shareEmails
+    if (!user || !shareName.trim() || finalEmails.length === 0) return
 
     // Create the coterie
     const { data: coterie, error } = await supabase
@@ -147,7 +152,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
 
     // Create invitations
     await Promise.all(
-      shareEmails.map(email =>
+      finalEmails.map(email =>
         supabase.from('coteries_invitations').insert({
           coterie_id: coterie.id,
           invited_by: user.id,

@@ -390,6 +390,11 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
   }
 
   const handleCreate = async () => {
+    // Scoop up any email typed but not yet added
+    const pendingEmail = emailInput.trim().toLowerCase()
+    const finalEmails = pendingEmail && !emails.includes(pendingEmail)
+      ? [...emails, pendingEmail]
+      : emails
     if (!user || !name.trim() || selectedMapIds.size === 0) return
 
     // Create the coterie
@@ -415,9 +420,7 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
     await supabase.from('coteries_maps').insert(mapInserts)
 
     // Create invitations
-    for (const email of emails) {
-      // Try to find existing user by checking auth (for local dev, match against profiles)
-      // In production this would use a server function
+    for (const email of finalEmails) {
       await supabase.from('coteries_invitations').insert({
         coterie_id: coterie.id,
         invited_by: user.id,

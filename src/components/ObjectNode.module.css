@@ -79,8 +79,8 @@
   color: var(--color-text-muted);
 }
 
-.org .type { color: var(--color-org-type); }
-.person .type { color: var(--color-person-type); }
+.org .types { color: var(--color-org-type); }
+.person .types { color: var(--color-person-type); }
 
 .handle {
   width: 6px;

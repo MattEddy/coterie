@@ -310,11 +310,7 @@ export default function Home() {
 
         {/* Waitlist CTA */}
         <section id="pricing" className={styles.ctaSection}>
-          <h2 className={styles.ctaHeadline}>Coterie is invite-only — for now.</h2>
-          <p className={styles.ctaSubtext}>
-            We're rolling out access gradually. Join the waitlist
-            and we'll let you know when it's your turn.
-          </p>
+          <h2 className={styles.ctaHeadline}>Coterie is currently invite-only.</h2>
           {waitlistStatus === 'done' ? (
             <p className={styles.ctaSuccess}>You're on the list. We'll be in touch.</p>
           ) : (

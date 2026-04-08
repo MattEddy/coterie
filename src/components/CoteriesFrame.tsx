@@ -626,17 +626,19 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
     if (!user) return
 
     // Mark invitation as accepted
-    await supabase
+    const { error: invError } = await supabase
       .from('coteries_invitations')
       .update({ status: 'accepted', user_id: user.id })
       .eq('id', invite.id)
+    if (invError) console.error('Failed to accept invitation:', invError)
 
     // Add user as member
-    await supabase.from('coteries_members').insert({
+    const { error: memberError } = await supabase.from('coteries_members').insert({
       coterie_id: invite.coterie_id,
       user_id: user.id,
       role: 'member',
     })
+    if (memberError) { console.error('Failed to join coterie:', memberError); return }
 
     // Collect all objects from all maps linked to this coterie
     const { data: coterieMaps } = await supabase

@@ -377,7 +377,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
                   setShareEmails(prev => prev.slice(0, -1))
                 }
               }}
-              onBlur={() => { if (shareEmailInput.trim()) addShareEmail() }}
+              onBlur={() => { /* handled by handleShare scoop-up */ }}
             />
           </div>
           <div className={styles.deleteConfirmActions}>
@@ -385,7 +385,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
             <button
               className={`${styles.formBtn} ${styles.formBtnPrimary}`}
               onClick={handleShare}
-              disabled={!shareName.trim() || shareEmails.length === 0}
+              disabled={!shareName.trim() || (shareEmails.length === 0 && !shareEmailInput.trim())}
             >
               Share
             </button>

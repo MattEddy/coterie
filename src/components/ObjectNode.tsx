@@ -48,7 +48,9 @@ function ObjectNode({ data, selected }: NodeProps) {
         className={`${styles.card} ${shapeClass} ${nodeData.mapHighlighted ? styles.mapHighlighted : ''} ${selected && !nodeData.mapHighlighted && !nodeData.mapEditMode ? styles.selected : ''}`}
       >
         <span className={styles.name}>{nodeData.name}</span>
-        {nodeData.types.length > 0 && (
+        {nodeData.title ? (
+          <div className={styles.types}>{nodeData.title}</div>
+        ) : nodeData.types.length > 0 ? (
           <div className={styles.types}>
             {nodeData.types.map((t, i) => (
               <span key={t} className={styles.type}>
@@ -56,7 +58,7 @@ function ObjectNode({ data, selected }: NodeProps) {
               </span>
             ))}
           </div>
-        )}
+        ) : null}
       </div>
       <Handle type="target" position={Position.Bottom} id="bottom" className={styles.handle} />
       <Handle type="target" position={Position.Right} id="right" className={styles.handle} />

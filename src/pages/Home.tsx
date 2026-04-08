@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabase'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -234,11 +234,6 @@ function DemoCanvas() {
 
 /* ── Home page ─────────────────────────────────────────────────── */
 
-// Anon client for waitlist inserts (no auth needed)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-const anonClient = createClient(supabaseUrl, supabaseAnonKey)
-
 export default function Home() {
   const { resolvedTheme } = useTheme()
   const logo = resolvedTheme === 'light' ? logoNameLight : logoNameDark
@@ -251,7 +246,7 @@ export default function Home() {
     const email = waitlistEmail.trim().toLowerCase()
     if (!email) return
     setWaitlistStatus('sending')
-    const { error } = await anonClient.from('waitlist').insert({ email })
+    const { error } = await supabase.from('waitlist').insert({ email })
     if (error) {
       // Duplicate = already on the list, treat as success
       if (error.code === '23505') {

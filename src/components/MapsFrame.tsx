@@ -98,6 +98,13 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     loadMapObjects(map.id)
   }, [map.id, loadMapObjects])
 
+  // Refresh object list when maps:refresh fires (e.g., auto-add on object create)
+  useEffect(() => {
+    const handler = () => loadMapObjects(map.id)
+    document.addEventListener('maps:refresh', handler)
+    return () => document.removeEventListener('maps:refresh', handler)
+  }, [map.id, loadMapObjects])
+
   const startShare = () => {
     setSharing(true)
     setShareName(`${map.name} Coterie`)

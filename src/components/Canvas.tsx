@@ -722,6 +722,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       await supabase
         .from('maps_objects')
         .insert(autoMaps.map(m => ({ map_id: m.id, object_ref_id: obj.id })))
+      document.dispatchEvent(new Event('maps:refresh'))
     }
 
     setCreateForm(null)

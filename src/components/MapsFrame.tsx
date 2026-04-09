@@ -164,8 +164,9 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     )
 
     setSharing(false)
-    // Notify maps list to refresh (coterie linkage changed)
+    // Notify maps + coteries lists to refresh
     document.dispatchEvent(new CustomEvent('maps:refresh'))
+    document.dispatchEvent(new CustomEvent('coteries:refresh'))
   }
 
   const startEdit = () => {

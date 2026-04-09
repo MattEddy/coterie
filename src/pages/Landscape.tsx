@@ -181,34 +181,33 @@ export default function Landscape() {
     if (showWelcome) {
       sessionStorage.removeItem('showWelcomeModal')
       async function showWelcomeFromLogin() {
+        let senderName = 'Your coterie'
+
         const { data: membership } = await supabase
           .from('coteries_members')
           .select('coterie_id')
           .eq('user_id', user!.id)
-          .order('created_at', { ascending: false })
+          .order('joined_at', { ascending: false })
           .limit(1)
           .single()
 
-        if (!membership) {
-          setWelcomeModal({ senderName: 'Your coterie', needsName, step: needsName ? 'name' : 'intro' })
-          return
-        }
+        if (membership) {
+          const { data: coterie } = await supabase
+            .from('coteries')
+            .select('owner_id')
+            .eq('id', membership.coterie_id)
+            .single()
 
-        const { data: coterie } = await supabase
-          .from('coteries')
-          .select('owner_id')
-          .eq('id', membership.coterie_id)
-          .single()
-
-        const { data: sender } = coterie
-          ? await supabase
+          if (coterie?.owner_id) {
+            const { data: sender } = await supabase
               .from('profiles')
               .select('display_name')
               .eq('user_id', coterie.owner_id)
               .single()
-          : { data: null }
+            if (sender?.display_name) senderName = sender.display_name
+          }
+        }
 
-        const senderName = sender?.display_name || 'Your coterie'
         setWelcomeModal({ senderName, needsName, step: needsName ? 'name' : 'intro' })
       }
       showWelcomeFromLogin()

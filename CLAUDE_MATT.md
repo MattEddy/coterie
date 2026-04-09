@@ -5,50 +5,67 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-04-06 (evening, continued)
+**Date:** 2026-04-07 → 2026-04-08
 **Branch:** main
 
 ### Narrative
 
-Major deployment session — took Coterie from local-only to production at `coteriepro.com`, added RLS policies, fixed bugs, and built the public landing page. Two sub-sessions in one evening.
+Marathon session spanning two days — overnight code review, then a full day of hardening, new features, and invite flow debugging.
 
-**Part 1 — Invite flow fixes + deployment prep.**
+**Overnight code review (Apr 6→7).** Matt asked for a full code review since the app was live with RLS. Ran parallel exploration agents across schema, components, hooks, services, and edge functions. Found ~15 real issues across three categories: bugs (missing error handling everywhere, fire-and-forget position saves, stale closures), performance (N+1 query loops, 3s polling of expensive `get_dissonances` RPC, sequential queries that could be parallel), security (edge function with no webhook signature verification, `private_notes` defense-in-depth gap). Fixed all in one commit (13 files, +298/-136). New migration added 4 missing indexes + `objects_types_overrides` updated_at trigger. All pushed to Supabase Cloud + Vercel.
 
-- Auth token question: confirmed Supabase localStorage-based auth means two regular Chrome windows share one session (last login wins). Separate Chrome profiles or incognito for multi-user testing.
-- Invite landing copy trimmed: "Intuitively and visually" → "Visually", "Then link up with" → "Connect with". Fake demo data (Stranger Things, etc.) replaced with one-line descriptors matching contact/notes pattern.
-- Welcome modal name step was being skipped. Root cause: `checkingProfile` in `Login.tsx` started `false`, so `<Navigate>` fired before `useEffect` could set `needsDisplayName`. Fix: initialize `checkingProfile` to `true`. The intro screen still showed via a different path (`pendingInviteToken` in Landscape Case 1).
+**Invite-only mode (Apr 7 morning).** Matt realized the app was open to anyone. Built two layers: (a) landing page CTA changed from "Start Free Trial" to "Join the Waitlist" with email form (new `waitlist` table, anon INSERT policy), login link removed from nav; (b) auth gate in Login.tsx — `is_email_allowed()` SECURITY DEFINER RPC checks `auth.users` + `coteries_invitations` before sending OTP. Post-auth safety net kept as backup. Fixed case-sensitivity bug in email comparison (`lower(email) = lower(p_email)`). Fixed fail-open logic that was skipping `acceptAndRedirect` on profile query error. Fixed duplicate GoTrueClient warning (Home.tsx was creating its own Supabase client for waitlist — switched to shared client). Stabilized `signOut` reference with `useCallback`.
 
-**Part 2 — Vercel + domain + RLS.**
+**Vercel env var issue.** Anon key was truncated (91 chars vs 209) — clipped during original paste into Vercel dashboard. Diagnosed by comparing `vercel env pull --environment production` with local `.env.local`. Fixed via `vercel env add --force` piping from `.env.local`. Redeployed with `vercel --prod`.
 
-- Vercel deployment: linked repo, added env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`). First deploy failed on 18 pre-existing TS errors (unused vars, React 19 `useRef` args, React Flow `nodesSelectable` → `elementsSelectable`, `FrameLayout.h` type, RPC return types). All fixed.
-- `vercel.json` created with SPA rewrite rule for React Router.
-- Domain: `coteriepro.com` on Porkbun. Wildcard CNAME → `www` CNAME (conflict resolution), A record → `76.76.21.21`. Supabase Auth Site URL and redirect URLs updated.
-- RLS: background agent wrote `supabase/migrations/20260407000000_rls_policies.sql` — 65 policies, 20 tables, helper functions (`is_coterie_admin`, `is_shared_via_coterie`), `accept_invitation_by_token` RPC. `acceptInvitation.ts` and `Landscape.tsx` updated for RLS-safe flows. Pushed to cloud.
+**RLS recursion — the major saga.** Three rounds of fixes:
+1. `coteries_members_read` policy queried `coteries_members` in its own USING clause → infinite recursion. Fix: `is_coterie_member()` SECURITY DEFINER helper.
+2. `coteries_read` policy only allowed members to read — but coterie creation inserts the row THEN adds the member. The `.select('id')` after INSERT was blocked. Fix: added `owner_id = auth.uid()` to read policy.
+3. `coteries_maps` INSERT → policy queries `maps` → `maps_read` queries `coteries_maps` → recursion. Comprehensive fix: created `is_map_shared_with_user()` SECURITY DEFINER, replaced ALL raw cross-table membership queries in policies with helper functions. No raw `coteries_members` or `coteries_maps` references remain in any RLS policy.
 
-**Part 3 — Landing page.**
+**FK cascade audit.** Matt noticed hard-deleting coteries didn't cascade to invitations. Audited all 39 FKs. Fixed 12 that defaulted to NO ACTION: role FKs → SET NULL, type FKs → RESTRICT, source_map/source_coterie → SET NULL, taxonomy refs → RESTRICT.
 
-- Built `src/pages/Home.tsx` + `Home.module.css` — public landing page at `/home` combining content from InviteLanding (overview + interactive demo) and InviteJoin (feature cards + pricing CTA).
-- Structure: sticky header (logo left, nav right) → hero icon + headline + explainer → interactive ReactFlow demo → 4 feature cards → pricing/CTA footer.
-- Router updated: unauthenticated `/` redirects to `/home` instead of `/login`. Nav links: Overview | Features | Plans | Login.
-- ReactFlow canvas needed `min-height: 350px` — `aspect-ratio` alone gave zero height inside flex column.
-- `global.css` has `overflow: hidden` on `html, body, #root` (for the canvas app). Landing page uses `overflow-y: auto` on its container to scroll.
+**UI features and fixes:**
+- Added "Create" button to new object form (gold accent, disabled until name entered)
+- Inline type/role deletion — trash icon on hover for user-created entries in autocomplete dropdowns. Min 2-char guard on new type/role creation.
+- Object pills now show title (e.g., "VP Production") instead of types when title is set. Falls back to types. Same bright class color for both.
+- Bumped dim colors on object pills up a notch for better visibility.
+- Maps popover in DetailPanel — map icon button next to pencil, dropdown shows all maps with checkmarks for membership, search to filter, click to toggle, click outside to close.
+- Added `fitViewOptions={{ padding: 0.3 }}` so canvas feels less cramped on load.
+- Fixed landing page scroll (nested `overflow-y: auto` on `.page` was creating a scroll-within-scroll).
+- Fixed share-from-map-detail: blur/click race condition where `onBlur` cleared `shareEmailInput` before `handleShare` could read it. Also the Share button's `disabled` check didn't account for typed-but-not-added email.
+- Fixed cross-panel refresh: `maps:refresh` dispatched after auto-add on object create, MapDetailCard listens for it. `coteries:refresh` dispatched after coterie creation from map detail.
+- Fixed welcome modal: `coteries_members` query used `created_at` (doesn't exist) instead of `joined_at`. Also crashed on null `owner_id`.
 
-**Files modified/created:**
-- `src/pages/Home.tsx` + `Home.module.css` — new landing page
-- `src/App.tsx` — added `/home` route, redirect unauthenticated to `/home`
-- `src/pages/Login.tsx` — `checkingProfile` race fix
-- `src/pages/InviteLanding.tsx` — copy trim, demo descriptors, RPC types
-- `src/components/Canvas.tsx`, `CoteriesFrame.tsx`, `CoterieUpdatesFrame.tsx`, `Frame.tsx`, `MapsFrame.tsx`, `NotificationBoxes.tsx`, `Tooltip.tsx`, `InviteJoin.tsx`, `Landscape.tsx` — TS fixes
-- `src/lib/acceptInvitation.ts` — RLS-safe RPC
-- `supabase/migrations/20260407000000_rls_policies.sql` — full RLS
-- `vercel.json` — SPA rewrite
-- `.gitignore` — `.vercel`
+**Landing page copy tweaks.** "Coterie is currently invite-only." (cut "for now" and rolling-out text). Cut "understand and" from explainer.
+
+**Files modified (major):**
+- `src/lib/acceptInvitation.ts` — full error handling, Promise.all for map objects
+- `src/components/Canvas.tsx` — parallel connection queries, position save error logging, stale closure fix, fitView padding, maps:refresh dispatch, min 2-char roles
+- `src/components/DetailPanel.tsx` — error handling on all saves, maps popover, private_notes comment
+- `src/components/CoteriesFrame.tsx` — N+1 → Promise.all, error handling, pending email scoop-up
+- `src/components/MapsFrame.tsx` — N+1 → Promise.all, error handling, share blur race fix, coteries:refresh dispatch, maps:refresh listener on detail card
+- `src/components/ObjectNode.tsx` — title display with type fallback
+- `src/components/TagInput.tsx` — inline delete for user-created types
+- `src/components/ConnectionRoleForm.tsx` — inline delete for user-created roles
+- `src/components/CreateObjectForm.tsx` — Create button
+- `src/components/NotificationBoxes.tsx` — polling 3s → 30s
+- `src/components/CoterieUpdatesFrame.tsx` — polling 3s → 30s, error handling
+- `src/components/MultiSelectPanel.tsx` — error handling
+- `src/contexts/AuthContext.tsx` — error handling, useCallback on signOut
+- `src/pages/Login.tsx` — invite-only gate, pre-OTP email check, fail-open fix
+- `src/pages/Home.tsx` — waitlist form, copy tweaks, removed duplicate Supabase client
+- `src/pages/Landscape.tsx` — welcome modal fixes (joined_at, null owner)
+- `src/hooks/useWorkspaceLayout.ts` — cache reset on user change, save error logging
+- `src/styles/global.css` — bumped dim colors
+- `supabase/functions/send-invite-email/index.ts` — webhook verification, Resend response validation
+- New migrations: indexes+trigger, waitlist, email gate, RLS recursion fixes (3), FK cascade audit
 
 ### Open Items / Next Steps
-1. **Test RLS end-to-end** — Matt is testing the flow on production tonight. Policies were agent-generated — verify invite→accept→share→intel works under RLS.
-2. **Deploy Edge Function** — `supabase functions deploy send-invite-email`, set RESEND_API_KEY + APP_URL secrets. Without this, invites require manually sharing links.
+1. **Invite flow testing** — welcome modal still needs verification. Matt hit Supabase email rate limit mid-test. Two tests so far: first showed delayed modal (browser throttling?), second showed no modal (fixed `joined_at` bug since then). Needs one more clean test.
+2. **Supabase email rate limit** — hit the limit during invite testing. Need to wait or configure Resend for production email sending.
 3. **Stripe integration** — wire up Checkout, webhooks to update subscription status
-4. **Charlotte coding setup** — Matt's 12-year-old daughter wants to start coding with Claude Code. Discussed isolation options: separate folder on same Mac vs. separate computer. Matt leaning toward the old computer. No action yet.
-5. **DetailPanel → Frame migration** — back burner
-6. **Light mode polish** — back burner
-7. **Map packages (store)** — later, possibly post-launch
+4. **Polling → Realtime** — NotificationBoxes and CoterieUpdatesFrame now poll at 30s instead of 3s, but should switch to Supabase Realtime for production
+5. **Hard vs soft delete audit** — Matt mentioned wanting to revisit this across the schema
+6. **DetailPanel → Frame migration** — back burner
+7. **Light mode polish** — back burner

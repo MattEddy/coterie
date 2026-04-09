@@ -122,14 +122,18 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 - **Auto-create profile + subscription on signup** via trigger
 - **Subscriptions table** tracks trial/payment status per user — `user_tier(uid)` returns `'pro'`/`'trial'`/`'free'`
 - **VIP status** for internal users (billing-exempt, full Pro access) — just a subscription status value, not a separate role
-- **RLS helper functions** — `is_coterie_admin(coterie_id)` handles ownerless coterie logic; `is_shared_via_coterie(object_id, target_user_id)` checks coterie intel scope. Both SECURITY DEFINER.
+- **RLS helper functions** — all cross-table membership/visibility checks MUST use SECURITY DEFINER helpers to avoid RLS recursion. PostgreSQL flags re-entry on the same table as infinite recursion, even across different policy types (e.g., INSERT policy → queries table B → B's SELECT policy → queries original table). Helpers: `is_coterie_admin(coterie_id)`, `is_coterie_member(coterie_id)`, `is_shared_via_coterie(object_id, target_user_id)`, `is_map_shared_with_user(map_id)`. NEVER raw-query `coteries_members` or `coteries_maps` from an RLS policy — always use the helper.
+- **`private_notes` defense-in-depth** — RLS grants full-row SELECT on `objects_overrides` for coterie intel. Column filtering is app-side only (`select('user_id, shared_notes, data')` in DetailPanel). A `select('*')` bug would leak private notes. Prominent comment at the query site.
 - **Invite acceptance RPC** — `accept_invitation_by_token(p_token, p_user_id)` SECURITY DEFINER, because the accepting user isn't a member yet and can't read/update invitations through member-based RLS policies.
 - **`get_dissonances()` is SECURITY DEFINER** — reads across multiple users' overrides; RLS would be prohibitively complex. Function already scopes to calling user's coteries.
 
 ## Known Gotchas
 
+### RLS Recursion — The #1 Gotcha
+PostgreSQL detects **any** policy re-entry on the same table as infinite recursion — even if it's a SELECT policy checking during an INSERT. The chain `table_A INSERT → policy queries table_B → table_B SELECT policy queries table_A` = crash. Fix: ALL cross-table checks in RLS policies must use SECURITY DEFINER helper functions. We hit this on `coteries_members`, `coteries_maps`, and `maps` before creating the full set of helpers. If adding new RLS policies, NEVER raw-query `coteries_members`, `coteries_maps`, or `maps` — use `is_coterie_member()`, `is_map_shared_with_user()`, etc.
+
 ### Supabase Realtime postgres_changes (Local Dev)
-Unreliable in local dev (JWT/RLS issues, GitHub #21624). **Workaround:** polling every 3s. Swap to Broadcast/Realtime on Supabase Cloud.
+Unreliable in local dev (JWT/RLS issues, GitHub #21624). **Workaround:** polling every 30s. Swap to Broadcast/Realtime on Supabase Cloud.
 
 ### Supabase Auth Seeding (Local Dev)
 - Must insert `auth.identities` alongside `auth.users`
@@ -224,7 +228,15 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [x] Edge Function for invite emails (Resend, not yet deployed/configured)
 - [x] RLS policies — 65 policies across 20 tables, helper functions, SECURITY DEFINER RPCs
 - [x] Vercel deployment + domain — coteriepro.com, SPA rewrites, env vars configured
-- [x] Landing page (`/home`) — hero, interactive demo, features, pricing CTA
+- [x] Landing page (`/home`) — hero, interactive demo, features, waitlist CTA
+- [x] Invite-only auth gate — `is_email_allowed()` pre-OTP check + post-auth safety net
+- [x] Waitlist table + landing page form
+- [x] Full code review — error handling, N+1 fixes, parallel queries, security hardening
+- [x] RLS recursion fixes — SECURITY DEFINER helpers for all cross-table policy checks
+- [x] FK cascade audit — all 39 FKs reviewed, 12 fixed (SET NULL / RESTRICT as appropriate)
+- [x] Inline type/role deletion — trash icon in autocomplete dropdowns, min 2-char creation guard
+- [x] Maps popover in DetailPanel — toggle map membership from object detail
+- [x] Object pill titles — show title on landscape pills, fall back to types
 - [ ] Stripe integration for subscription billing
 - [ ] DetailPanel migration to Frame component (back burner)
 - [ ] Light mode polish (back burner)

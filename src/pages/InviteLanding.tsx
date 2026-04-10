@@ -14,8 +14,8 @@ import type { ObjectNodeData } from '../components/ObjectNode'
 import RoleEdge from '../components/RoleEdge'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../contexts/ThemeContext'
-import logoMottoDark from '../assets/logo-name-motto.svg'
-import logoMottoLight from '../assets/logo-name-motto-light.svg'
+import logoDark from '../assets/logo-name.svg'
+import logoLight from '../assets/logo-name-light.svg'
 import styles from './InviteLanding.module.css'
 
 /* ── Demo canvas data ──────────────────────────────────────────── */
@@ -215,7 +215,7 @@ export default function InviteLanding() {
   const { token } = useParams<{ token: string }>()
   const navigate = useNavigate()
   const { resolvedTheme } = useTheme()
-  const logoMotto = resolvedTheme === 'light' ? logoMottoLight : logoMottoDark
+  const logo = resolvedTheme === 'light' ? logoLight : logoDark
   const [invite, setInvite] = useState<InviteData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -270,7 +270,7 @@ export default function InviteLanding() {
     return (
       <div className={styles.container}>
         <div className={styles.errorCard}>
-          <img src={logoMotto} alt="Coterie" className={styles.logoImg} />
+          <img src={logo} alt="Coterie" className={styles.logoImg} />
           <p className={styles.errorText}>{error}</p>
           <button className={styles.button} onClick={() => navigate('/login')}>
             Go to Login
@@ -287,7 +287,7 @@ export default function InviteLanding() {
         <p className={styles.invitedBy}>
           <strong>{invite!.senderName}</strong> has invited you to join
         </p>
-        <img src={logoMotto} alt="Coterie — Map your professional world" className={styles.logoImg} />
+        <img src={logo} alt="Coterie" className={styles.logoImg} />
 
         {/* Explainer */}
         <p className={styles.explainer}>

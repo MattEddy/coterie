@@ -54,9 +54,14 @@ export default function NotificationBoxes({ onOpenCoteries, onOpenUpdates }: Not
     }
     document.addEventListener('coterie:dissonance-count', handleCountPush)
 
+    // Refresh after invite acceptance (welcome flow dispatches this)
+    const handleRefreshNotifs = () => loadCountsRef.current?.()
+    document.addEventListener('coterie:refresh-notifications', handleRefreshNotifs)
+
     return () => {
       clearInterval(interval)
       document.removeEventListener('coterie:dissonance-count', handleCountPush)
+      document.removeEventListener('coterie:refresh-notifications', handleRefreshNotifs)
     }
   }, [loadCounts])
 

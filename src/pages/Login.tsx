@@ -43,7 +43,7 @@ export default function Login() {
 
   // After OTP verification, check if user is allowed (existing user or has invite)
   useEffect(() => {
-    if (!user) { setCheckingProfile(false); return }
+    if (!user) return
     setCheckingProfile(true)
     setInviteOnly(false)
 
@@ -62,13 +62,9 @@ export default function Login() {
         if (!isExistingUser && !hasInviteToken) {
           await signOut()
           setInviteOnly(true)
-          setCheckingProfile(false)
           return
         }
 
-        if (!isExistingUser) {
-          sessionStorage.setItem('needsDisplayName', 'true')
-        }
         await acceptAndRedirect(user.id)
         setCheckingProfile(false)
       })

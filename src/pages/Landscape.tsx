@@ -145,18 +145,28 @@ export default function Landscape() {
   }, [toggleFrame])
 
   // Check for pending invite (logged-in user from invite flow) or welcome modal flag (from Login)
+  // Ref guard: sessionStorage flags are one-shot — StrictMode double-fires effects, and user
+  // reference changes can re-trigger. Without this, the second run finds empty sessionStorage.
+  const welcomeCheckedRef = useRef(false)
   useEffect(() => {
     if (!user) return
+    if (welcomeCheckedRef.current) return
+    welcomeCheckedRef.current = true
 
-    const needsName = sessionStorage.getItem('needsDisplayName') === 'true'
-    sessionStorage.removeItem('needsDisplayName')
+    async function checkAndShowWelcome() {
+      // Check profile directly (resilient to StrictMode, no sessionStorage dependency)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('user_id', user!.id)
+        .single()
+      const needsName = !profile?.display_name
 
-    // Case 1: Already-logged-in user with a pending invite token
-    const pendingToken = sessionStorage.getItem('pendingInviteToken')
-    if (pendingToken) {
-      sessionStorage.removeItem('pendingInviteToken')
+      // Case 1: Already-logged-in user with a pending invite token
+      const pendingToken = sessionStorage.getItem('pendingInviteToken')
+      if (pendingToken) {
+        sessionStorage.removeItem('pendingInviteToken')
 
-      async function acceptPending() {
         // Use SECURITY DEFINER RPC to look up invitation by token (RLS-safe)
         const { data: invData } = await supabase
           .rpc('get_invitation_by_token', { invite_token: pendingToken })
@@ -166,21 +176,19 @@ export default function Landscape() {
 
         const senderName = inv.sender_name || 'Your coterie'
 
-        const accepted = await acceptInvitationByToken(user!.id, pendingToken!)
+        const accepted = await acceptInvitationByToken(user!.id, pendingToken)
         if (accepted) {
           document.dispatchEvent(new Event('coterie:refresh-canvas'))
+          document.dispatchEvent(new Event('coterie:refresh-notifications'))
           setWelcomeModal({ senderName, needsName, step: needsName ? 'name' : 'intro' })
         }
+        return
       }
-      acceptPending()
-      return
-    }
 
-    // Case 2: User just came through Login which already accepted the invite
-    const showWelcome = sessionStorage.getItem('showWelcomeModal')
-    if (showWelcome) {
-      sessionStorage.removeItem('showWelcomeModal')
-      async function showWelcomeFromLogin() {
+      // Case 2: User just came through Login which already accepted the invite
+      const showWelcome = sessionStorage.getItem('showWelcomeModal')
+      if (showWelcome) {
+        sessionStorage.removeItem('showWelcomeModal')
         let senderName = 'Your coterie'
 
         const { data: membership } = await supabase
@@ -208,16 +216,17 @@ export default function Landscape() {
           }
         }
 
+        document.dispatchEvent(new Event('coterie:refresh-notifications'))
         setWelcomeModal({ senderName, needsName, step: needsName ? 'name' : 'intro' })
+        return
       }
-      showWelcomeFromLogin()
-      return
-    }
 
-    // Case 3: New user who signed up directly (no invite) — still needs name
-    if (needsName) {
-      setWelcomeModal({ senderName: '', needsName: true, step: 'name' })
+      // Case 3: New user who signed up directly (no invite) — still needs name
+      if (needsName) {
+        setWelcomeModal({ senderName: '', needsName: true, step: 'name' })
+      }
     }
+    checkAndShowWelcome()
   }, [user])
 
   return (

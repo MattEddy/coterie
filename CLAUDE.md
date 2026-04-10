@@ -78,9 +78,10 @@ A **coterie** is a named trust circle for sharing relationship intelligence. Ful
 **Core concepts:**
 - Coteries require maps — sharing is map-based via `coteries_maps` join table
 - Recipients get ONE aggregated map per coterie (`maps.source_coterie_id`)
-- Two sharing channels activate once objects overlap between members:
-  - **Channel 1 — Intel** (passive): shared_notes + contacts visible on shared objects, attributed. Pure query pattern, no extra tables. Contact adopt via `+` button + fingerprint tracking.
+- Three sharing channels:
+  - **Channel 1 — Intel** (passive): shared_notes visible on shared objects, attributed. Pure query pattern.
   - **Channel 2 — Updates** (diff-based): structural differences surface as dissonances. Self-correcting — reversed changes evaporate automatically.
+  - **Channel 3 — Explicit shares** (`coteries_shares` table): per-coterie, per-item sharing of contacts, projects, and events. One row = "I share this thing with this coterie." Private by default, explicit opt-in. `get_coterie_shared_intel()` SECURITY DEFINER RPC fetches shared intel from peers. `CoterieSharePicker` component provides the UI (share icon → coterie dropdown with checkboxes).
 - Five dissonance types: `new_object`, `new_connection`, `deactivated_connection`, `career_move`, `type_change`
 
 ### Connection Roles
@@ -104,7 +105,7 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 
 ## Key Design Decisions
 
-- **Deletion**: Canonical tables use soft delete (`is_active`). User tables use hard delete. Orphaned user-created objects are hard-deleted. `connections_overrides.deactivated` boolean for canonical overrides only.
+- **Deletion**: Canonical tables use soft delete (`is_active`) — `objects`, `connections`, `coteries`. User tables use hard delete. Maps use hard delete (no `is_active`). Orphaned user-created objects are hard-deleted. `connections_overrides.deactivated` boolean for canonical overrides only.
 - **Option B storage**: user-created objects = skeleton `objects` row + all content in `objects_overrides`
 - **Every object gets a registry row** — `is_canon` distinguishes vetted from user-created
 - **`objects_overrides.object_id` always set** — overrides always point to an `objects` row
@@ -126,6 +127,8 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 - **`private_notes` defense-in-depth** — RLS grants full-row SELECT on `objects_overrides` for coterie intel. Column filtering is app-side only (`select('user_id, shared_notes, data')` in DetailPanel). A `select('*')` bug would leak private notes. Prominent comment at the query site.
 - **Invite acceptance RPC** — `accept_invitation_by_token(p_token, p_user_id)` SECURITY DEFINER, because the accepting user isn't a member yet and can't read/update invitations through member-based RLS policies.
 - **`get_dissonances()` is SECURITY DEFINER** — reads across multiple users' overrides; RLS would be prohibitively complex. Function already scopes to calling user's coteries.
+- **`get_coterie_shared_intel()` is SECURITY DEFINER** — reads peers' `connections_overrides` (RLS requires both endpoints in shared maps, but projects/events aren't in maps) and `coteries_shares` to find shared contacts/projects/events.
+- **`coteries_shares` table** — universal per-coterie, per-item intel sharing. Replaces earlier `share_contacts` (on `coteries_members`) and `coterie_shared` (on `objects_overrides`) flags which were too blunt. Schema: `(coterie_id, user_id, object_id, share_type)` with `share_type` in ('contacts', 'project', 'event'). Private by default.
 
 ## Known Gotchas
 
@@ -196,7 +199,14 @@ See `docs/UI_REFERENCE.md` for MapsFrame architecture, workspace persistence, co
 
 ### Typography
 - **Urbanist** (`--font-sans`): primary display font — everything by default
-- **Inter**: data/functional text only (type labels, data fields in DetailPanel). 2px smaller for x-height match.
+- **Inter** (`--font-data`): data/functional text only (type labels, data fields in DetailPanel, pill subtitles). 2px smaller for x-height match.
+
+### Keyboard UX
+- **Frame** (`Frame.tsx`): ESC closes, Tab focus-trapped (cycles within panel), auto-focuses on mount/click
+- **DetailPanel**: Tab focus-trapped, Enter toggles edit mode (opens when idle, saves when editing), Delete/Backspace triggers delete confirmation
+- **MultiSelectPanel**: Delete/Backspace triggers bulk delete confirmation
+- **MapsFrame/CoteriesFrame**: Right arrow opens detail card from list item
+- **NavBar**: Hotkey hints shown on menu items (S/M/C/,)
 
 ## Running Locally
 

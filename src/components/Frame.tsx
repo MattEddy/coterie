@@ -181,26 +181,26 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
     frameRef.current?.focus()
   }, [])
 
-  // Focus trap: TAB cycles within the frame while it's active
+  // Focus trap: TAB always stays within the frame
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key !== 'Tab') return
+    e.preventDefault()
     const el = frameRef.current
     if (!el) return
-    const focusable = el.querySelectorAll<HTMLElement>(
+    // Only visible, non-hidden focusable elements
+    const all = el.querySelectorAll<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     )
-    if (focusable.length === 0) { e.preventDefault(); return }
-    const first = focusable[0]
-    const last = focusable[focusable.length - 1]
+    const focusable = Array.from(all).filter(
+      node => node.offsetParent !== null && !node.closest('[hidden]')
+    )
+    if (focusable.length === 0) return
     const active = document.activeElement
-    // If focus is on the frame itself (not a child), jump to first/last
-    if (active === el || !el.contains(active)) {
-      e.preventDefault()
-      ;(e.shiftKey ? last : first).focus()
-    } else if (e.shiftKey && active === first) {
-      e.preventDefault(); last.focus()
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault(); first.focus()
+    const idx = focusable.indexOf(active as HTMLElement)
+    if (e.shiftKey) {
+      focusable[idx <= 0 ? focusable.length - 1 : idx - 1].focus()
+    } else {
+      focusable[idx < 0 || idx >= focusable.length - 1 ? 0 : idx + 1].focus()
     }
   }, [])
 

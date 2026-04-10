@@ -436,6 +436,18 @@
   margin-bottom: 0;
 }
 
+.coterieIntelItem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 4px;
+}
+
+.coterieIntelItemDetail {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
 .intelContactRow {
   display: flex;
   align-items: center;
@@ -887,6 +899,21 @@
   font-size: 8px;
   color: var(--color-text-muted);
   text-transform: capitalize;
+}
+
+.coterieSharedToggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+.coterieSharedToggle input[type="checkbox"] {
+  accent-color: var(--color-accent);
+  color-scheme: dark;
 }
 
 .itemActions {

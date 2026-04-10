@@ -570,12 +570,26 @@ CREATE TABLE coteries_members (
     coterie_id UUID NOT NULL REFERENCES coteries(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'member',  -- 'owner', 'member'
-    share_contacts BOOLEAN NOT NULL DEFAULT TRUE,  -- whether this member's contacts are visible to others
     joined_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (coterie_id, user_id)
 );
 
 CREATE INDEX idx_coteries_members_user ON coteries_members(user_id);
+
+-- Per-coterie, per-item intel sharing (contacts, projects, events)
+-- One row = "I share this thing with this coterie"
+CREATE TABLE coterie_shares (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    coterie_id UUID NOT NULL REFERENCES coteries(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+    object_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+    share_type TEXT NOT NULL,  -- 'contacts', 'project', 'event'
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(coterie_id, user_id, object_id)
+);
+
+CREATE INDEX idx_coterie_shares_user ON coterie_shares(user_id);
+CREATE INDEX idx_coterie_shares_object ON coterie_shares(object_id);
 
 -- Maps shared with coteries
 CREATE TABLE coteries_maps (

@@ -530,20 +530,6 @@
   color-scheme: dark;
 }
 
-.shareContactsToggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--color-text);
-  cursor: pointer;
-  margin-top: 4px;
-}
-
-.shareContactsToggle input[type="checkbox"] {
-  accent-color: var(--color-accent);
-  color-scheme: dark;
-}
 
 :global([data-theme="light"]) .checkboxLabel input[type="checkbox"] {
   color-scheme: light;

@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import type { ObjectNodeData, ContactEntry } from './ObjectNode'
 import type { NodeRect } from '../types'
 import Tooltip from './Tooltip'
+import CoterieSharePicker from './CoterieSharePicker'
 import TagInput from './TagInput'
 import ObjectSearch from './ObjectSearch'
 import styles from './DetailPanel.module.css'
@@ -132,8 +133,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     private_notes: object.private_notes || '',
   })
 
-  // Coterie Intel (shared notes + contacts from coterie members)
+  // Coterie Intel (shared notes from coterie members — old system, kept for shared_notes)
   const [coterieIntel, setCoterieIntel] = useState<{ user_id: string; display_name: string; shared_notes: string | null; contacts: ContactEntry[] }[]>([])
+
+  // Coterie shared intel via coterie_shares table (contacts, projects, events)
+  interface SharedIntelRow { peer_user_id: string; peer_display_name: string; share_type: string; shared_object_id: string; object_class: string | null; name: string | null; title: string | null; status: string | null; event_date: string | null; contacts: any }
+  const [sharedIntel, setSharedIntel] = useState<SharedIntelRow[]>([])
 
   // Connected items (projects/events)
   const [connectedProjects, setConnectedProjects] = useState<ConnectedItem[]>([])
@@ -155,7 +160,6 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const [newItemTypes, setNewItemTypes] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [dateInputActive, setDateInputActive] = useState(false)
-
   function resetCreateForm() {
     setNewItemValues({ name: '', title: '', status: '', event_date: '' })
     setNewItemTypes([])
@@ -366,16 +370,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
       const { data: peers } = await supabase
         .from('coteries_members')
-        .select('user_id, share_contacts')
+        .select('user_id')
         .in('coterie_id', myMemberships.map(m => m.coterie_id))
         .neq('user_id', user.id)
       if (!peers?.length) return
 
       const peerIds = [...new Set(peers.map(p => p.user_id))]
-      // A peer who set share_contacts=false in ANY shared coterie hides contacts
-      const contactsHidden = new Set(
-        peers.filter(p => p.share_contacts === false).map(p => p.user_id)
-      )
 
       // IMPORTANT: Only select shared_notes + data — NEVER private_notes.
       // RLS grants full-row SELECT for coterie intel (column filtering is app-side).
@@ -395,16 +395,29 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       const nameMap = new Map((profiles ?? []).map(p => [p.user_id, p.display_name || 'Unknown']))
 
       setCoterieIntel(overrides
-        .filter(o => o.shared_notes || (!contactsHidden.has(o.user_id) && (o.data as any)?.contacts?.length > 0))
+        .filter(o => o.shared_notes)
         .map(o => ({
           user_id: o.user_id,
           display_name: nameMap.get(o.user_id) || 'Unknown',
           shared_notes: o.shared_notes,
-          contacts: contactsHidden.has(o.user_id) ? [] : ((o.data as any)?.contacts ?? []) as ContactEntry[],
+          contacts: [] as ContactEntry[],
         }))
       )
     }
     loadCoterieIntel()
+  }, [object.id, user])
+
+  // Load coterie-shared intel (contacts, projects, events) via RPC
+  useEffect(() => {
+    async function loadSharedIntel() {
+      if (!user) return
+      const { data } = await supabase.rpc('get_coterie_shared_intel', {
+        p_user_id: user.id,
+        p_object_id: object.id,
+      })
+      setSharedIntel((data || []) as SharedIntelRow[])
+    }
+    loadSharedIntel()
   }, [object.id, user])
 
   // Load all objects linked to a specific event/project (for expanded view)
@@ -1453,6 +1466,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                         <X size={11} />
                       </button>
                     </Tooltip>
+                    <CoterieSharePicker objectId={item.id} shareType={targetClass} />
                   </div>
                 </div>
               )}
@@ -1700,14 +1714,17 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                   }}><X size={12} /></button></Tooltip>
                 </>
               ) : (
-                <Tooltip text="Edit contact info">
-                  <button className={styles.iconButtonSm} onClick={() => {
-                    setEditContacts(object.data?.contacts ?? [])
-                    setContactEditing(true)
-                  }}>
-                    <Pencil size={12} />
-                  </button>
-                </Tooltip>
+                <>
+                  <Tooltip text="Edit contact info">
+                    <button className={styles.iconButtonSm} onClick={() => {
+                      setEditContacts(object.data?.contacts ?? [])
+                      setContactEditing(true)
+                    }}>
+                      <Pencil size={12} />
+                    </button>
+                  </Tooltip>
+                  <CoterieSharePicker objectId={object.id} shareType="contacts" />
+                </>
               )}
             </div>
             {contactEditing ? (
@@ -1775,22 +1792,30 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                 {!(object.data?.contacts?.length) && !coterieIntel.some(ci => ci.contacts.length > 0) && (
                   <span className={styles.emptyState}>No contact info</span>
                 )}
-                {/* Note: the coterie intel contacts section with adopt buttons is rendered via the IIFE below */}
+                {/* Coterie-shared contacts via coterie_shares table */}
                 {(() => {
+                  const contactIntel = sharedIntel.filter(r => r.share_type === 'contacts' && r.contacts?.length > 0)
+                  if (contactIntel.length === 0) return null
                   const adopted = new Set<string>(((object.data as any)?.adopted_intel ?? []) as string[])
-                  const intelWithUnadopted = coterieIntel
-                    .map(ci => ({
-                      ...ci,
-                      unadoptedContacts: ci.contacts.filter(c => !adopted.has(intelContactFingerprint(ci.user_id, c))),
-                    }))
-                    .filter(ci => ci.unadoptedContacts.length > 0)
-                  return intelWithUnadopted.length > 0 && (
+                  // Group by peer
+                  const byPeer = new Map<string, { display_name: string; contacts: ContactEntry[] }>()
+                  for (const r of contactIntel) {
+                    if (!byPeer.has(r.peer_user_id)) byPeer.set(r.peer_user_id, { display_name: r.peer_display_name, contacts: [] })
+                    for (const c of r.contacts as ContactEntry[]) {
+                      if (!adopted.has(intelContactFingerprint(r.peer_user_id, c))) {
+                        byPeer.get(r.peer_user_id)!.contacts.push(c)
+                      }
+                    }
+                  }
+                  const entries = Array.from(byPeer.entries()).filter(([, v]) => v.contacts.length > 0)
+                  if (entries.length === 0) return null
+                  return (
                     <div className={styles.coterieIntelSection}>
                       <span className={styles.coterieIntelLabel}>Coterie Intel</span>
-                      {intelWithUnadopted.map(ci => (
-                        <div key={ci.user_id} className={styles.coterieIntelEntry}>
-                          <span className={styles.coterieIntelAuthor}>{ci.display_name}</span>
-                          {ci.unadoptedContacts.map((c, i) => (
+                      {entries.map(([uid, { display_name, contacts }]) => (
+                        <div key={uid} className={styles.coterieIntelEntry}>
+                          <span className={styles.coterieIntelAuthor}>{display_name}</span>
+                          {contacts.map((c, i) => (
                             <div key={i} className={styles.intelContactRow}>
                               <div className={styles.field} style={{ flex: 1 }}>
                                 <span className={styles.label}>{c.label || c.type}</span>
@@ -1799,7 +1824,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                               <Tooltip text="Add to my intel">
                                 <button
                                   className={styles.intelAdoptBtn}
-                                  onClick={() => adoptIntelContact(ci.user_id, c)}
+                                  onClick={() => adoptIntelContact(uid, c)}
                                 >
                                   <Plus size={11} />
                                 </button>
@@ -1909,6 +1934,32 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             )}
             {creatingProject && renderCreateForm('project')}
             {renderItemList(connectedProjects, 'project')}
+            {(() => {
+              const projectIntel = sharedIntel.filter(r => r.share_type === 'project')
+              if (projectIntel.length === 0) return null
+              const byPeer = new Map<string, { display_name: string; items: SharedIntelRow[] }>()
+              for (const r of projectIntel) {
+                if (!byPeer.has(r.peer_user_id)) byPeer.set(r.peer_user_id, { display_name: r.peer_display_name, items: [] })
+                byPeer.get(r.peer_user_id)!.items.push(r)
+              }
+              return (
+                <div className={styles.coterieIntelSection}>
+                  <span className={styles.coterieIntelLabel}>Coterie Intel</span>
+                  {Array.from(byPeer.entries()).map(([uid, { display_name, items }]) => (
+                    <div key={uid} className={styles.coterieIntelEntry}>
+                      <span className={styles.coterieIntelAuthor}>{display_name}</span>
+                      {items.map(item => (
+                        <div key={item.shared_object_id} className={styles.coterieIntelItem}>
+                          <span className={styles.itemName}>{item.name || '(unnamed)'}</span>
+                          {item.title && <span className={styles.coterieIntelItemDetail}>{item.title}</span>}
+                          {item.status && <span className={styles.coterieIntelItemDetail}>{item.status}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         )}
 
@@ -1929,6 +1980,32 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             )}
             {creatingEvent && renderCreateForm('event')}
             {renderItemList(connectedEvents, 'event')}
+            {(() => {
+              const eventIntel = sharedIntel.filter(r => r.share_type === 'event')
+              if (eventIntel.length === 0) return null
+              const byPeer = new Map<string, { display_name: string; items: SharedIntelRow[] }>()
+              for (const r of eventIntel) {
+                if (!byPeer.has(r.peer_user_id)) byPeer.set(r.peer_user_id, { display_name: r.peer_display_name, items: [] })
+                byPeer.get(r.peer_user_id)!.items.push(r)
+              }
+              return (
+                <div className={styles.coterieIntelSection}>
+                  <span className={styles.coterieIntelLabel}>Coterie Intel</span>
+                  {Array.from(byPeer.entries()).map(([uid, { display_name, items }]) => (
+                    <div key={uid} className={styles.coterieIntelEntry}>
+                      <span className={styles.coterieIntelAuthor}>{display_name}</span>
+                      {items.map(item => (
+                        <div key={item.shared_object_id} className={styles.coterieIntelItem}>
+                          <span className={styles.itemName}>{item.name || '(unnamed)'}</span>
+                          {item.title && <span className={styles.coterieIntelItemDetail}>{item.title}</span>}
+                          {item.event_date && <span className={styles.coterieIntelItemDetail}>{formatDate(item.event_date)}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         )}
       </div>

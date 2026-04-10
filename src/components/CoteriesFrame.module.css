@@ -417,20 +417,6 @@
   margin-bottom: 12px;
 }
 
-.shareContactsToggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-.shareContactsToggle input[type="checkbox"] {
-  accent-color: var(--color-accent);
-  color-scheme: dark;
-}
-
 .memberList {
   display: flex;
   flex-direction: column;

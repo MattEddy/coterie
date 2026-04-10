@@ -136,7 +136,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   // Coterie Intel (shared notes from coterie members — old system, kept for shared_notes)
   const [coterieIntel, setCoterieIntel] = useState<{ user_id: string; display_name: string; shared_notes: string | null; contacts: ContactEntry[] }[]>([])
 
-  // Coterie shared intel via coterie_shares table (contacts, projects, events)
+  // Coterie shared intel via coteries_shares table (contacts, projects, events)
   interface SharedIntelRow { peer_user_id: string; peer_display_name: string; share_type: string; shared_object_id: string; object_class: string | null; name: string | null; title: string | null; status: string | null; event_date: string | null; contacts: any }
   const [sharedIntel, setSharedIntel] = useState<SharedIntelRow[]>([])
 
@@ -1792,7 +1792,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                 {!(object.data?.contacts?.length) && !coterieIntel.some(ci => ci.contacts.length > 0) && (
                   <span className={styles.emptyState}>No contact info</span>
                 )}
-                {/* Coterie-shared contacts via coterie_shares table */}
+                {/* Coterie-shared contacts via coteries_shares table */}
                 {(() => {
                   const contactIntel = sharedIntel.filter(r => r.share_type === 'contacts' && r.contacts?.length > 0)
                   if (contactIntel.length === 0) return null

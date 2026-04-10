@@ -1,5 +1,5 @@
 -- Replace per-member share_contacts and per-object coterie_shared with
--- universal coterie_shares join table for granular per-coterie, per-item sharing
+-- universal coteries_shares join table for granular per-coterie, per-item sharing
 
 -- 1. Drop view that depends on coterie_shared, then drop old flags
 DROP VIEW IF EXISTS user_objects;
@@ -42,8 +42,8 @@ FROM objects_overrides ov
 JOIN objects o ON o.id = ov.object_id
 WHERE o.is_active = TRUE;
 
--- 4. Create coterie_shares table
-CREATE TABLE IF NOT EXISTS coterie_shares (
+-- 4. Create coteries_shares table
+CREATE TABLE IF NOT EXISTS coteries_shares (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     coterie_id UUID NOT NULL REFERENCES coteries(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
@@ -53,21 +53,21 @@ CREATE TABLE IF NOT EXISTS coterie_shares (
     UNIQUE(coterie_id, user_id, object_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_coterie_shares_user ON coterie_shares(user_id);
-CREATE INDEX IF NOT EXISTS idx_coterie_shares_object ON coterie_shares(object_id);
+CREATE INDEX IF NOT EXISTS idx_coteries_shares_user ON coteries_shares(user_id);
+CREATE INDEX IF NOT EXISTS idx_coteries_shares_object ON coteries_shares(object_id);
 
 -- 5. RLS
-ALTER TABLE coterie_shares ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coteries_shares ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "coterie_shares_read_own" ON coterie_shares;
-DROP POLICY IF EXISTS "coterie_shares_read_coterie" ON coterie_shares;
-DROP POLICY IF EXISTS "coterie_shares_insert" ON coterie_shares;
-DROP POLICY IF EXISTS "coterie_shares_delete" ON coterie_shares;
+DROP POLICY IF EXISTS "coteries_shares_read_own" ON coteries_shares;
+DROP POLICY IF EXISTS "coteries_shares_read_coterie" ON coteries_shares;
+DROP POLICY IF EXISTS "coteries_shares_insert" ON coteries_shares;
+DROP POLICY IF EXISTS "coteries_shares_delete" ON coteries_shares;
 
-CREATE POLICY "coterie_shares_read_own" ON coterie_shares FOR SELECT TO authenticated USING (user_id = auth.uid());
-CREATE POLICY "coterie_shares_read_coterie" ON coterie_shares FOR SELECT TO authenticated USING (user_id != auth.uid() AND is_coterie_member(coterie_id));
-CREATE POLICY "coterie_shares_insert" ON coterie_shares FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid() AND is_coterie_member(coterie_id));
-CREATE POLICY "coterie_shares_delete" ON coterie_shares FOR DELETE TO authenticated USING (user_id = auth.uid());
+CREATE POLICY "coteries_shares_read_own" ON coteries_shares FOR SELECT TO authenticated USING (user_id = auth.uid());
+CREATE POLICY "coteries_shares_read_coterie" ON coteries_shares FOR SELECT TO authenticated USING (user_id != auth.uid() AND is_coterie_member(coterie_id));
+CREATE POLICY "coteries_shares_insert" ON coteries_shares FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid() AND is_coterie_member(coterie_id));
+CREATE POLICY "coteries_shares_delete" ON coteries_shares FOR DELETE TO authenticated USING (user_id = auth.uid());
 
 -- 6. SECURITY DEFINER function for fetching shared intel from peers
 CREATE OR REPLACE FUNCTION get_coterie_shared_intel(p_user_id UUID, p_object_id UUID)
@@ -101,7 +101,7 @@ RETURNS TABLE(
       NULL::TEXT AS status,
       NULL::DATE AS event_date,
       ov.data->'contacts' AS contacts
-    FROM public.coterie_shares cs
+    FROM public.coteries_shares cs
     JOIN my_coteries mc ON mc.coterie_id = cs.coterie_id
     JOIN public.objects_overrides ov ON ov.object_id = cs.object_id AND ov.user_id = cs.user_id
     JOIN public.profiles pr ON pr.user_id = cs.user_id
@@ -123,7 +123,7 @@ RETURNS TABLE(
       COALESCE(ov.status, o.status) AS status,
       COALESCE(ov.event_date, o.event_date) AS event_date,
       NULL::JSONB AS contacts
-    FROM public.coterie_shares cs
+    FROM public.coteries_shares cs
     JOIN my_coteries mc ON mc.coterie_id = cs.coterie_id
     JOIN public.objects_overrides ov ON ov.object_id = cs.object_id AND ov.user_id = cs.user_id
     JOIN public.objects o ON o.id = cs.object_id AND o.class IN ('project', 'event')

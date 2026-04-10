@@ -35,7 +35,7 @@ export default function CoterieSharePicker({ objectId, shareType }: CoterieShare
     if (!memberships?.length) { setCoteries([]); return }
 
     const { data: shares } = await supabase
-      .from('coterie_shares')
+      .from('coteries_shares')
       .select('coterie_id')
       .eq('user_id', user.id)
       .eq('object_id', objectId)
@@ -79,14 +79,14 @@ export default function CoterieSharePicker({ objectId, shareType }: CoterieShare
     if (!user) return
     if (currently) {
       await supabase
-        .from('coterie_shares')
+        .from('coteries_shares')
         .delete()
         .eq('coterie_id', coterieId)
         .eq('user_id', user.id)
         .eq('object_id', objectId)
     } else {
       await supabase
-        .from('coterie_shares')
+        .from('coteries_shares')
         .insert({ coterie_id: coterieId, user_id: user.id, object_id: objectId, share_type: shareType })
     }
     setCoteries(prev => prev.map(c => c.id === coterieId ? { ...c, shared: !currently } : c))

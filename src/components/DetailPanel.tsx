@@ -366,12 +366,16 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
       const { data: peers } = await supabase
         .from('coteries_members')
-        .select('user_id')
+        .select('user_id, share_contacts')
         .in('coterie_id', myMemberships.map(m => m.coterie_id))
         .neq('user_id', user.id)
       if (!peers?.length) return
 
       const peerIds = [...new Set(peers.map(p => p.user_id))]
+      // A peer who set share_contacts=false in ANY shared coterie hides contacts
+      const contactsHidden = new Set(
+        peers.filter(p => p.share_contacts === false).map(p => p.user_id)
+      )
 
       // IMPORTANT: Only select shared_notes + data — NEVER private_notes.
       // RLS grants full-row SELECT for coterie intel (column filtering is app-side).
@@ -391,12 +395,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       const nameMap = new Map((profiles ?? []).map(p => [p.user_id, p.display_name || 'Unknown']))
 
       setCoterieIntel(overrides
-        .filter(o => o.shared_notes || (o.data as any)?.contacts?.length > 0)
+        .filter(o => o.shared_notes || (!contactsHidden.has(o.user_id) && (o.data as any)?.contacts?.length > 0))
         .map(o => ({
           user_id: o.user_id,
           display_name: nameMap.get(o.user_id) || 'Unknown',
           shared_notes: o.shared_notes,
-          contacts: ((o.data as any)?.contacts ?? []) as ContactEntry[],
+          contacts: contactsHidden.has(o.user_id) ? [] : ((o.data as any)?.contacts ?? []) as ContactEntry[],
         }))
       )
     }

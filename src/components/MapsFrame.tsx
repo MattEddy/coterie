@@ -62,6 +62,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   const [shareName, setShareName] = useState('')
   const [shareEmails, setShareEmails] = useState<string[]>([])
   const [shareEmailInput, setShareEmailInput] = useState('')
+  const [shareContacts, setShareContacts] = useState(true)
 
   const loadMapObjects = useCallback(async (mapId: string) => {
     if (!user) return
@@ -109,6 +110,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     setSharing(true)
     setShareName(`${map.name} Coterie`)
     setShareEmails([])
+    setShareContacts(true)
     setShareEmailInput('')
   }
 
@@ -140,6 +142,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
       coterie_id: coterie.id,
       user_id: user.id,
       role: 'owner',
+      share_contacts: shareContacts,
     })
     if (memberError) { console.error('Failed to add coterie member:', memberError); return }
 
@@ -381,6 +384,14 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
               onBlur={() => { /* handled by handleShare scoop-up */ }}
             />
           </div>
+          <label className={styles.shareContactsToggle}>
+            <input
+              type="checkbox"
+              checked={shareContacts}
+              onChange={e => setShareContacts(e.target.checked)}
+            />
+            Share objects' contact info (phone, email, etc.) with this coterie
+          </label>
           <div className={styles.deleteConfirmActions}>
             <button className={styles.formBtn} onClick={() => setSharing(false)}>Cancel</button>
             <button

@@ -69,6 +69,7 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [transferTargetId, setTransferTargetId] = useState<string | null>(null)
   const [inviteEmail, setInviteEmail] = useState('')
+  const [shareContacts, setShareContacts] = useState(true)
   const isOwner = coterie.owner_id === user?.id
   const isAdmin = isOwner || !coterie.owner_id  // ownerless coteries: all members are admins
 
@@ -76,7 +77,7 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
     // Load members
     const { data: memberData } = await supabase
       .from('coteries_members')
-      .select('user_id, role, profiles(display_name)')
+      .select('user_id, role, share_contacts, profiles(display_name)')
       .eq('coterie_id', coterie.id)
     if (memberData) {
       setMembers(memberData.map((m: any) => ({
@@ -84,6 +85,9 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
         display_name: m.profiles?.display_name ?? 'Unknown',
         role: m.role,
       })))
+      // Set current user's share_contacts preference
+      const myRow = memberData.find((m: any) => m.user_id === user?.id)
+      if (myRow) setShareContacts((myRow as any).share_contacts ?? true)
     }
 
     // Load pending invitations for this coterie
@@ -279,6 +283,26 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Contact sharing toggle */}
+      <div className={styles.detailSection}>
+        <label className={styles.shareContactsToggle}>
+          <input
+            type="checkbox"
+            checked={shareContacts}
+            onChange={async (e) => {
+              const val = e.target.checked
+              setShareContacts(val)
+              await supabase
+                .from('coteries_members')
+                .update({ share_contacts: val })
+                .eq('coterie_id', coterie.id)
+                .eq('user_id', user!.id)
+            }}
+          />
+          Share objects' contact info (phone, email, etc.) with this coterie
+        </label>
       </div>
 
       {/* Invite member */}

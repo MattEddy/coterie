@@ -570,6 +570,7 @@ CREATE TABLE coteries_members (
     coterie_id UUID NOT NULL REFERENCES coteries(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'member',  -- 'owner', 'member'
+    share_contacts BOOLEAN NOT NULL DEFAULT TRUE,  -- whether this member's contacts are visible to others
     joined_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (coterie_id, user_id)
 );

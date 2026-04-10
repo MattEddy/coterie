@@ -144,6 +144,7 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
     }
 
     onClose()
+    document.dispatchEvent(new Event('maps:refresh'))
     document.dispatchEvent(new Event('coterie:refresh-canvas'))
   }
 

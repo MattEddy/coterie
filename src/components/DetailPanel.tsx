@@ -854,6 +854,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     setDeleteConfirm(null)
     onClose()
     onObjectUpdated?.()
+    document.dispatchEvent(new Event('maps:refresh'))
   }
 
   async function createConnectedItem(targetClass: 'project' | 'event') {

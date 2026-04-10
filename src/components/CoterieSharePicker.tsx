@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Share2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -20,19 +21,19 @@ export default function CoterieSharePicker({ objectId, shareType }: CoterieShare
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [coteries, setCoteries] = useState<CoterieOption[]>([])
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     if (!user) return
 
-    // Get user's coteries
     const { data: memberships } = await supabase
       .from('coteries_members')
       .select('coterie_id, coteries(name)')
       .eq('user_id', user.id)
     if (!memberships?.length) { setCoteries([]); return }
 
-    // Get existing shares for this object
     const { data: shares } = await supabase
       .from('coterie_shares')
       .select('coterie_id')
@@ -49,15 +50,26 @@ export default function CoterieSharePicker({ objectId, shareType }: CoterieShare
     })))
   }, [user, objectId, shareType])
 
-  useEffect(() => {
-    if (open) load()
-  }, [open, load])
+  // Load on mount to show gold indicator, and reload when dropdown opens
+  useEffect(() => { load() }, [load])
+  useEffect(() => { if (open) load() }, [open, load])
+
+  // Position dropdown relative to button
+  const openDropdown = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPos({ top: rect.bottom + 4, left: rect.right - 160 })
+    }
+    setOpen(true)
+  }
 
   // Close on outside click
   useEffect(() => {
     if (!open) return
     const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (dropdownRef.current?.contains(e.target as Node)) return
+      if (btnRef.current?.contains(e.target as Node)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -85,17 +97,22 @@ export default function CoterieSharePicker({ objectId, shareType }: CoterieShare
   if (!user) return null
 
   return (
-    <div ref={ref} className={styles.container}>
+    <>
       <Tooltip text="Share with coteries">
         <button
+          ref={btnRef}
           className={`${styles.shareBtn} ${anyShared ? styles.shareBtnActive : ''}`}
-          onClick={() => setOpen(!open)}
+          onClick={() => open ? setOpen(false) : openDropdown()}
         >
           <Share2 size={11} />
         </button>
       </Tooltip>
-      {open && (
-        <div className={styles.dropdown}>
+      {open && createPortal(
+        <div
+          ref={dropdownRef}
+          className={styles.dropdown}
+          style={{ top: pos.top, left: Math.max(8, pos.left) }}
+        >
           {coteries.length === 0 ? (
             <span className={styles.empty}>No coteries</span>
           ) : (
@@ -110,8 +127,9 @@ export default function CoterieSharePicker({ objectId, shareType }: CoterieShare
               </label>
             ))
           )}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }

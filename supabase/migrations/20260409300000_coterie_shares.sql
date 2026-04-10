@@ -59,28 +59,15 @@ CREATE INDEX IF NOT EXISTS idx_coterie_shares_object ON coterie_shares(object_id
 -- 5. RLS
 ALTER TABLE coterie_shares ENABLE ROW LEVEL SECURITY;
 
--- Read own shares
-CREATE POLICY "coterie_shares_read_own"
-  ON coterie_shares FOR SELECT TO authenticated
-  USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "coterie_shares_read_own" ON coterie_shares;
+DROP POLICY IF EXISTS "coterie_shares_read_coterie" ON coterie_shares;
+DROP POLICY IF EXISTS "coterie_shares_insert" ON coterie_shares;
+DROP POLICY IF EXISTS "coterie_shares_delete" ON coterie_shares;
 
--- Read coterie-mates' shares (for intel)
-CREATE POLICY "coterie_shares_read_coterie"
-  ON coterie_shares FOR SELECT TO authenticated
-  USING (
-    user_id != auth.uid()
-    AND is_coterie_member(coterie_id)
-  );
-
--- Insert own shares
-CREATE POLICY "coterie_shares_insert"
-  ON coterie_shares FOR INSERT TO authenticated
-  WITH CHECK (user_id = auth.uid() AND is_coterie_member(coterie_id));
-
--- Delete own shares
-CREATE POLICY "coterie_shares_delete"
-  ON coterie_shares FOR DELETE TO authenticated
-  USING (user_id = auth.uid());
+CREATE POLICY "coterie_shares_read_own" ON coterie_shares FOR SELECT TO authenticated USING (user_id = auth.uid());
+CREATE POLICY "coterie_shares_read_coterie" ON coterie_shares FOR SELECT TO authenticated USING (user_id != auth.uid() AND is_coterie_member(coterie_id));
+CREATE POLICY "coterie_shares_insert" ON coterie_shares FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid() AND is_coterie_member(coterie_id));
+CREATE POLICY "coterie_shares_delete" ON coterie_shares FOR DELETE TO authenticated USING (user_id = auth.uid());
 
 -- 6. SECURITY DEFINER function for fetching shared intel from peers
 CREATE OR REPLACE FUNCTION get_coterie_shared_intel(p_user_id UUID, p_object_id UUID)
@@ -100,59 +87,57 @@ RETURNS TABLE(
   WITH my_coteries AS (
     SELECT cm.coterie_id FROM public.coteries_members cm WHERE cm.user_id = p_user_id
   ),
-  peer_shares AS (
-    SELECT cs.user_id, cs.coterie_id, cs.object_id, cs.share_type
-    FROM public.coterie_shares cs
-    JOIN my_coteries mc ON mc.coterie_id = cs.coterie_id
-    WHERE cs.user_id != p_user_id
-      AND cs.object_id = p_object_id
-  ),
   -- Contact shares: object_id = the person/company whose contacts are shared
   contact_results AS (
     SELECT
-      ps.user_id AS peer_user_id,
+      cs.user_id AS peer_user_id,
       pr.display_name AS peer_display_name,
-      ps.coterie_id,
-      ps.share_type,
-      ps.object_id AS shared_object_id,
+      cs.coterie_id,
+      cs.share_type,
+      cs.object_id AS shared_object_id,
       NULL::TEXT AS object_class,
       NULL::TEXT AS name,
       NULL::TEXT AS title,
       NULL::TEXT AS status,
       NULL::DATE AS event_date,
       ov.data->'contacts' AS contacts
-    FROM peer_shares ps
-    JOIN public.objects_overrides ov ON ov.object_id = ps.object_id AND ov.user_id = ps.user_id
-    JOIN public.profiles pr ON pr.user_id = ps.user_id
-    WHERE ps.share_type = 'contacts'
+    FROM public.coterie_shares cs
+    JOIN my_coteries mc ON mc.coterie_id = cs.coterie_id
+    JOIN public.objects_overrides ov ON ov.object_id = cs.object_id AND ov.user_id = cs.user_id
+    JOIN public.profiles pr ON pr.user_id = cs.user_id
+    WHERE cs.user_id != p_user_id
+      AND cs.object_id = p_object_id
+      AND cs.share_type = 'contacts'
   ),
-  -- Project/event shares: find peer's connections from p_object_id to the shared item
+  -- Project/event shares: find peer's shared items connected to p_object_id
   item_shares AS (
     SELECT
-      ps.user_id AS peer_user_id,
+      cs.user_id AS peer_user_id,
       pr.display_name AS peer_display_name,
-      ps.coterie_id,
-      ps.share_type,
-      ps.object_id AS shared_object_id,
+      cs.coterie_id,
+      cs.share_type,
+      cs.object_id AS shared_object_id,
       o.class AS object_class,
       COALESCE(ov.name, o.name) AS name,
       COALESCE(ov.title, o.title) AS title,
       COALESCE(ov.status, o.status) AS status,
       COALESCE(ov.event_date, o.event_date) AS event_date,
       NULL::JSONB AS contacts
-    FROM peer_shares ps
-    JOIN public.objects_overrides ov ON ov.object_id = ps.object_id AND ov.user_id = ps.user_id
-    JOIN public.objects o ON o.id = ps.object_id AND o.class IN ('project', 'event')
-    JOIN public.profiles pr ON pr.user_id = ps.user_id
-    WHERE ps.share_type IN ('project', 'event')
-    -- Only show if peer has a connection from the viewed object to this project/event
-    AND EXISTS (
-      SELECT 1 FROM public.connections_overrides co
-      WHERE co.user_id = ps.user_id
-        AND co.connection_id IS NULL
-        AND ((co.object_a_id = p_object_id AND co.object_b_id = ps.object_id)
-          OR (co.object_a_id = ps.object_id AND co.object_b_id = p_object_id))
-    )
+    FROM public.coterie_shares cs
+    JOIN my_coteries mc ON mc.coterie_id = cs.coterie_id
+    JOIN public.objects_overrides ov ON ov.object_id = cs.object_id AND ov.user_id = cs.user_id
+    JOIN public.objects o ON o.id = cs.object_id AND o.class IN ('project', 'event')
+    JOIN public.profiles pr ON pr.user_id = cs.user_id
+    WHERE cs.user_id != p_user_id
+      AND cs.share_type IN ('project', 'event')
+      -- The shared project/event must be connected to the viewed object
+      AND EXISTS (
+        SELECT 1 FROM public.connections_overrides co
+        WHERE co.user_id = cs.user_id
+          AND co.connection_id IS NULL
+          AND ((co.object_a_id = p_object_id AND co.object_b_id = cs.object_id)
+            OR (co.object_a_id = cs.object_id AND co.object_b_id = p_object_id))
+      )
   )
   SELECT * FROM contact_results
   UNION ALL

@@ -172,6 +172,13 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
 
   const bringToFront = useCallback(() => {
     setZIndex(getNextZ())
+    // Auto-focus the frame so keyboard events work immediately
+    frameRef.current?.focus()
+  }, [])
+
+  // Focus the frame on mount so Tab works without clicking first
+  useEffect(() => {
+    frameRef.current?.focus()
   }, [])
 
   // Focus trap: TAB cycles within the frame while it's active
@@ -182,13 +189,18 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
     const focusable = el.querySelectorAll<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     )
-    if (focusable.length === 0) return
+    if (focusable.length === 0) { e.preventDefault(); return }
     const first = focusable[0]
     const last = focusable[focusable.length - 1]
-    if (e.shiftKey) {
-      if (document.activeElement === first) { e.preventDefault(); last.focus() }
-    } else {
-      if (document.activeElement === last) { e.preventDefault(); first.focus() }
+    const active = document.activeElement
+    // If focus is on the frame itself (not a child), jump to first/last
+    if (active === el || !el.contains(active)) {
+      e.preventDefault()
+      ;(e.shiftKey ? last : first).focus()
+    } else if (e.shiftKey && active === first) {
+      e.preventDefault(); last.focus()
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault(); first.focus()
     }
   }, [])
 
@@ -203,6 +215,7 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
         ...(size.h ? { height: size.h } : {}),
         zIndex,
       }}
+      tabIndex={-1}
       onMouseDown={bringToFront}
       onKeyDown={handleKeyDown}
     >

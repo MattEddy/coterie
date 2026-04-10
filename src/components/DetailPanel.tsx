@@ -1136,7 +1136,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       // Focus trap: Tab cycles within the panel
       if (e.key === 'Tab') {
         e.preventDefault()
-        const all = panel.querySelectorAll<HTMLElement>(
+        const all = panel!.querySelectorAll<HTMLElement>(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         )
         const focusable = Array.from(all).filter(

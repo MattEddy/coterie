@@ -190,7 +190,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
 
   const handleDelete = async () => {
     if (activeMapId === map.id) onActivateMap(null)
-    const { error } = await supabase.from('maps').update({ is_active: false }).eq('id', map.id)
+    const { error } = await supabase.from('maps').delete().eq('id', map.id)
     if (error) { console.error('Failed to delete map:', error); return }
     setConfirmDelete(false)
     onMapDeleted(map.id)
@@ -503,7 +503,6 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
       .from('maps')
       .select('id, name, description, auto_add, source_coterie_id')
       .eq('user_id', user.id)
-      .eq('is_active', true)
       .order('name')
     if (!data) return
     const countResults = await Promise.all(

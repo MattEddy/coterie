@@ -423,7 +423,6 @@ CREATE TABLE maps (
     source_coterie_id UUID,              -- recipient's aggregated view of a coterie (FK added after coteries table)
     is_published BOOLEAN DEFAULT FALSE,
     auto_add BOOLEAN NOT NULL DEFAULT FALSE,
-    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

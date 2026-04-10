@@ -174,6 +174,24 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
     setZIndex(getNextZ())
   }, [])
 
+  // Focus trap: TAB cycles within the frame while it's active
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab') return
+    const el = frameRef.current
+    if (!el) return
+    const focusable = el.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    if (focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus() }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
+  }, [])
+
   return (
     <div
       ref={setRef}
@@ -186,6 +204,7 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
         zIndex,
       }}
       onMouseDown={bringToFront}
+      onKeyDown={handleKeyDown}
     >
       <div className={`${styles.header} ${collapsed ? styles.headerCollapsed : ''}`} onMouseDown={handleHeaderMouseDown}>
         <div className={styles.headerTop}>

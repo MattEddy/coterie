@@ -1085,12 +1085,31 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  // Escape to close panel when nothing is being edited
+  // Keyboard shortcuts: Escape to close, Enter to toggle edit mode
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return
-      if (headerEditing || showTagInput || contactEditing || notesEditing || creatingProject || creatingEvent || editingItemId || showLinkSearch) return
-      onClose()
+      const anyEditing = headerEditing || showTagInput || contactEditing || notesEditing || creatingProject || creatingEvent || editingItemId || showLinkSearch
+
+      if (e.key === 'Escape') {
+        if (anyEditing) return
+        onClose()
+        return
+      }
+
+      if (e.key === 'Enter') {
+        const active = document.activeElement
+        const inInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')
+        const onButton = active && active.tagName === 'BUTTON'
+        if (inInput) return // let inputs handle Enter normally
+
+        if (headerEditing) {
+          e.preventDefault()
+          saveHeader()
+        } else if (!anyEditing && !onButton) {
+          e.preventDefault()
+          setHeaderEditing(true)
+        }
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)

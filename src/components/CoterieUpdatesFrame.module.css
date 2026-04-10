@@ -52,7 +52,7 @@
 .detail span {
   font-size: 11px;
   color: var(--color-text-muted);
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
 }
 
 .coterieName {

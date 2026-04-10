@@ -61,7 +61,7 @@
 }
 
 .title {
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 10px;
   color: var(--color-text-muted);
   line-height: 1.3;
@@ -87,7 +87,7 @@
 }
 
 .titleInput {
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 10px;
   color: var(--color-text);
   background: var(--color-surface-2);
@@ -120,7 +120,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 8px;
   font-weight: 500;
   text-transform: capitalize;
@@ -390,7 +390,7 @@
 }
 
 .value {
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 11px;
   white-space: pre-wrap;
 }
@@ -404,7 +404,7 @@
 }
 
 .noteText {
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 11px;
   line-height: 1.5;
   color: var(--color-text);
@@ -534,7 +534,7 @@
 
 .contactValue {
   grid-column: 1 / -2;
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 11px;
   color: var(--color-text);
   background: var(--color-surface-2);
@@ -572,7 +572,7 @@
 }
 
 .editInput {
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 11px;
   color: var(--color-text);
   background: var(--color-surface-2);
@@ -829,7 +829,7 @@
 }
 
 .itemName {
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 10px;
   font-weight: 500;
   color: var(--color-text);
@@ -842,7 +842,7 @@
 }
 
 .itemDate {
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 8px;
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -850,7 +850,7 @@
 }
 
 .itemStatus {
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 8px;
   font-weight: 500;
   text-transform: capitalize;
@@ -883,7 +883,7 @@
 }
 
 .itemMeta {
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 8px;
   color: var(--color-text-muted);
   text-transform: capitalize;
@@ -935,7 +935,7 @@
 }
 
 .createInput {
-  font-family: 'Inter', var(--font-sans);
+  font-family: var(--font-data);
   font-size: 11px;
   color: var(--color-text);
   background: var(--color-surface-2);

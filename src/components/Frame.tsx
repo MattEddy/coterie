@@ -181,8 +181,13 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
     frameRef.current?.focus()
   }, [])
 
-  // Focus trap: TAB always stays within the frame
+  // Keyboard: ESC to close, TAB focus trap
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
+      return
+    }
     if (e.key !== 'Tab') return
     e.preventDefault()
     const el = frameRef.current
@@ -202,7 +207,7 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
     } else {
       focusable[idx < 0 || idx >= focusable.length - 1 ? 0 : idx + 1].focus()
     }
-  }, [])
+  }, [onClose])
 
   return (
     <div

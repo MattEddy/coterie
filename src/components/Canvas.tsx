@@ -717,7 +717,6 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       .select('id')
       .eq('user_id', user.id)
       .eq('auto_add', true)
-      .eq('is_active', true)
     if (autoMaps && autoMaps.length > 0) {
       await supabase
         .from('maps_objects')

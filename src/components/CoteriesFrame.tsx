@@ -961,6 +961,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
                 className={`${styles.coterieItem} ${selectedCoterieId === c.id ? styles.coterieItemSelected : ''}`}
                 onClick={() => handleCoterieClick(c)}
                 onDoubleClick={() => handleCoterieDoubleClick(c)}
+                onKeyDown={e => { if (e.key === 'ArrowRight') { e.preventDefault(); handleCoterieDoubleClick(c) } }}
               >
                 <Users size={14} className={styles.coterieIcon} />
                 <div className={styles.coterieInfo}>

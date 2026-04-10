@@ -45,7 +45,6 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
       .from('maps')
       .select('id, name')
       .eq('user_id', user.id)
-      .eq('is_active', true)
       .order('name')
       .then(({ data }) => {
         if (data) setMaps(data)
@@ -64,6 +63,20 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
     const t = setTimeout(() => setFeedback(null), 2000)
     return () => clearTimeout(t)
   }, [feedback])
+
+  // Delete key opens the confirmation modal
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const active = document.activeElement
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return
+        e.preventDefault()
+        setMode('confirmDelete')
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const objectIds = items.map(i => i.nodeId)
 

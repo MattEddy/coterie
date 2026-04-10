@@ -1085,8 +1085,16 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  // Keyboard shortcuts: Escape to close, Enter to toggle edit mode
+  // Focus panel on mount and when object changes
   useEffect(() => {
+    panelRef.current?.focus()
+  }, [object.id])
+
+  // Keyboard: Escape to close, Enter to toggle edit mode, Tab focus trap
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+
     function handleKeyDown(e: KeyboardEvent) {
       const anyEditing = headerEditing || showTagInput || contactEditing || notesEditing || creatingProject || creatingEvent || editingItemId || showLinkSearch
 
@@ -1100,7 +1108,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         const active = document.activeElement
         const inInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')
         const onButton = active && active.tagName === 'BUTTON'
-        if (inInput) return // let inputs handle Enter normally
+        if (inInput) return
 
         if (headerEditing) {
           e.preventDefault()
@@ -1109,10 +1117,39 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
           e.preventDefault()
           setHeaderEditing(true)
         }
+        return
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (anyEditing) return
+        const active = document.activeElement
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return
+        e.preventDefault()
+        initiateDelete()
+        return
+      }
+
+      // Focus trap: Tab cycles within the panel
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        const all = panel.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        const focusable = Array.from(all).filter(
+          node => node.offsetParent !== null && !node.closest('[hidden]')
+        )
+        if (focusable.length === 0) return
+        const active = document.activeElement
+        const idx = focusable.indexOf(active as HTMLElement)
+        if (e.shiftKey) {
+          focusable[idx <= 0 ? focusable.length - 1 : idx - 1].focus()
+        } else {
+          focusable[idx < 0 || idx >= focusable.length - 1 ? 0 : idx + 1].focus()
+        }
       }
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    panel.addEventListener('keydown', handleKeyDown)
+    return () => panel.removeEventListener('keydown', handleKeyDown)
   }, [headerEditing, showTagInput, contactEditing, notesEditing, creatingProject, creatingEvent, editingItemId, showLinkSearch, onClose])
 
   // Off-screen detection
@@ -1495,7 +1532,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   }
 
   return (
-    <div ref={panelRef} className={styles.panel} style={{ left: pos.left, top: pos.top, width: PANEL_WIDTH, visibility: nodeOffScreen ? 'hidden' : 'visible' } as CSSProperties}>
+    <div ref={panelRef} tabIndex={-1} className={styles.panel} style={{ left: pos.left, top: pos.top, width: PANEL_WIDTH, visibility: nodeOffScreen ? 'hidden' : 'visible', outline: 'none' } as CSSProperties}>
       {/* ===== HEADER ===== */}
       <div className={`${styles.header} ${headerClassStyles[object.class] || ''}`}>
         {object.photo_url && (

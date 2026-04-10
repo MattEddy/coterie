@@ -10,11 +10,11 @@ import styles from './NavBar.module.css'
 
 export type FrameType = 'search' | 'maps' | 'coteries' | 'coterie-updates' | 'settings'
 
-const menuItems: { type: FrameType; Icon: typeof Search; label: string }[] = [
-  { type: 'search', Icon: Search, label: 'Search' },
-  { type: 'maps', Icon: Map, label: 'Maps' },
-  { type: 'coteries', Icon: Users, label: 'Coteries' },
-  { type: 'settings', Icon: Settings, label: 'Settings' },
+const menuItems: { type: FrameType; Icon: typeof Search; label: string; hotkey: string }[] = [
+  { type: 'search', Icon: Search, label: 'Search', hotkey: 'S' },
+  { type: 'maps', Icon: Map, label: 'Maps', hotkey: 'M' },
+  { type: 'coteries', Icon: Users, label: 'Coteries', hotkey: 'C' },
+  { type: 'settings', Icon: Settings, label: 'Settings', hotkey: ',' },
 ]
 
 interface NavBarProps {
@@ -136,7 +136,7 @@ export default function NavBar({ onOpenFrame }: NavBarProps) {
 
         {menuOpen && (
           <div className={styles.popover}>
-            {menuItems.map(({ type, Icon, label }) => (
+            {menuItems.map(({ type, Icon, label, hotkey }) => (
               <button
                 key={type}
                 className={styles.menuItem}
@@ -147,6 +147,7 @@ export default function NavBar({ onOpenFrame }: NavBarProps) {
               >
                 <Icon size={15} />
                 <span>{label}</span>
+                <kbd className={styles.hotkey}>{hotkey}</kbd>
               </button>
             ))}
           </div>

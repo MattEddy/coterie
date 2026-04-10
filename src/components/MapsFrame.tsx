@@ -762,6 +762,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
                 className={`${styles.mapItem} ${selectedMapId === m.id ? styles.mapItemSelected : ''} ${activeMapId === m.id ? styles.mapItemActive : ''}`}
                 onClick={e => { e.stopPropagation(); handleMapClick(m) }}
                 onDoubleClick={e => { e.stopPropagation(); handleMapDoubleClick(m) }}
+                onKeyDown={e => { if (e.key === 'ArrowRight') { e.preventDefault(); handleMapDoubleClick(m) } }}
               >
                 <MapIcon size={14} className={styles.mapIcon} />
                 <div className={styles.mapInfo}>

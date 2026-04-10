@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import {
   ReactFlow,
@@ -235,6 +236,7 @@ function DemoCanvas() {
 /* ── Home page ─────────────────────────────────────────────────── */
 
 export default function Home() {
+  const navigate = useNavigate()
   const { resolvedTheme } = useTheme()
   const logo = resolvedTheme === 'light' ? logoNameLight : logoNameDark
   const [waitlistEmail, setWaitlistEmail] = useState('')
@@ -269,6 +271,7 @@ export default function Home() {
           <a href="#overview" className={styles.navLink}>Overview</a>
           <a href="#features" className={styles.navLink}>Features</a>
           <a href="#pricing" className={styles.navLink}>Plans</a>
+          <button className={styles.loginLink} onClick={() => navigate('/login')}>Log In</button>
         </nav>
       </header>
 

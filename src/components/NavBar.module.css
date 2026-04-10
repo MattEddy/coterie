@@ -69,6 +69,13 @@
   background: var(--color-surface-2);
 }
 
+.hotkey {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
 .accountName {
   padding: 8px 12px 0;
   font-size: 13px;

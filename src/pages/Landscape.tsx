@@ -10,6 +10,7 @@ import SettingsFrame from '../components/SettingsFrame'
 import CoterieUpdatesFrame from '../components/CoterieUpdatesFrame'
 import NotificationBoxes from '../components/NotificationBoxes'
 import PlacementBar from '../components/PlacementBar'
+import HelpButton from '../components/HelpButton'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { acceptInvitationByToken } from '../lib/acceptInvitation'
@@ -275,6 +276,8 @@ export default function Landscape() {
       {openFrames.has('settings') && (
         <SettingsFrame onClose={() => closeFrame('settings')} />
       )}
+
+      {!placementCluster && <HelpButton />}
 
       {welcomeModal && (
         <div className={styles.modalOverlay}>

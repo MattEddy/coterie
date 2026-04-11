@@ -46,9 +46,9 @@ Four tiers planned — building in order:
 Every entity has ONE **class** and MULTIPLE **types**:
 
 ```
-Classes (fixed):     company, person, project, event
+Classes (fixed):     company, person, project, event, note
 Landscape-visible:   company, person (on the canvas)
-Off-landscape:       project, event (shown in detail panels, connected to landscape objects)
+Off-landscape:       project, event, note (shown in detail panels, connected to landscape objects)
 
 Types (extensible):
   company → studio, streamer, agency, production_company, ...
@@ -79,7 +79,7 @@ A **coterie** is a named trust circle for sharing relationship intelligence. Ful
 - Coteries require maps — sharing is map-based via `coteries_maps` join table
 - Recipients get ONE aggregated map per coterie (`maps.source_coterie_id`)
 - Three sharing channels:
-  - **Channel 1 — Intel** (passive): shared_notes visible on shared objects, attributed. Pure query pattern.
+  - **Channel 1 — Intel** (passive): notes shared via `coteries_shares` on shared objects, attributed. Pure query pattern.
   - **Channel 2 — Updates** (diff-based): structural differences surface as dissonances. Self-correcting — reversed changes evaporate automatically.
   - **Channel 3 — Explicit shares** (`coteries_shares` table): per-coterie, per-item sharing of contacts, projects, and events. One row = "I share this thing with this coterie." Private by default, explicit opt-in. `get_coterie_shared_intel()` SECURITY DEFINER RPC fetches shared intel from peers. `CoterieSharePicker` component provides the UI (share icon → coterie dropdown with checkboxes).
 - Five dissonance types: `new_object`, `new_connection`, `deactivated_connection`, `career_move`, `type_change`
@@ -124,11 +124,14 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 - **Subscriptions table** tracks trial/payment status per user — `user_tier(uid)` returns `'pro'`/`'trial'`/`'free'`
 - **VIP status** for internal users (billing-exempt, full Pro access) — just a subscription status value, not a separate role
 - **RLS helper functions** — all cross-table membership/visibility checks MUST use SECURITY DEFINER helpers to avoid RLS recursion. PostgreSQL flags re-entry on the same table as infinite recursion, even across different policy types (e.g., INSERT policy → queries table B → B's SELECT policy → queries original table). Helpers: `is_coterie_admin(coterie_id)`, `is_coterie_member(coterie_id)`, `is_shared_via_coterie(object_id, target_user_id)`, `is_map_shared_with_user(map_id)`. NEVER raw-query `coteries_members` or `coteries_maps` from an RLS policy — always use the helper.
-- **`private_notes` defense-in-depth** — RLS grants full-row SELECT on `objects_overrides` for coterie intel. Column filtering is app-side only (`select('user_id, shared_notes, data')` in DetailPanel). A `select('*')` bug would leak private notes. Prominent comment at the query site.
-- **Invite acceptance RPC** — `accept_invitation_by_token(p_token, p_user_id)` SECURITY DEFINER, because the accepting user isn't a member yet and can't read/update invitations through member-based RLS policies.
+- **Invite acceptance RPCs** — `accept_coterie_invitation(p_user_id, p_invitation_id, p_token)` handles acceptance + member creation + recipient map + returns placement data as JSONB. `place_coterie_objects(p_user_id, p_coterie_id, p_anchor_x, p_anchor_y, p_items)` finalizes placement. Two-step design supports the ghost placement UX (user picks anchor point before committing). Replaces old `accept_invitation_by_token`.
 - **`get_dissonances()` is SECURITY DEFINER** — reads across multiple users' overrides; RLS would be prohibitively complex. Function already scopes to calling user's coteries.
 - **`get_coterie_shared_intel()` is SECURITY DEFINER** — reads peers' `connections_overrides` (RLS requires both endpoints in shared maps, but projects/events aren't in maps) and `coteries_shares` to find shared contacts/projects/events.
-- **`coteries_shares` table** — universal per-coterie, per-item intel sharing. Replaces earlier `share_contacts` (on `coteries_members`) and `coterie_shared` (on `objects_overrides`) flags which were too blunt. Schema: `(coterie_id, user_id, object_id, share_type)` with `share_type` in ('contacts', 'project', 'event'). Private by default.
+- **`coteries_shares` table** — universal per-coterie, per-item intel sharing. Replaces earlier `share_contacts` (on `coteries_members`) and `coterie_shared` (on `objects_overrides`) flags which were too blunt. Schema: `(coterie_id, user_id, object_id, share_type)` with `share_type` in ('contacts', 'project', 'event', 'note'). Private by default.
+- **Notes are objects** — class='note', `landscape_visible=false`. Connected to parent via 'note_on' connection. Text stored in `objects_overrides.name`. Each note independently shareable per-coterie via `coteries_shares`. Replaced old `shared_notes`/`private_notes` TEXT columns (dropped from `objects_overrides` and `connections_overrides`).
+- **Server-side RPCs for all multi-step operations** — 12 SECURITY DEFINER functions in `20260410100000_rpc_operations.sql` replace ~970 lines of frontend DB orchestration. Every future client (iPad, etc.) gets this logic for free. RPCs: `create_note`, `create_connected_item`, `delete_object_with_cleanup`, `delete_connected_item`, `delete_multiple_objects`, `create_coterie_with_maps`, `share_map_as_coterie`, `accept_coterie_invitation` + `place_coterie_objects` (two-step for placement UX), `save_item_with_types`, `link_existing_item`, `create_map_with_objects`.
+- **Contact info stays JSONB** — contacts in `objects_overrides.data.contacts` are shared all-or-nothing per person per coterie. Intentionally NOT objectified — the access pattern (read/write as a group) doesn't benefit from per-item granularity.
+- **Cross-platform input** — Canvas multi-select checks both `metaKey` (Mac Cmd) and `ctrlKey` (Windows Ctrl). `multiSelectionKeyCode` is platform-detected. Pan via middle-click drag or Space+drag.
 
 ## Known Gotchas
 
@@ -222,9 +225,10 @@ npm run dev                 # → http://localhost:5173
 # Auth: 6-digit email OTP (no passwords) — works for both signup and login
 ```
 
-Deploy: Supabase Cloud (`supabase db push`) + Vercel (`vercel --prod`).
+Deploy: Supabase Cloud (`supabase db push`) + Vercel (auto-deploys from GitHub push to main).
 Production: `https://coteriepro.com` (Vercel) + Supabase Cloud (sbgxgveornxaxxiowwsh, us-west-1).
 Domain DNS: Porkbun → A record `76.76.21.21` + CNAME `www` → `cname.vercel-dns.com`.
+`.env.local` is pointed at Supabase Cloud (local dev config commented out).
 
 ## Status
 
@@ -247,6 +251,11 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [x] Inline type/role deletion — trash icon in autocomplete dropdowns, min 2-char creation guard
 - [x] Maps popover in DetailPanel — toggle map membership from object detail
 - [x] Object pill titles — show title on landscape pills, fall back to types
+- [x] Notes as objects — per-note coterie sharing, replaced old shared_notes/private_notes columns
+- [x] Server-side RPCs — 12 functions replacing ~970 lines of frontend DB orchestration
+- [x] DetailPanel UI polish — persistent add buttons, themed controls, consistent save/cancel, expandable intel
+- [x] Help button — floating `?` reference card with controls/shortcuts/panel keys
+- [x] Cross-platform input fixes — Ctrl+click multi-select on Windows, platform-detected lasso modifier
 - [ ] Stripe integration for subscription billing
 - [ ] DetailPanel migration to Frame component (back burner)
 - [ ] Light mode polish (back burner)

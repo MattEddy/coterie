@@ -822,12 +822,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         const active = document.activeElement
         const inInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')
         const onButton = active && active.tagName === 'BUTTON'
-        if (inInput) return
+        if (inInput || onButton) return
 
         if (headerEditing) {
           e.preventDefault()
           saveHeader()
-        } else if (!anyEditing && !onButton) {
+        } else if (!anyEditing) {
           e.preventDefault()
           setHeaderEditing(true)
         }

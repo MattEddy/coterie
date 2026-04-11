@@ -347,7 +347,6 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
         .from('maps')
         .select('id, name')
         .eq('user_id', user.id)
-        .eq('is_active', true)
         .order('name')
       if (!data) return
       const withCounts = await Promise.all(
@@ -694,6 +693,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
     setOpenedCoterie(null)
     setSelectedCoterieId(null)
     loadCoteries()
+    document.dispatchEvent(new Event('maps:refresh'))
   }
 
   return (

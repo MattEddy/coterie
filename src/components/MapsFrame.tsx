@@ -232,8 +232,13 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
             .from('coteries')
             .select('name')
             .eq('id', map.source_coterie_id)
-            .single()
-          setCoterieDeleteBlock(coterie?.name || 'a coterie')
+            .eq('is_active', true)
+            .maybeSingle()
+          if (coterie) {
+            setCoterieDeleteBlock(coterie.name || 'a coterie')
+          } else {
+            setConfirmDelete(true)
+          }
         } else {
           setConfirmDelete(true)
         }

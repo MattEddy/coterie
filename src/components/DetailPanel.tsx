@@ -108,6 +108,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
   const panelRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: 0, top: 0 })
+  const initialTopSet = useRef<string | null>(null)
 
   // Tabs
   const [activeTab, setActiveTab] = useState<TabId>('contact')
@@ -126,17 +127,14 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     () => object.data?.contacts ?? []
   )
 
-  // Notes tab editing
-  const [notesEditing, setNotesEditing] = useState(false)
-  const [notesValues, setNotesValues] = useState({
-    shared_notes: object.shared_notes || '',
-    private_notes: object.private_notes || '',
-  })
+  // Notes tab — notes are objects (class='note') connected to this object
+  const [connectedNotes, setConnectedNotes] = useState<ConnectedItem[]>([])
+  const [creatingNote, setCreatingNote] = useState(false)
+  const [newNoteText, setNewNoteText] = useState('')
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editNoteText, setEditNoteText] = useState('')
 
-  // Coterie Intel (shared notes from coterie members — old system, kept for shared_notes)
-  const [coterieIntel, setCoterieIntel] = useState<{ user_id: string; display_name: string; shared_notes: string | null; contacts: ContactEntry[] }[]>([])
-
-  // Coterie shared intel via coteries_shares table (contacts, projects, events)
+  // Coterie shared intel via coteries_shares table (contacts, projects, events, notes)
   interface SharedIntelRow { peer_user_id: string; peer_display_name: string; share_type: string; shared_object_id: string; object_class: string | null; name: string | null; title: string | null; status: string | null; event_date: string | null; contacts: any }
   const [sharedIntel, setSharedIntel] = useState<SharedIntelRow[]>([])
 
@@ -282,7 +280,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const placeholders = classPlaceholders[object.class] || classPlaceholders.org
 
   // Load connected projects/events when tab activates
-  const loadConnectedItems = useCallback(async (objectId: string, targetClass: 'project' | 'event') => {
+  const loadConnectedItems = useCallback(async (objectId: string, targetClass: 'project' | 'event' | 'note') => {
     if (!user) return
 
     const conns = await getEffectiveConnections(objectId, user.id)
@@ -294,7 +292,8 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
     if (itemIds.size === 0) {
       if (targetClass === 'project') setConnectedProjects([])
-      else setConnectedEvents([])
+      else if (targetClass === 'event') setConnectedEvents([])
+      else setConnectedNotes([])
       return
     }
 
@@ -340,72 +339,25 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       })),
     ]
 
-    // Sort: events by date desc, projects alphabetically
+    // Sort: events by date desc, notes by newest first (reverse alpha as proxy), projects alphabetically
     if (targetClass === 'event') {
       items.sort((a, b) => (b.event_date || '').localeCompare(a.event_date || ''))
+    } else if (targetClass === 'note') {
+      items.reverse()
     } else {
       items.sort((a, b) => (a.name).localeCompare(b.name))
     }
 
     if (targetClass === 'project') setConnectedProjects(items)
-    else setConnectedEvents(items)
+    else if (targetClass === 'event') setConnectedEvents(items)
+    else setConnectedNotes(items)
   }, [user])
 
   useEffect(() => {
     if (activeTab === 'projects') loadConnectedItems(object.id, 'project')
     if (activeTab === 'events') loadConnectedItems(object.id, 'event')
+    if (activeTab === 'notes') loadConnectedItems(object.id, 'note')
   }, [activeTab, object.id, loadConnectedItems])
-
-  // Load coterie intel (shared notes + contacts from coterie members)
-  useEffect(() => {
-    async function loadCoterieIntel() {
-      if (!user) return
-
-      // Get coterie peer user IDs
-      const { data: myMemberships } = await supabase
-        .from('coteries_members')
-        .select('coterie_id')
-        .eq('user_id', user.id)
-      if (!myMemberships?.length) return
-
-      const { data: peers } = await supabase
-        .from('coteries_members')
-        .select('user_id')
-        .in('coterie_id', myMemberships.map(m => m.coterie_id))
-        .neq('user_id', user.id)
-      if (!peers?.length) return
-
-      const peerIds = [...new Set(peers.map(p => p.user_id))]
-
-      // IMPORTANT: Only select shared_notes + data — NEVER private_notes.
-      // RLS grants full-row SELECT for coterie intel (column filtering is app-side).
-      // Using select('*') here would leak private_notes to coterie members.
-      const { data: overrides } = await supabase
-        .from('objects_overrides')
-        .select('user_id, shared_notes, data')
-        .eq('object_id', object.id)
-        .in('user_id', peerIds)
-      if (!overrides?.length) { setCoterieIntel([]); return }
-
-      // Get display names
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('user_id, display_name')
-        .in('user_id', overrides.map(o => o.user_id))
-      const nameMap = new Map((profiles ?? []).map(p => [p.user_id, p.display_name || 'Unknown']))
-
-      setCoterieIntel(overrides
-        .filter(o => o.shared_notes)
-        .map(o => ({
-          user_id: o.user_id,
-          display_name: nameMap.get(o.user_id) || 'Unknown',
-          shared_notes: o.shared_notes,
-          contacts: [] as ContactEntry[],
-        }))
-      )
-    }
-    loadCoterieIntel()
-  }, [object.id, user])
 
   // Load coterie-shared intel (contacts, projects, events) via RPC
   useEffect(() => {
@@ -526,7 +478,10 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     setHeaderEditing(false)
     setShowTagInput(false)
     setContactEditing(false)
-    setNotesEditing(false)
+    setCreatingNote(false)
+    setNewNoteText('')
+    setEditingNoteId(null)
+    setEditNoteText('')
     setCreatingProject(false)
     setCreatingEvent(false)
     setExpandedItemId(null)
@@ -537,10 +492,6 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     setHeaderValues({ name: object.name || '', title: object.title || '' })
     setEditTypes(object.types || [])
     setEditContacts(object.data?.contacts ?? [])
-    setNotesValues({
-      shared_notes: object.shared_notes || '',
-      private_notes: object.private_notes || '',
-    })
   }, [object.id])
 
   // Position panel adjacent to node
@@ -565,12 +516,17 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     }
     left = Math.max(GAP, Math.min(left, vw - PANEL_WIDTH - GAP))
 
-    const anchorRatio = Math.max(0, Math.min(1, nodeCenterY / vh))
-    let top = nodeCenterY - (h * anchorRatio)
-    top = Math.max(GAP, Math.min(top, vh - h - GAP))
-
-    setPos({ left, top })
-  }, [nodeRect, activeTab, headerEditing, contactEditing, notesEditing, showTagInput, creatingProject, creatingEvent, expandedItemId, editingItemId, object.id])
+    // Only calculate top on initial placement (new object); keep it stable as content grows
+    if (initialTopSet.current !== object.id) {
+      const anchorRatio = Math.max(0, Math.min(1, nodeCenterY / vh))
+      let top = nodeCenterY - (h * anchorRatio)
+      top = Math.max(GAP, Math.min(top, vh - h - GAP))
+      initialTopSet.current = object.id
+      setPos({ left, top })
+    } else {
+      setPos(prev => ({ ...prev, left }))
+    }
+  }, [nodeRect, activeTab, headerEditing, contactEditing, creatingNote, editingNoteId, showTagInput, creatingProject, creatingEvent, expandedItemId, editingItemId, object.id])
 
   // --- Save functions ---
 
@@ -654,19 +610,81 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     onObjectUpdated?.()
   }
 
-  async function saveNotes() {
-    if (!user) return
+  async function createNote() {
+    if (!user || !newNoteText.trim()) return
+    setSaving(true)
+
+    // 1. Create skeleton objects row
+    const { data: newObj } = await supabase
+      .from('objects')
+      .insert({ class: 'note', is_canon: false, created_by: user.id })
+      .select('id')
+      .single()
+    if (!newObj) { setSaving(false); return }
+
+    // 2. Create objects_overrides with note text in name
+    const { error: ovError } = await supabase.from('objects_overrides').insert({
+      user_id: user.id,
+      object_id: newObj.id,
+      name: newNoteText.trim(),
+    })
+    if (ovError) { console.error('Failed to create note override:', ovError); setSaving(false); return }
+
+    // 3. Create connection to parent object
+    const { error: connErr } = await supabase.from('connections_overrides').insert({
+      user_id: user.id,
+      object_a_id: object.id,
+      object_b_id: newObj.id,
+    })
+    if (connErr) console.error('Failed to create note connection:', connErr)
+
+    setSaving(false)
+    setCreatingNote(false)
+    setNewNoteText('')
+    loadConnectedItems(object.id, 'note')
+  }
+
+  async function saveEditNote(noteId: string) {
+    if (!user || !editNoteText.trim()) return
+    setSaving(true)
+
     const { error } = await supabase
       .from('objects_overrides')
-      .update({
-        shared_notes: notesValues.shared_notes.trim() || null,
-        private_notes: notesValues.private_notes.trim() || null,
-      })
-      .eq('object_id', object.id)
+      .update({ name: editNoteText.trim() })
+      .eq('object_id', noteId)
       .eq('user_id', user.id)
-    if (error) { console.error('Failed to save notes:', error); return }
-    setNotesEditing(false)
-    onObjectUpdated?.()
+    if (error) { console.error('Failed to save note:', error); setSaving(false); return }
+
+    setSaving(false)
+    setEditingNoteId(null)
+    setEditNoteText('')
+    loadConnectedItems(object.id, 'note')
+  }
+
+  async function deleteNote(noteId: string) {
+    if (!user) return
+
+    // Hard delete connection, override, and object (notes are always user-created)
+    await supabase
+      .from('connections_overrides')
+      .delete()
+      .eq('user_id', user.id)
+      .is('connection_id', null)
+      .or(`and(object_a_id.eq.${object.id},object_b_id.eq.${noteId}),and(object_a_id.eq.${noteId},object_b_id.eq.${object.id})`)
+
+    await supabase
+      .from('objects_overrides')
+      .delete()
+      .eq('object_id', noteId)
+      .eq('user_id', user.id)
+
+    await supabase
+      .from('objects')
+      .delete()
+      .eq('id', noteId)
+      .eq('is_canon', false)
+
+    loadConnectedItems(object.id, 'note')
   }
 
   // ===== DELETE =====
@@ -1114,7 +1132,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (!panel) return
 
     function handleKeyDown(e: KeyboardEvent) {
-      const anyEditing = headerEditing || showTagInput || contactEditing || notesEditing || creatingProject || creatingEvent || editingItemId || showLinkSearch
+      const anyEditing = headerEditing || showTagInput || contactEditing || creatingNote || editingNoteId || creatingProject || creatingEvent || editingItemId || showLinkSearch
 
       if (e.key === 'Escape') {
         if (anyEditing) return
@@ -1168,7 +1186,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     }
     panel.addEventListener('keydown', handleKeyDown)
     return () => panel.removeEventListener('keydown', handleKeyDown)
-  }, [headerEditing, showTagInput, contactEditing, notesEditing, creatingProject, creatingEvent, editingItemId, showLinkSearch, onClose])
+  }, [headerEditing, showTagInput, contactEditing, creatingNote, editingNoteId, creatingProject, creatingEvent, editingItemId, showLinkSearch, onClose])
 
   // Off-screen detection
   const nodeOffScreen = !nodeRect ||
@@ -1789,7 +1807,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                     <span className={styles.value}>{c.value}</span>
                   </div>
                 ))}
-                {!(object.data?.contacts?.length) && !coterieIntel.some(ci => ci.contacts.length > 0) && (
+                {!(object.data?.contacts?.length) && !sharedIntel.some(r => r.share_type === 'contacts' && r.contacts?.length > 0) && (
                   <span className={styles.emptyState}>No contact info</span>
                 )}
                 {/* Coterie-shared contacts via coteries_shares table */}
@@ -1844,76 +1862,127 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {/* NOTES TAB */}
         {activeTab === 'notes' && (
           <div className={styles.tabSection}>
-            <div className={styles.tabFloatingAction}>
-              {notesEditing ? (
-                <>
-                  <Tooltip text="Save"><button className={styles.iconButtonSm} onClick={saveNotes}><Check size={12} /></button></Tooltip>
-                  <Tooltip text="Cancel"><button className={styles.iconButtonSm} onClick={() => {
-                    setNotesValues({ shared_notes: object.shared_notes || '', private_notes: object.private_notes || '' })
-                    setNotesEditing(false)
-                  }}><X size={12} /></button></Tooltip>
-                </>
-              ) : (
-                <Tooltip text="Edit notes">
-                  <button className={styles.iconButtonSm} onClick={() => setNotesEditing(true)}>
-                    <Pencil size={12} />
+            {!creatingNote && (
+              <div className={styles.tabFloatingAction}>
+                <Tooltip text="Add note">
+                  <button className={styles.iconButtonSm} onClick={() => setCreatingNote(true)}>
+                    <Plus size={12} />
                   </button>
                 </Tooltip>
-              )}
-            </div>
-            {notesEditing ? (
-              <div className={styles.editFields}>
-                <div className={styles.editField}>
-                  <label className={styles.label}>Shared with Coteries</label>
-                  <textarea
-                    className={styles.editTextarea}
-                    value={notesValues.shared_notes}
-                    onChange={e => setNotesValues(prev => ({ ...prev, shared_notes: e.target.value }))}
-                    placeholder="Notes visible to your coterie..."
-                    rows={3}
-                  />
-                </div>
-                <div className={styles.editField}>
-                  <label className={styles.label}>Private (Not Shared)</label>
-                  <textarea
-                    className={styles.editTextarea}
-                    value={notesValues.private_notes}
-                    onChange={e => setNotesValues(prev => ({ ...prev, private_notes: e.target.value }))}
-                    placeholder="Private notes (never shared)..."
-                    rows={3}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className={styles.readFields}>
-                {object.shared_notes && (
-                  <div className={styles.noteBlock}>
-                    <span className={styles.label}>Shared with Coteries</span>
-                    <p className={styles.noteText}>{object.shared_notes}</p>
-                  </div>
-                )}
-                {object.private_notes && (
-                  <div className={styles.noteBlock}>
-                    <span className={styles.label}>Private (Not Shared)</span>
-                    <p className={styles.noteText}>{object.private_notes}</p>
-                  </div>
-                )}
-                {!object.shared_notes && !object.private_notes && !coterieIntel.some(ci => ci.shared_notes) && (
-                  <span className={styles.emptyState}>No notes</span>
-                )}
-                {coterieIntel.some(ci => ci.shared_notes) && (
-                  <div className={styles.coterieIntelSection}>
-                    <span className={styles.coterieIntelLabel}>Coterie Intel</span>
-                    {coterieIntel.filter(ci => ci.shared_notes).map(ci => (
-                      <div key={ci.user_id} className={styles.coterieIntelEntry}>
-                        <span className={styles.coterieIntelAuthor}>{ci.display_name}</span>
-                        <p className={styles.noteText}>{ci.shared_notes}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
+            {creatingNote && (
+              <div className={styles.createForm}>
+                <textarea
+                  className={styles.editTextarea}
+                  value={newNoteText}
+                  onChange={e => setNewNoteText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { setCreatingNote(false); setNewNoteText('') }
+                  }}
+                  placeholder="Write a note..."
+                  autoFocus
+                  rows={3}
+                />
+                <div className={styles.createFormActions}>
+                  <button
+                    className={styles.addButton}
+                    onClick={createNote}
+                    disabled={saving || !newNoteText.trim()}
+                  >
+                    <Check size={12} /> {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    className={styles.addButton}
+                    onClick={() => { setCreatingNote(false); setNewNoteText('') }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {connectedNotes.length === 0 && !creatingNote && (
+              <span className={styles.emptyState}>No notes yet</span>
+            )}
+            {connectedNotes.length > 0 && (
+              <div className={styles.itemList}>
+                {connectedNotes.map(note => (
+                  <div key={note.id} className={styles.item}>
+                    {editingNoteId === note.id ? (
+                      <div className={styles.itemEditBody}>
+                        <textarea
+                          className={styles.editTextarea}
+                          value={editNoteText}
+                          onChange={e => setEditNoteText(e.target.value)}
+                          autoFocus
+                          rows={3}
+                        />
+                        <div className={styles.createFormActions}>
+                          <button
+                            className={styles.addButton}
+                            onClick={() => saveEditNote(note.id)}
+                            disabled={saving || !editNoteText.trim()}
+                          >
+                            <Check size={12} /> {saving ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            className={styles.addButton}
+                            onClick={() => { setEditingNoteId(null); setEditNoteText('') }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={styles.noteCard}>
+                        <p className={styles.noteText}>{note.name}</p>
+                        <div className={styles.itemActions}>
+                          <Tooltip text="Edit">
+                            <button
+                              className={styles.iconButtonSm}
+                              onClick={() => { setEditingNoteId(note.id); setEditNoteText(note.name) }}
+                            >
+                              <Pencil size={11} />
+                            </button>
+                          </Tooltip>
+                          <Tooltip text="Remove">
+                            <button
+                              className={styles.iconButtonSmDanger}
+                              onClick={() => deleteNote(note.id)}
+                            >
+                              <X size={11} />
+                            </button>
+                          </Tooltip>
+                          <CoterieSharePicker objectId={note.id} shareType="note" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {(() => {
+              const noteIntel = sharedIntel.filter(r => r.share_type === 'note')
+              if (noteIntel.length === 0) return null
+              const byPeer = new Map<string, { display_name: string; items: SharedIntelRow[] }>()
+              for (const r of noteIntel) {
+                if (!byPeer.has(r.peer_user_id)) byPeer.set(r.peer_user_id, { display_name: r.peer_display_name, items: [] })
+                byPeer.get(r.peer_user_id)!.items.push(r)
+              }
+              return (
+                <div className={styles.coterieIntelSection}>
+                  <span className={styles.coterieIntelLabel}>Coterie Intel</span>
+                  {Array.from(byPeer.entries()).map(([uid, { display_name, items }]) => (
+                    <div key={uid} className={styles.coterieIntelEntry}>
+                      <span className={styles.coterieIntelAuthor}>{display_name}</span>
+                      {items.map(item => (
+                        <p key={item.shared_object_id} className={styles.noteText}>{item.name || '(empty note)'}</p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         )}
 

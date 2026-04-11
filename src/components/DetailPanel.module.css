@@ -411,6 +411,13 @@
   white-space: pre-wrap;
 }
 
+.noteCard {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* Coterie Intel sections */
 .coterieIntelSection {
   margin-top: 12px;

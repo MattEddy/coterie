@@ -14,7 +14,7 @@ interface CoterieOption {
 
 interface CoterieSharePickerProps {
   objectId: string
-  shareType: 'contacts' | 'project' | 'event'
+  shareType: 'contacts' | 'project' | 'event' | 'note'
 }
 
 export default function CoterieSharePicker({ objectId, shareType }: CoterieSharePickerProps) {

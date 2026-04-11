@@ -33,7 +33,7 @@ const demoNode = (
   data: {
     id, name, title: title ?? null, class: cls,
     status: null, types, photo_url: null, data: null,
-    shared_notes: null, private_notes: null, tags: null,
+    tags: null,
     is_canon: true, created_by: null,
   } satisfies ObjectNodeData as ObjectNodeData & Record<string, unknown>,
 })

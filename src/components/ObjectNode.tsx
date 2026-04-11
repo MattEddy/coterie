@@ -18,8 +18,6 @@ export interface ObjectNodeData {
   types: string[]
   photo_url: string | null
   data: { contacts?: ContactEntry[] } | null
-  shared_notes: string | null
-  private_notes: string | null
   tags: string[] | null
   is_canon: boolean
   created_by: string | null

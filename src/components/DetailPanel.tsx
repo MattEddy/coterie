@@ -605,7 +605,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (!user || !newNoteText.trim()) return
     setSaving(true)
 
-    const { data: noteId, error } = await supabase.rpc('create_note', {
+    const { error } = await supabase.rpc('create_note', {
       p_user_id: user.id,
       p_parent_id: object.id,
       p_text: newNoteText.trim(),
@@ -729,7 +729,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (!user || !newItemValues.name.trim()) return
     setSaving(true)
 
-    const { data: newId, error } = await supabase.rpc('create_connected_item', {
+    const { error } = await supabase.rpc('create_connected_item', {
       p_user_id: user.id,
       p_parent_id: object.id,
       p_class: targetClass,

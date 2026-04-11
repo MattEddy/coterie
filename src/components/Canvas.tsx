@@ -503,7 +503,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
 
       const item: SelectedItem = { nodeId: node.id, data: node.data as unknown as ObjectNodeData }
 
-      if (event.metaKey || event.shiftKey) {
+      if (event.metaKey || event.ctrlKey || event.shiftKey) {
         setSelectedItems(prev => {
           const exists = prev.find(i => i.nodeId === node.id)
           if (exists) return prev.filter(i => i.nodeId !== node.id)
@@ -991,7 +991,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         selectionOnDrag={!mapEditMode}
         selectionMode={SelectionMode.Partial}
         elementsSelectable={!mapEditMode}
-        multiSelectionKeyCode="Meta"
+        multiSelectionKeyCode={navigator.platform.includes('Mac') ? 'Meta' : 'Control'}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--color-dots)" />

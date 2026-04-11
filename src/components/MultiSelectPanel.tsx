@@ -83,65 +83,11 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
   const handleDelete = async () => {
     if (!user) return
 
-    // Delete overrides first (critical — removes from landscape)
-    for (const id of objectIds) {
-      await supabase
-        .from('objects_overrides')
-        .delete()
-        .eq('object_id', id)
-        .eq('user_id', user.id)
-    }
-
-    // Clean up connections (non-critical)
-    try {
-      // Delete user-created connections involving any of these objects
-      for (const id of objectIds) {
-        await supabase
-          .from('connections_overrides')
-          .delete()
-          .eq('user_id', user.id)
-          .or(`object_a_id.eq.${id},object_b_id.eq.${id}`)
-      }
-
-      // Deactivate canonical connections involving these objects
-      for (const id of objectIds) {
-        const { data: canonConns } = await supabase
-          .from('connections')
-          .select('id, object_a_id, object_b_id')
-          .eq('is_active', true)
-          .or(`object_a_id.eq.${id},object_b_id.eq.${id}`)
-
-        for (const c of canonConns ?? []) {
-          const { data: existing } = await supabase
-            .from('connections_overrides')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('connection_id', c.id)
-            .maybeSingle()
-
-          if (existing) {
-            await supabase.from('connections_overrides').update({ deactivated: true }).eq('id', existing.id)
-          } else {
-            await supabase.from('connections_overrides').insert({
-              user_id: user.id,
-              connection_id: c.id,
-              object_a_id: c.object_a_id,
-              object_b_id: c.object_b_id,
-              deactivated: true,
-            })
-          }
-        }
-      }
-
-      // Hard-delete user-created objects
-      for (const item of items) {
-        if (!item.data.is_canon && item.data.created_by === user.id) {
-          await supabase.from('objects').delete().eq('id', item.nodeId)
-        }
-      }
-    } catch (e) {
-      console.error('Connection cleanup error (non-critical):', e)
-    }
+    const { error } = await supabase.rpc('delete_multiple_objects', {
+      p_user_id: user.id,
+      p_object_ids: objectIds,
+    })
+    if (error) { console.error('Delete error:', error); return }
 
     onClose()
     document.dispatchEvent(new Event('maps:refresh'))
@@ -150,23 +96,16 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
 
   const handleCreateMap = async () => {
     if (!user || !newMapName.trim()) return
-    const { data: map, error: mapError } = await supabase
-      .from('maps')
-      .insert({ name: newMapName.trim(), user_id: user.id })
-      .select('id')
-      .single()
 
-    if (mapError || !map) { console.error('Failed to create map:', mapError); return }
-
-    // Add all selected objects
-    const { error: objError } = await supabase
-      .from('maps_objects')
-      .insert(objectIds.map(id => ({ map_id: map.id, object_ref_id: id })))
-    if (objError) console.error('Failed to add objects to map:', objError)
+    const { data: mapId, error } = await supabase.rpc('create_map_with_objects', {
+      p_user_id: user.id,
+      p_name: newMapName.trim(),
+      p_object_ids: objectIds,
+    })
+    if (error || !mapId) { console.error('Failed to create map:', error); return }
 
     setNewMapName('')
-    // Notify MapsFrame to refresh and select the new map, then clear selection
-    document.dispatchEvent(new CustomEvent('coterie:map-created', { detail: { mapId: map.id } }))
+    document.dispatchEvent(new CustomEvent('coterie:map-created', { detail: { mapId } }))
     onClose()
   }
 

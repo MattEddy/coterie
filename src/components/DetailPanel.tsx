@@ -446,23 +446,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (!user) return
     setSaving(true)
 
-    const { error: connError } = await supabase.from('connections_overrides').insert({
-      user_id: user.id,
-      object_a_id: object.id,
-      object_b_id: existingId,
+    const { error } = await supabase.rpc('link_existing_item', {
+      p_user_id: user.id,
+      p_parent_id: object.id,
+      p_item_id: existingId,
     })
-    if (connError) { console.error('Failed to link item:', connError); setSaving(false); return }
-
-    // Ensure override row exists so it shows up in user_objects
-    const { data: existing } = await supabase
-      .from('objects_overrides')
-      .select('id')
-      .eq('object_id', existingId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-    if (!existing) {
-      await supabase.from('objects_overrides').insert({ user_id: user.id, object_id: existingId })
-    }
+    if (error) { console.error('Failed to link item:', error); setSaving(false); return }
 
     setSaving(false)
     if (targetClass === 'project') {
@@ -616,29 +605,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (!user || !newNoteText.trim()) return
     setSaving(true)
 
-    // 1. Create skeleton objects row
-    const { data: newObj } = await supabase
-      .from('objects')
-      .insert({ class: 'note', is_canon: false, created_by: user.id })
-      .select('id')
-      .single()
-    if (!newObj) { setSaving(false); return }
-
-    // 2. Create objects_overrides with note text in name
-    const { error: ovError } = await supabase.from('objects_overrides').insert({
-      user_id: user.id,
-      object_id: newObj.id,
-      name: newNoteText.trim(),
+    const { data: noteId, error } = await supabase.rpc('create_note', {
+      p_user_id: user.id,
+      p_parent_id: object.id,
+      p_text: newNoteText.trim(),
     })
-    if (ovError) { console.error('Failed to create note override:', ovError); setSaving(false); return }
-
-    // 3. Create connection to parent object
-    const { error: connErr } = await supabase.from('connections_overrides').insert({
-      user_id: user.id,
-      object_a_id: object.id,
-      object_b_id: newObj.id,
-    })
-    if (connErr) console.error('Failed to create note connection:', connErr)
+    if (error) { console.error('Failed to create note:', error); setSaving(false); return }
 
     setSaving(false)
     setCreatingNote(false)
@@ -666,25 +638,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   async function deleteNote(noteId: string) {
     if (!user) return
 
-    // Hard delete connection, override, and object (notes are always user-created)
-    await supabase
-      .from('connections_overrides')
-      .delete()
-      .eq('user_id', user.id)
-      .is('connection_id', null)
-      .or(`and(object_a_id.eq.${object.id},object_b_id.eq.${noteId}),and(object_a_id.eq.${noteId},object_b_id.eq.${object.id})`)
-
-    await supabase
-      .from('objects_overrides')
-      .delete()
-      .eq('object_id', noteId)
-      .eq('user_id', user.id)
-
-    await supabase
-      .from('objects')
-      .delete()
-      .eq('id', noteId)
-      .eq('is_canon', false)
+    const { error } = await supabase.rpc('delete_connected_item', {
+      p_user_id: user.id,
+      p_parent_id: object.id,
+      p_item_id: noteId,
+    })
+    if (error) console.error('Failed to delete note:', error)
 
     loadConnectedItems(object.id, 'note')
   }
@@ -754,135 +713,11 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   async function executeDelete() {
     if (!user) return
 
-    // Delete the override FIRST (critical operation — removes from landscape)
-    const { error: deleteError } = await supabase
-      .from('objects_overrides')
-      .delete()
-      .eq('object_id', object.id)
-      .eq('user_id', user.id)
-
-    if (deleteError) return
-
-    // If user-created, hard-delete the objects row too
-    if (!object.is_canon && object.created_by === user.id) {
-      await supabase.from('objects').delete().eq('id', object.id)
-    }
-
-    // Clean up connections (non-critical — wrapped in try/catch)
-    try {
-    // 1. Delete user-created connections involving this object
-    await supabase
-      .from('connections_overrides')
-      .delete()
-      .eq('user_id', user.id)
-      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
-
-    // 2. Deactivate canonical connections (create override with deactivated=true)
-    const { data: canonConns } = await supabase
-      .from('connections')
-      .select('id')
-      .eq('is_active', true)
-      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
-
-    if (canonConns?.length) {
-      for (const c of canonConns) {
-        const { data: existing } = await supabase
-          .from('connections_overrides')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('connection_id', c.id)
-          .maybeSingle()
-
-        if (existing) {
-          await supabase
-            .from('connections_overrides')
-            .update({ deactivated: true })
-            .eq('id', existing.id)
-        } else {
-          // Need real object_a/object_b from the canonical connection
-          const { data: conn } = await supabase
-            .from('connections')
-            .select('object_a_id, object_b_id')
-            .eq('id', c.id)
-            .single()
-
-          if (conn) {
-            await supabase
-              .from('connections_overrides')
-              .insert({
-                user_id: user.id,
-                connection_id: c.id,
-                object_a_id: conn.object_a_id,
-                object_b_id: conn.object_b_id,
-                deactivated: true,
-              })
-          }
-        }
-      }
-    }
-
-    // 3. Clean up orphaned off-landscape objects
-    const { data: offConns } = await supabase
-      .from('connections')
-      .select('object_a_id, object_b_id')
-      .eq('is_active', true)
-      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
-
-    const { data: offUserConns } = await supabase
-      .from('connections_overrides')
-      .select('object_a_id, object_b_id')
-      .eq('user_id', user.id)
-      .is('connection_id', null)
-      .or(`object_a_id.eq.${object.id},object_b_id.eq.${object.id}`)
-
-    const orphanCandidates = new Set<string>()
-    for (const c of [...(offConns || []), ...(offUserConns || [])]) {
-      orphanCandidates.add(c.object_a_id === object.id ? c.object_b_id : c.object_a_id)
-    }
-
-    for (const orphanId of orphanCandidates) {
-      // Delete connections to this orphan that go through our object
-      // (already deleted above via user connections + deactivated canonical)
-      // Check if truly orphaned now
-      const { count: remaining } = await supabase
-        .from('connections')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .or(`object_a_id.eq.${orphanId},object_b_id.eq.${orphanId}`)
-        .neq('object_a_id', object.id)
-        .neq('object_b_id', object.id)
-
-      const { count: remainingUser } = await supabase
-        .from('connections_overrides')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .is('connection_id', null)
-        .or(`object_a_id.eq.${orphanId},object_b_id.eq.${orphanId}`)
-        .neq('object_a_id', object.id)
-        .neq('object_b_id', object.id)
-
-      if ((remaining || 0) + (remainingUser || 0) === 0) {
-        // Orphan — hard-delete override and (if user-created) the object
-        await supabase
-          .from('objects_overrides')
-          .delete()
-          .eq('object_id', orphanId)
-          .eq('user_id', user.id)
-
-        const { data: orphanObj } = await supabase
-          .from('objects')
-          .select('is_canon, created_by')
-          .eq('id', orphanId)
-          .single()
-
-        if (orphanObj && !orphanObj.is_canon && orphanObj.created_by === user.id) {
-          await supabase.from('objects').delete().eq('id', orphanId)
-        }
-      }
-    }
-    } catch (e) {
-      console.error('Connection cleanup error (non-critical):', e)
-    }
+    const { error } = await supabase.rpc('delete_object_with_cleanup', {
+      p_user_id: user.id,
+      p_object_id: object.id,
+    })
+    if (error) { console.error('Delete error:', error); return }
 
     setDeleteConfirm(null)
     onClose()
@@ -894,63 +729,18 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (!user || !newItemValues.name.trim()) return
     setSaving(true)
 
-    // 1. Create skeleton objects row
-    const { data: newObj } = await supabase
-      .from('objects')
-      .insert({ class: targetClass, is_canon: false, created_by: user.id })
-      .select('id')
-      .single()
-
-    if (!newObj) { setSaving(false); return }
-
-    // 2. Create objects_overrides with all user data
-    const overridePayload: Record<string, unknown> = {
-      user_id: user.id,
-      object_id: newObj.id,
-      name: newItemValues.name.trim(),
-      title: newItemValues.title.trim() || null,
-      status: newItemValues.status.trim() || null,
-    }
-    if (targetClass === 'event' && newItemValues.event_date) {
-      overridePayload.event_date = newItemValues.event_date
-    }
-    const { error: ovError } = await supabase.from('objects_overrides').insert(overridePayload)
-    if (ovError) { console.error('Failed to create override:', ovError); setSaving(false); return }
-
-    // 3. Create types overrides (resolve display_names to UUIDs)
-    if (newItemTypes.length > 0) {
-      const { data: typeRows } = await supabase
-        .from('types')
-        .select('id, display_name')
-        .in('display_name', newItemTypes)
-        .eq('class', targetClass)
-      const typeIds = (typeRows || []).map(t => t.id)
-      if (typeIds.length > 0) {
-        await supabase
-          .from('objects_types_overrides')
-          .insert(typeIds.map(typeId => ({ user_id: user.id, object_id: newObj.id, type_id: typeId })))
-      }
-    }
-
-    // 4. Create connection to current node
-    const { error: connErr } = await supabase.from('connections_overrides').insert({
-      user_id: user.id,
-      object_a_id: object.id,
-      object_b_id: newObj.id,
+    const { data: newId, error } = await supabase.rpc('create_connected_item', {
+      p_user_id: user.id,
+      p_parent_id: object.id,
+      p_class: targetClass,
+      p_name: newItemValues.name.trim(),
+      p_title: newItemValues.title.trim() || null,
+      p_status: newItemValues.status.trim() || null,
+      p_event_date: targetClass === 'event' && newItemValues.event_date ? newItemValues.event_date : null,
+      p_types: newItemTypes,
+      p_link_ids: newItemLinks.map(l => l.id),
     })
-    if (connErr) console.error('Failed to create connection:', connErr)
-
-    // 5. Create additional connections from the link picker
-    if (newItemLinks.length > 0) {
-      const { error: linksErr } = await supabase.from('connections_overrides').insert(
-        newItemLinks.map(link => ({
-          user_id: user.id,
-          object_a_id: link.id,
-          object_b_id: newObj.id,
-        }))
-      )
-      if (linksErr) console.error('Failed to create link connections:', linksErr)
-    }
+    if (error) { console.error('Failed to create item:', error); setSaving(false); return }
 
     // Reset and reload
     setSaving(false)
@@ -969,54 +759,17 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (!user) return
     setSaving(true)
 
-    const payload: Record<string, unknown> = {
-      name: editItemValues.name.trim() || null,
-      title: editItemValues.title.trim() || null,
-      status: editItemValues.status.trim() || null,
-    }
-    if (targetClass === 'event') {
-      payload.event_date = editItemValues.event_date || null
-    }
-
-    // Upsert override (might not exist yet for canonical objects)
-    const { data: existing } = await supabase
-      .from('objects_overrides')
-      .select('id')
-      .eq('object_id', itemId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (existing) {
-      await supabase
-        .from('objects_overrides')
-        .update(payload)
-        .eq('object_id', itemId)
-        .eq('user_id', user.id)
-    } else {
-      await supabase
-        .from('objects_overrides')
-        .insert({ user_id: user.id, object_id: itemId, ...payload })
-    }
-
-    // Save types
-    await supabase
-      .from('objects_types_overrides')
-      .delete()
-      .eq('object_id', itemId)
-      .eq('user_id', user.id)
-    if (editItemTypes.length > 0) {
-      const { data: typeRows } = await supabase
-        .from('types')
-        .select('id, display_name')
-        .in('display_name', editItemTypes)
-        .eq('class', targetClass)
-      const typeIds = (typeRows || []).map(t => t.id)
-      if (typeIds.length > 0) {
-        await supabase
-          .from('objects_types_overrides')
-          .insert(typeIds.map(typeId => ({ user_id: user.id, object_id: itemId, type_id: typeId })))
-      }
-    }
+    const { error } = await supabase.rpc('save_item_with_types', {
+      p_user_id: user.id,
+      p_object_id: itemId,
+      p_class: targetClass,
+      p_name: editItemValues.name.trim() || null,
+      p_title: editItemValues.title.trim() || null,
+      p_status: editItemValues.status.trim() || null,
+      p_event_date: targetClass === 'event' && editItemValues.event_date ? editItemValues.event_date : null,
+      p_types: editItemTypes,
+    })
+    if (error) { console.error('Failed to save item:', error); setSaving(false); return }
 
     setSaving(false)
     setEditingItemId(null)
@@ -1027,89 +780,12 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   async function deleteConnectedItem(itemId: string, targetClass: 'project' | 'event') {
     if (!user) return
 
-    // Deactivate canonical connections between this node and the item
-    const { data: canonConns } = await supabase
-      .from('connections')
-      .select('id')
-      .eq('is_active', true)
-      .or(`and(object_a_id.eq.${object.id},object_b_id.eq.${itemId}),and(object_a_id.eq.${itemId},object_b_id.eq.${object.id})`)
-
-    if (canonConns && canonConns.length > 0) {
-      for (const conn of canonConns) {
-        await supabase.from('connections_overrides').upsert({
-          user_id: user.id,
-          connection_id: conn.id,
-          deactivated: true,
-        }, { onConflict: 'user_id,connection_id' })
-      }
-    }
-
-    // Hard delete user-created connections between this node and the item
-    await supabase
-      .from('connections_overrides')
-      .delete()
-      .eq('user_id', user.id)
-      .is('connection_id', null)
-      .or(`and(object_a_id.eq.${object.id},object_b_id.eq.${itemId}),and(object_a_id.eq.${itemId},object_b_id.eq.${object.id})`)
-
-    // Check if the item has any remaining connections for this user
-    // Canonical connections not deactivated by this user
-    const { data: allCanonConns } = await supabase
-      .from('connections')
-      .select('id')
-      .eq('is_active', true)
-      .or(`object_a_id.eq.${itemId},object_b_id.eq.${itemId}`)
-
-    const { data: allDeactivated } = await supabase
-      .from('connections_overrides')
-      .select('connection_id')
-      .eq('user_id', user.id)
-      .not('connection_id', 'is', null)
-      .eq('deactivated', true)
-
-    const deactivatedIds = new Set((allDeactivated || []).map(d => d.connection_id))
-    const activeCanon = (allCanonConns || []).filter(c => !deactivatedIds.has(c.id)).length
-
-    // Remaining user-created connections
-    const { count: remainingUser } = await supabase
-      .from('connections_overrides')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .is('connection_id', null)
-      .or(`object_a_id.eq.${itemId},object_b_id.eq.${itemId}`)
-
-    const totalRemaining = activeCanon + (remainingUser || 0)
-
-    // If no remaining connections, clean up the orphaned item
-    if (totalRemaining <= 0) {
-      // Hard delete the user's override
-      await supabase
-        .from('objects_overrides')
-        .delete()
-        .eq('object_id', itemId)
-        .eq('user_id', user.id)
-
-      // Hard delete type overrides
-      await supabase
-        .from('objects_types_overrides')
-        .delete()
-        .eq('object_id', itemId)
-        .eq('user_id', user.id)
-
-      // If user created it and it's not canonical, hard delete the objects row too
-      const { data: obj } = await supabase
-        .from('objects')
-        .select('is_canon, created_by')
-        .eq('id', itemId)
-        .single()
-
-      if (obj && !obj.is_canon && obj.created_by === user.id) {
-        await supabase
-          .from('objects')
-          .delete()
-          .eq('id', itemId)
-      }
-    }
+    const { error } = await supabase.rpc('delete_connected_item', {
+      p_user_id: user.id,
+      p_parent_id: object.id,
+      p_item_id: itemId,
+    })
+    if (error) console.error('Failed to delete item:', error)
 
     setExpandedItemId(null)
     setEditingItemId(null)

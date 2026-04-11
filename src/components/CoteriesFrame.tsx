@@ -397,36 +397,13 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
       : emails
     if (!user || !name.trim() || selectedMapIds.size === 0) return
 
-    // Create the coterie
-    const { data: coterie, error } = await supabase
-      .from('coteries')
-      .insert({ name: name.trim(), owner_id: user.id })
-      .select('id')
-      .single()
-    if (error || !coterie) { console.error('Coterie create error:', error); return }
-
-    // Add owner as member
-    await supabase.from('coteries_members').insert({
-      coterie_id: coterie.id,
-      user_id: user.id,
-      role: 'owner',
+    const { data: coterieId, error } = await supabase.rpc('create_coterie_with_maps', {
+      p_user_id: user.id,
+      p_name: name.trim(),
+      p_map_ids: Array.from(selectedMapIds),
+      p_emails: finalEmails,
     })
-
-    // Link selected maps
-    const mapInserts = Array.from(selectedMapIds).map(mapId => ({
-      coterie_id: coterie.id,
-      map_id: mapId,
-    }))
-    await supabase.from('coteries_maps').insert(mapInserts)
-
-    // Create invitations
-    for (const email of finalEmails) {
-      await supabase.from('coteries_invitations').insert({
-        coterie_id: coterie.id,
-        invited_by: user.id,
-        email,
-      })
-    }
+    if (error || !coterieId) { console.error('Coterie create error:', error); return }
 
     onCreated()
   }
@@ -628,262 +605,55 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
   const handleAcceptInvite = async (invite: PendingInvite) => {
     if (!user) return
 
-    // Mark invitation as accepted
-    const { error: invError } = await supabase
-      .from('coteries_invitations')
-      .update({ status: 'accepted', user_id: user.id })
-      .eq('id', invite.id)
-    if (invError) console.error('Failed to accept invitation:', invError)
-
-    // Add user as member
-    const { error: memberError } = await supabase.from('coteries_members').insert({
-      coterie_id: invite.coterie_id,
-      user_id: user.id,
-      role: 'member',
+    // Step 1: Accept invitation and get placement data via RPC
+    const { data: result, error } = await supabase.rpc('accept_coterie_invitation', {
+      p_user_id: user.id,
+      p_invitation_id: invite.id,
     })
-    if (memberError) { console.error('Failed to join coterie:', memberError); return }
+    if (error || !result || result.error) { console.error('Accept error:', error || result?.error); return }
 
-    // Collect all objects from all maps linked to this coterie
-    const { data: coterieMaps } = await supabase
-      .from('coteries_maps')
-      .select('map_id')
-      .eq('coterie_id', invite.coterie_id)
-
-    const allObjectIds = new Set<string>()
-    if (coterieMaps) {
-      for (const cm of coterieMaps) {
-        const { data: mapObjs } = await supabase
-          .from('maps_objects')
-          .select('object_ref_id')
-          .eq('map_id', cm.map_id)
-        if (mapObjs) mapObjs.forEach(o => allObjectIds.add(o.object_ref_id))
-      }
-    }
-
-    // Get the coterie name for the recipient map
-    const coterie = coteries.find(c => c.id === invite.coterie_id)
-    const mapName = coterie?.name ?? invite.coterie_name
-
-    // Create the aggregated recipient map
-    const { data: newMap } = await supabase
-      .from('maps')
-      .insert({
-        name: mapName,
-        user_id: user.id,
-        source_coterie_id: invite.coterie_id,
-      })
-      .select('id')
-      .single()
-
-    if (newMap && allObjectIds.size > 0) {
-      // Add all objects to the recipient map
-      const mapObjInserts = Array.from(allObjectIds).map(objId => ({
-        map_id: newMap.id,
-        object_ref_id: objId,
-      }))
-      await supabase.from('maps_objects').insert(mapObjInserts)
-    }
-
-    // Find which objects the user doesn't already have
-    const { data: existingOverrides } = await supabase
-      .from('objects_overrides')
-      .select('object_id')
-      .eq('user_id', user.id)
-    const existingIds = new Set(existingOverrides?.map(o => o.object_id) ?? [])
-    const newObjectIds = Array.from(allObjectIds).filter(id => !existingIds.has(id))
-
-    if (newObjectIds.length === 0) {
-      // All objects already on landscape, just refresh
-      await loadCoteries()
-      await loadInvitations()
+    // Step 2: If no new items to place, just refresh
+    if (result.items.length === 0) {
+      await loadCoteries(); await loadInvitations()
       document.dispatchEvent(new Event('coterie:refresh-canvas'))
       return
     }
 
-    // Get owner positions for relative layout
-    const { data: coterieRow } = await supabase
-      .from('coteries')
-      .select('owner_id')
-      .eq('id', invite.coterie_id)
-      .single()
-
-    let ownerPositions = new Map<string, { x: number; y: number }>()
-    if (coterieRow) {
-      const { data: ownerOverrides } = await supabase
-        .from('objects_overrides')
-        .select('object_id, map_x, map_y')
-        .eq('user_id', coterieRow.owner_id)
-        .in('object_id', newObjectIds)
-      if (ownerOverrides) {
-        for (const ov of ownerOverrides) {
-          if (ov.map_x != null && ov.map_y != null) {
-            ownerPositions.set(ov.object_id, { x: ov.map_x, y: ov.map_y })
-          }
-        }
-      }
-    }
-
-    // Compute centroid
-    const positions = Array.from(ownerPositions.values())
-    const centroid = positions.length > 0
-      ? { x: positions.reduce((s, p) => s + p.x, 0) / positions.length, y: positions.reduce((s, p) => s + p.y, 0) / positions.length }
-      : { x: 0, y: 0 }
-
-    // Fetch object details for ghost rendering
-    const { data: objectRows } = await supabase
-      .from('objects')
-      .select('id, name, class')
-      .in('id', newObjectIds)
-
-    // Get owner's overrides (name, title, status) for user-created objects
-    const { data: ownerOverrideRows } = coterieRow ? await supabase
-      .from('objects_overrides')
-      .select('object_id, name, title, status')
-      .eq('user_id', coterieRow.owner_id)
-      .in('object_id', newObjectIds) : { data: [] }
-    const ownerOverrides = new Map((ownerOverrideRows ?? []).map(o => [o.object_id, o]))
-
-    // Fetch owner's type overrides for these objects
-    const { data: ownerTypeRows } = coterieRow ? await supabase
-      .from('objects_types_overrides')
-      .select('object_id, type_id, is_primary')
-      .eq('user_id', coterieRow.owner_id)
-      .in('object_id', newObjectIds) : { data: [] }
-    const ownerTypeOverrides = ownerTypeRows ?? []
-
-    // Fetch canonical connections between these objects
-    const { data: connRows } = await supabase
-      .from('connections')
-      .select('object_a_id, object_b_id')
-      .eq('is_active', true)
-      .in('object_a_id', newObjectIds)
-      .in('object_b_id', newObjectIds)
-
-    // Fetch owner's user-created connections between these objects
-    const { data: ownerConnRows } = coterieRow ? await supabase
-      .from('connections_overrides')
-      .select('id, object_a_id, object_b_id, role_a, role_b')
-      .eq('user_id', coterieRow.owner_id)
-      .is('connection_id', null)
-      .eq('deactivated', false)
-      .in('object_a_id', newObjectIds)
-      .in('object_b_id', newObjectIds) : { data: [] }
-    const ownerUserConns = ownerConnRows ?? []
-
-    const items = newObjectIds.map(id => {
-      const obj = objectRows?.find(o => o.id === id)
-      const ownerPos = ownerPositions.get(id)
-      return {
-        objectId: id,
-        name: ownerOverrides.get(id)?.name ?? obj?.name ?? 'Unknown',
-        class: obj?.class ?? 'person',
-        relativeX: ownerPos ? ownerPos.x - centroid.x : 0,
-        relativeY: ownerPos ? ownerPos.y - centroid.y : 0,
-      }
-    })
-
-    const connections = [
-      ...(connRows ?? []).map(c => ({ sourceId: c.object_a_id, targetId: c.object_b_id })),
-      ...ownerUserConns.map(c => ({ sourceId: c.object_a_id, targetId: c.object_b_id })),
-    ]
-
-    // Copy owner's user-created connections for the recipient
-    const insertUserConnections = async () => {
-      if (ownerUserConns.length === 0) return
-      const connOverrides = ownerUserConns.map(c => ({
-        user_id: user.id,
-        object_a_id: c.object_a_id,
-        object_b_id: c.object_b_id,
-        role_a: c.role_a,
-        role_b: c.role_b,
-        deactivated: false,
-      }))
-      await supabase.from('connections_overrides').insert(connOverrides)
-    }
-
-    // Copy owner's type overrides so recipient starts with matching types
-    const insertTypeOverrides = async () => {
-      if (ownerTypeOverrides.length === 0) return
-      await supabase.from('objects_types_overrides').insert(
-        ownerTypeOverrides.map(t => ({
-          user_id: user.id,
-          object_id: t.object_id,
-          type_id: t.type_id,
-          is_primary: t.is_primary,
-        }))
-      )
-    }
-
     // Enter placement mode
-    if (onEnterPlacement) {
-      onEnterPlacement({
-        label: invite.coterie_name,
-        items,
-        connections,
-        onConfirm: async (anchorX, anchorY) => {
-          const overrides = items.map(item => {
-            const oo = ownerOverrides.get(item.objectId)
-            return {
-              user_id: user.id,
-              object_id: item.objectId,
-              map_x: anchorX + item.relativeX,
-              map_y: anchorY + item.relativeY,
-              ...(oo?.name && { name: oo.name }),
-              ...(oo?.title && { title: oo.title }),
-              ...(oo?.status && { status: oo.status }),
-            }
-          })
-          await supabase.from('objects_overrides').insert(overrides)
-          await insertUserConnections()
-          await insertTypeOverrides()
-          await loadCoteries()
-          await loadInvitations()
-          document.dispatchEvent(new CustomEvent('maps:refresh'))
-        },
-        onCancel: () => {
-          // Still create overrides at default positions (invitation already accepted)
-          const overrides = items.map(item => {
-            const oo = ownerOverrides.get(item.objectId)
-            return {
-              user_id: user.id,
-              object_id: item.objectId,
-              map_x: item.relativeX,
-              map_y: item.relativeY,
-              ...(oo?.name && { name: oo.name }),
-              ...(oo?.title && { title: oo.title }),
-              ...(oo?.status && { status: oo.status }),
-            }
-          })
-          supabase.from('objects_overrides').insert(overrides).then(async () => {
-            await insertUserConnections()
-            await insertTypeOverrides()
-            document.dispatchEvent(new Event('coterie:refresh-canvas'))
-          })
-        },
-      })
-    } else {
-      // Fallback: auto-place (no placement mode available)
-      const overrides = items.map(item => {
-        const oo = ownerOverrides.get(item.objectId)
-        return {
-          user_id: user.id,
-          object_id: item.objectId,
-          map_x: item.relativeX,
-          map_y: item.relativeY,
-          ...(oo?.name && { name: oo.name }),
-          ...(oo?.title && { title: oo.title }),
-          ...(oo?.status && { status: oo.status }),
-        }
-      })
-      if (overrides.length > 0) {
-        await supabase.from('objects_overrides').insert(overrides)
-      }
-      await insertUserConnections()
-      await insertTypeOverrides()
-      await loadCoteries()
-      await loadInvitations()
-      document.dispatchEvent(new Event('coterie:refresh-canvas'))
-    }
+    onEnterPlacement?.({
+      label: result.coterie_name || 'Shared Map',
+      items: result.items.map((item: any) => ({
+        id: item.objectId,
+        name: item.name,
+        class: item.class,
+        relativeX: item.relativeX,
+        relativeY: item.relativeY,
+      })),
+      connections: result.connections || [],
+      onConfirm: async (anchorX: number, anchorY: number) => {
+        await supabase.rpc('place_coterie_objects', {
+          p_user_id: user.id,
+          p_coterie_id: result.coterie_id,
+          p_anchor_x: anchorX,
+          p_anchor_y: anchorY,
+          p_items: result.items,
+        })
+        await loadCoteries(); await loadInvitations()
+        document.dispatchEvent(new Event('coterie:refresh-canvas'))
+      },
+      onCancel: async () => {
+        // Still place at default position
+        await supabase.rpc('place_coterie_objects', {
+          p_user_id: user.id,
+          p_coterie_id: result.coterie_id,
+          p_anchor_x: 0,
+          p_anchor_y: 0,
+          p_items: result.items,
+        })
+        await loadCoteries(); await loadInvitations()
+        document.dispatchEvent(new Event('coterie:refresh-canvas'))
+      },
+    })
   }
 
   const handleDeclineInvite = async (invite: PendingInvite) => {

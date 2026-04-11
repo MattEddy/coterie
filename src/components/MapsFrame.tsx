@@ -127,41 +127,13 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
       : shareEmails
     if (!user || !shareName.trim() || finalEmails.length === 0) return
 
-    // Create the coterie
-    const { data: coterie, error } = await supabase
-      .from('coteries')
-      .insert({ name: shareName.trim(), owner_id: user.id })
-      .select('id')
-      .single()
-    if (error || !coterie) { console.error('Coterie create error:', error); return }
-
-    // Add owner as member
-    const { error: memberError } = await supabase.from('coteries_members').insert({
-      coterie_id: coterie.id,
-      user_id: user.id,
-      role: 'owner',
+    const { data: coterieId, error } = await supabase.rpc('share_map_as_coterie', {
+      p_user_id: user.id,
+      p_name: shareName.trim(),
+      p_map_id: map.id,
+      p_emails: finalEmails,
     })
-    if (memberError) { console.error('Failed to add coterie member:', memberError); return }
-
-    // Link this map
-    const { error: linkError } = await supabase.from('coteries_maps').insert({
-      coterie_id: coterie.id,
-      map_id: map.id,
-    })
-    if (linkError) { console.error('Failed to link map to coterie:', linkError); return }
-
-    // Create invitations
-    await Promise.all(
-      finalEmails.map(email =>
-        supabase.from('coteries_invitations').insert({
-          coterie_id: coterie.id,
-          invited_by: user.id,
-          email,
-        }).then(({ error }) => {
-          if (error) console.error('Failed to create invitation for', email, error)
-        })
-      )
-    )
+    if (error || !coterieId) { console.error('Share error:', error); return }
 
     setSharing(false)
     // Notify maps + coteries lists to refresh

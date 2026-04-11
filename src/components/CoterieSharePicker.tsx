@@ -15,9 +15,10 @@ interface CoterieOption {
 interface CoterieSharePickerProps {
   objectId: string
   shareType: 'contacts' | 'project' | 'event' | 'note'
+  tooltip?: string
 }
 
-export default function CoterieSharePicker({ objectId, shareType }: CoterieSharePickerProps) {
+export default function CoterieSharePicker({ objectId, shareType, tooltip }: CoterieSharePickerProps) {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [coteries, setCoteries] = useState<CoterieOption[]>([])
@@ -98,7 +99,7 @@ export default function CoterieSharePicker({ objectId, shareType }: CoterieShare
 
   return (
     <>
-      <Tooltip text="Share with coteries">
+      <Tooltip text={tooltip || "Share with coteries"}>
         <button
           ref={btnRef}
           className={`${styles.shareBtn} ${anyShared ? styles.shareBtnActive : ''}`}

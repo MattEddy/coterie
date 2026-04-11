@@ -10,10 +10,11 @@ export interface ObjectSearchProps {
   onSelect: (obj: { id: string; name: string; class: string }) => void
   onCreateNew?: (name: string) => void
   onCancel?: () => void
+  onChange?: (value: string) => void
   autoFocus?: boolean
 }
 
-export default function ObjectSearch({ userId, targetClass, excludeIds = [], placeholder, onSelect, onCreateNew, onCancel, autoFocus }: ObjectSearchProps) {
+export default function ObjectSearch({ userId, targetClass, excludeIds = [], placeholder, onSelect, onCreateNew, onCancel, onChange, autoFocus }: ObjectSearchProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<{ id: string; name: string; class: string; title: string | null }[]>([])
   const [showResults, setShowResults] = useState(false)
@@ -86,6 +87,7 @@ export default function ObjectSearch({ userId, targetClass, excludeIds = [], pla
           setQuery(e.target.value)
           setShowResults(true)
           setHighlightIndex(0)
+          onChange?.(e.target.value)
         }}
         onFocus={() => setShowResults(true)}
         onBlur={() => setTimeout(() => setShowResults(false), 200)}

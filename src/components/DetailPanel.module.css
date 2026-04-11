@@ -367,6 +367,35 @@
   opacity: 1;
 }
 
+.addNewRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 100%;
+}
+
+.addNewRow:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-surface-2);
+}
+
+.addNewRowBar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* ===== READ MODE FIELDS ===== */
 
 .readFields {
@@ -487,7 +516,7 @@
 .coterieIntelAuthor {
   font-size: 10px;
   font-weight: 600;
-  color: var(--color-text-muted);
+  color: var(--color-accent);
   display: block;
   margin-bottom: 2px;
 }
@@ -520,20 +549,63 @@
   align-items: start;
 }
 
+.contactTypeWrapper {
+  position: relative;
+}
+
 .contactType {
-  font-family: var(--font-sans);
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-data);
+  font-size: 10px;
   color: var(--color-text);
   background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  padding: 4px 4px;
+  padding: 4px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.contactType:hover {
+  border-color: var(--color-accent);
+}
+
+.contactTypeDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  box-shadow: var(--shadow);
+  z-index: 10;
+  min-width: 80px;
+  overflow: hidden;
+}
+
+.contactTypeOption {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--color-text);
+  background: none;
+  border: none;
   cursor: pointer;
 }
 
-.contactType:focus {
-  outline: none;
-  border-color: var(--color-accent);
+.contactTypeOption:hover {
+  background: var(--color-surface-2);
+}
+
+.contactTypeOptionActive {
+  color: var(--color-accent);
+  font-weight: 600;
 }
 
 .contactLabel {
@@ -886,7 +958,6 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border-top: 1px solid var(--color-border);
 }
 
 .itemDescription {
@@ -1059,6 +1130,7 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+  margin-top: 6px;
 }
 
 .linkedItem {
@@ -1081,6 +1153,44 @@
 .createFormActions {
   display: flex;
   gap: 6px;
+  justify-content: flex-end;
+}
+
+.formBtn {
+  padding: 4px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.formBtn:hover {
+  color: var(--color-text);
+}
+
+.formBtnPrimary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+
+.formBtnPrimary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.formBtnPrimary:disabled:hover {
+  opacity: 0.35;
+}
+
+.formBtnPrimary:hover {
+  opacity: 0.9;
+  color: var(--color-bg);
 }
 
 /* Delete confirmation overlay */

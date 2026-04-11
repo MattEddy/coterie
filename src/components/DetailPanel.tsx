@@ -126,6 +126,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const [editContacts, setEditContacts] = useState<ContactEntry[]>(
     () => object.data?.contacts ?? []
   )
+  const [openContactTypeIndex, setOpenContactTypeIndex] = useState<number | null>(null)
 
   // Notes tab — notes are objects (class='note') connected to this object
   const [connectedNotes, setConnectedNotes] = useState<ConnectedItem[]>([])
@@ -142,6 +143,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const [connectedProjects, setConnectedProjects] = useState<ConnectedItem[]>([])
   const [connectedEvents, setConnectedEvents] = useState<ConnectedItem[]>([])
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
+  const [expandedIntelId, setExpandedIntelId] = useState<string | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [editItemValues, setEditItemValues] = useState({ name: '', title: '', status: '', event_date: '' })
   const [editItemTypes, setEditItemTypes] = useState<string[]>([])
@@ -1216,8 +1218,8 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
           />
         )}
 
-        {/* Feature A: Project name matching — search existing or type new */}
-        {targetClass === 'project' && !newItemValues.name ? (
+        {/* Project name: search existing or type new */}
+        {targetClass === 'project' ? (
           <ObjectSearch
             userId={user!.id}
             targetClass="project"
@@ -1226,6 +1228,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             autoFocus
             onSelect={proj => linkExistingItem(proj.id, 'project')}
             onCreateNew={name => setNewItemValues(prev => ({ ...prev, name }))}
+            onChange={value => setNewItemValues(prev => ({ ...prev, name: value }))}
             onCancel={() => { setCreatingProject(false); resetCreateForm() }}
           />
         ) : (
@@ -1235,22 +1238,106 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
             onChange={e => setNewItemValues(prev => ({ ...prev, name: e.target.value }))}
             onKeyDown={e => {
               if (e.key === 'Escape') {
-                if (targetClass === 'project') setCreatingProject(false)
-                else setCreatingEvent(false)
+                setCreatingEvent(false)
                 resetCreateForm()
               }
             }}
-            placeholder={targetClass === 'project' ? 'Project name' : 'Event name'}
+            placeholder="Event name"
             autoComplete="off"
-            autoFocus={!newItemValues.name}
+            autoFocus
             rows={1}
           />
         )}
 
-        {/* Cancel button always visible before name is set */}
-        {!newItemValues.name && (
+        {targetClass === 'project' && (
+          <TagInput
+            tags={newItemTypes}
+            onChange={setNewItemTypes}
+            objectClass="project"
+            placeholder="Formats & Genres"
+            userId={user!.id}
+            autoFocus={false}
+          />
+        )}
+        <textarea
+          className={styles.createInput}
+          value={newItemValues.title}
+          onChange={e => setNewItemValues(prev => ({ ...prev, title: e.target.value }))}
+          placeholder="Description"
+          autoComplete="off"
+          rows={1}
+        />
+        {targetClass === 'event' && (
+          <>
+            {dateInputActive || newItemValues.event_date ? (
+              <div className={styles.dateRow}>
+                <input
+                  className={styles.createInput}
+                  type="date"
+                  value={newItemValues.event_date}
+                  onChange={e => setNewItemValues(prev => ({ ...prev, event_date: e.target.value }))}
+                  autoFocus={dateInputActive && !newItemValues.event_date}
+                />
+                <Tooltip text="Set to today">
+                  <button
+                    className={styles.todayBtn}
+                    onClick={() => setNewItemValues(prev => ({ ...prev, event_date: todayDateString() }))}
+                    type="button"
+                  >
+                    <CalendarCheck size={14} />
+                  </button>
+                </Tooltip>
+              </div>
+            ) : (
+              <input
+                className={styles.createInput}
+                readOnly
+                placeholder="Event Date"
+                onFocus={() => setDateInputActive(true)}
+              />
+            )}
+          </>
+        )}
+        {targetClass === 'project' && (
+          <textarea
+            className={styles.createInput}
+            value={newItemValues.status}
+            onChange={e => setNewItemValues(prev => ({ ...prev, status: e.target.value }))}
+            placeholder="Status"
+            autoComplete="off"
+            rows={1}
+          />
+        )}
+
+        {/* Link additional objects during creation */}
+        {newItemLinks.length > 0 && (
+          <div className={styles.linkedList}>
+            <span className={styles.label}>Also linked to</span>
+            {newItemLinks.map(link => (
+              <div key={link.id} className={styles.linkedItem}>
+                <span className={styles.linkedName}>{link.name}</span>
+                <span className={styles.canonBadge}>{link.class}</span>
+                <button
+                  className={styles.iconButtonSm}
+                  onClick={() => setNewItemLinks(prev => prev.filter(l => l.id !== link.id))}
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <ObjectSearch
+          userId={user!.id}
+          excludeIds={[...connectedIds, ...newItemLinks.map(l => l.id)]}
+          placeholder="Link to another person, org, or project..."
+          onSelect={obj => setNewItemLinks(prev => [...prev, obj])}
+          autoFocus={false}
+        />
+
+        <div className={styles.createFormActions}>
           <button
-            className={styles.addButton}
+            className={styles.formBtn}
             onClick={() => {
               if (targetClass === 'project') setCreatingProject(false)
               else setCreatingEvent(false)
@@ -1259,118 +1346,14 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
           >
             Cancel
           </button>
-        )}
-
-        {/* Only show remaining fields once a new name is set (not linking existing) */}
-        {newItemValues.name && (
-          <>
-            <textarea
-              className={styles.createInput}
-              value={newItemValues.title}
-              onChange={e => setNewItemValues(prev => ({ ...prev, title: e.target.value }))}
-              placeholder="Description"
-              autoComplete="off"
-              rows={1}
-            />
-            {targetClass === 'event' && (
-              <>
-                {dateInputActive || newItemValues.event_date ? (
-                  <div className={styles.dateRow}>
-                    <input
-                      className={styles.createInput}
-                      type="date"
-                      value={newItemValues.event_date}
-                      onChange={e => setNewItemValues(prev => ({ ...prev, event_date: e.target.value }))}
-                      autoFocus={dateInputActive && !newItemValues.event_date}
-                    />
-                    <Tooltip text="Set to today">
-                      <button
-                        className={styles.todayBtn}
-                        onClick={() => setNewItemValues(prev => ({ ...prev, event_date: todayDateString() }))}
-                        type="button"
-                      >
-                        <CalendarCheck size={14} />
-                      </button>
-                    </Tooltip>
-                  </div>
-                ) : (
-                  <input
-                    className={styles.createInput}
-                    readOnly
-                    placeholder="Event Date"
-                    onFocus={() => setDateInputActive(true)}
-                  />
-                )}
-              </>
-            )}
-            {targetClass === 'project' && (
-              <>
-                <textarea
-                  className={styles.createInput}
-                  value={newItemValues.status}
-                  onChange={e => setNewItemValues(prev => ({ ...prev, status: e.target.value }))}
-                  placeholder="Status"
-                  autoComplete="off"
-                  rows={1}
-                />
-                <TagInput
-                  tags={newItemTypes}
-                  onChange={setNewItemTypes}
-                  objectClass="project"
-                  placeholder="Formats & Genres"
-                  userId={user!.id}
-                  autoFocus={false}
-                />
-              </>
-            )}
-
-            {/* Feature C: Link additional objects during creation */}
-            {newItemLinks.length > 0 && (
-              <div className={styles.linkedList}>
-                <span className={styles.label}>Also linked to</span>
-                {newItemLinks.map(link => (
-                  <div key={link.id} className={styles.linkedItem}>
-                    <span className={styles.linkedName}>{link.name}</span>
-                    <span className={styles.canonBadge}>{link.class}</span>
-                    <button
-                      className={styles.iconButtonSm}
-                      onClick={() => setNewItemLinks(prev => prev.filter(l => l.id !== link.id))}
-                    >
-                      <X size={10} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <ObjectSearch
-              userId={user!.id}
-              excludeIds={[...connectedIds, ...newItemLinks.map(l => l.id)]}
-              placeholder="Link to another person, org, or project..."
-              onSelect={obj => setNewItemLinks(prev => [...prev, obj])}
-              autoFocus={false}
-            />
-
-            <div className={styles.createFormActions}>
-              <button
-                className={styles.addButton}
-                onClick={() => createConnectedItem(targetClass)}
-                disabled={saving || !newItemValues.name.trim()}
-              >
-                <Check size={12} /> {saving ? 'Saving...' : 'Save'}
-              </button>
-              <button
-                className={styles.addButton}
-                onClick={() => {
-                  if (targetClass === 'project') setCreatingProject(false)
-                  else setCreatingEvent(false)
-                  resetCreateForm()
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </>
-        )}
+          <button
+            className={`${styles.formBtn} ${styles.formBtnPrimary}`}
+            onClick={() => createConnectedItem(targetClass)}
+            disabled={saving || !newItemValues.name.trim()}
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
       </div>
     )
   }
@@ -1412,7 +1395,6 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
               </button>
               {isExpanded && !isEditing && (
                 <div className={styles.itemBody}>
-                  {item.title && <p className={styles.itemDescription}>{item.title}</p>}
                   {item.types.length > 0 && (
                     <div className={styles.itemTypes}>
                       {item.types.map(t => (
@@ -1420,11 +1402,9 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                       ))}
                     </div>
                   )}
+                  {item.title && <p className={styles.itemDescription}>{item.title}</p>}
                   {targetClass === 'event' && item.event_date && (
                     <div className={styles.itemMeta}>{formatDate(item.event_date)}</div>
-                  )}
-                  {targetClass === 'project' && item.status && (
-                    <div className={styles.itemMeta}>{item.status}</div>
                   )}
                   {/* Feature D: Show all linked objects */}
                   {linkedObjects.length > 0 && (
@@ -1451,14 +1431,6 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                   ) : null}
 
                   <div className={styles.itemActions}>
-                    <Tooltip text="Link existing">
-                      <button
-                        className={styles.iconButtonSm}
-                        onClick={() => setShowLinkSearch(!showLinkSearch)}
-                      >
-                        <Link size={11} />
-                      </button>
-                    </Tooltip>
                     <Tooltip text="Edit">
                       <button
                         className={styles.iconButtonSm}
@@ -1476,15 +1448,23 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                         <Pencil size={11} />
                       </button>
                     </Tooltip>
-                    <Tooltip text="Remove">
+                    <Tooltip text="Link to another person or org">
+                      <button
+                        className={styles.iconButtonSm}
+                        onClick={() => setShowLinkSearch(!showLinkSearch)}
+                      >
+                        <Link size={11} />
+                      </button>
+                    </Tooltip>
+                    <CoterieSharePicker objectId={item.id} shareType={targetClass} />
+                    <Tooltip text="Delete">
                       <button
                         className={styles.iconButtonSmDanger}
                         onClick={() => deleteConnectedItem(item.id, targetClass)}
                       >
-                        <X size={11} />
+                        <Trash2 size={11} />
                       </button>
                     </Tooltip>
-                    <CoterieSharePicker objectId={item.id} shareType={targetClass} />
                   </div>
                 </div>
               )}
@@ -1498,6 +1478,14 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                     autoComplete="off"
                     rows={1}
                     autoFocus
+                  />
+                  <TagInput
+                    tags={editItemTypes}
+                    onChange={setEditItemTypes}
+                    objectClass={targetClass}
+                    placeholder={targetClass === 'project' ? 'Formats & Genres' : 'Event Type(s)'}
+                    userId={user!.id}
+                    autoFocus={false}
                   />
                   <textarea
                     className={styles.createInput}
@@ -1536,27 +1524,19 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                       rows={1}
                     />
                   )}
-                  <TagInput
-                    tags={editItemTypes}
-                    onChange={setEditItemTypes}
-                    objectClass={targetClass}
-                    placeholder={targetClass === 'project' ? 'Formats & Genres' : 'Event Type(s)'}
-                    userId={user!.id}
-                    autoFocus={false}
-                  />
                   <div className={styles.createFormActions}>
                     <button
-                      className={styles.addButton}
-                      onClick={() => saveEditItem(item.id, targetClass)}
-                      disabled={saving || !editItemValues.name.trim()}
-                    >
-                      <Check size={12} /> {saving ? 'Saving...' : 'Save'}
-                    </button>
-                    <button
-                      className={styles.addButton}
+                      className={styles.formBtn}
                       onClick={() => setEditingItemId(null)}
                     >
                       Cancel
+                    </button>
+                    <button
+                      className={`${styles.formBtn} ${styles.formBtnPrimary}`}
+                      onClick={() => saveEditItem(item.id, targetClass)}
+                      disabled={saving || !editItemValues.name.trim()}
+                    >
+                      {saving ? 'Saving...' : 'Save'}
                     </button>
                   </div>
                 </div>
@@ -1722,42 +1702,34 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {/* CONTACT TAB */}
         {activeTab === 'contact' && (
           <div className={styles.tabSection}>
-            <div className={styles.tabFloatingAction}>
-              {contactEditing ? (
-                <>
-                  <Tooltip text="Save"><button className={styles.iconButtonSm} onClick={saveContact}><Check size={12} /></button></Tooltip>
-                  <Tooltip text="Cancel"><button className={styles.iconButtonSm} onClick={() => {
-                    setEditContacts(object.data?.contacts ?? [])
-                    setContactEditing(false)
-                  }}><X size={12} /></button></Tooltip>
-                </>
-              ) : (
-                <>
-                  <Tooltip text="Edit contact info">
-                    <button className={styles.iconButtonSm} onClick={() => {
-                      setEditContacts(object.data?.contacts ?? [])
-                      setContactEditing(true)
-                    }}>
-                      <Pencil size={12} />
-                    </button>
-                  </Tooltip>
-                  <CoterieSharePicker objectId={object.id} shareType="contacts" />
-                </>
-              )}
-            </div>
             {contactEditing ? (
               <div className={styles.editFields}>
                 {editContacts.map((c, i) => (
                   <div key={i} className={styles.contactRow}>
-                    <select
-                      className={styles.contactType}
-                      value={c.type}
-                      onChange={e => setEditContacts(prev => prev.map((x, j) => j === i ? { ...x, type: e.target.value } : x))}
-                    >
-                      {contactTypes.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+                    <div className={styles.contactTypeWrapper}>
+                      <button
+                        className={styles.contactType}
+                        onClick={() => setOpenContactTypeIndex(openContactTypeIndex === i ? null : i)}
+                      >
+                        {c.type} <ChevronDown size={10} />
+                      </button>
+                      {openContactTypeIndex === i && (
+                        <div className={styles.contactTypeDropdown}>
+                          {contactTypes.map(t => (
+                            <button
+                              key={t}
+                              className={`${styles.contactTypeOption} ${t === c.type ? styles.contactTypeOptionActive : ''}`}
+                              onClick={() => {
+                                setEditContacts(prev => prev.map((x, j) => j === i ? { ...x, type: t } : x))
+                                setOpenContactTypeIndex(null)
+                              }}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <input
                       className={styles.contactLabel}
                       value={c.label}
@@ -1784,10 +1756,10 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                     )}
                     <Tooltip text="Remove">
                       <button
-                        className={styles.iconButtonSm}
+                        className={styles.iconButtonSmDanger}
                         onClick={() => setEditContacts(prev => prev.filter((_, j) => j !== i))}
                       >
-                        <X size={10} />
+                        <Trash2 size={10} />
                       </button>
                     </Tooltip>
                   </div>
@@ -1796,65 +1768,88 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                   className={styles.addButton}
                   onClick={() => setEditContacts(prev => [...prev, emptyContact()])}
                 >
-                  <Plus size={12} /> Add contact
+                  <Plus size={12} /> Add another
                 </button>
+                <div className={styles.createFormActions}>
+                  <button className={styles.formBtn} onClick={() => {
+                    setEditContacts(object.data?.contacts ?? [])
+                    setOpenContactTypeIndex(null)
+                    setContactEditing(false)
+                  }}>
+                    Cancel
+                  </button>
+                  <button
+                    className={`${styles.formBtn} ${styles.formBtnPrimary}`}
+                    onClick={saveContact}
+                    disabled={editContacts.length === 0 || editContacts.every(c => !c.value.trim())}
+                  >
+                    Save
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className={styles.readFields}>
-                {(object.data?.contacts ?? []).map((c, i) => (
-                  <div key={i} className={styles.field}>
-                    <span className={styles.label}>{c.label || c.type}</span>
-                    <span className={styles.value}>{c.value}</span>
-                  </div>
-                ))}
-                {!(object.data?.contacts?.length) && !sharedIntel.some(r => r.share_type === 'contacts' && r.contacts?.length > 0) && (
-                  <span className={styles.emptyState}>No contact info</span>
-                )}
-                {/* Coterie-shared contacts via coteries_shares table */}
-                {(() => {
-                  const contactIntel = sharedIntel.filter(r => r.share_type === 'contacts' && r.contacts?.length > 0)
-                  if (contactIntel.length === 0) return null
-                  const adopted = new Set<string>(((object.data as any)?.adopted_intel ?? []) as string[])
-                  // Group by peer
-                  const byPeer = new Map<string, { display_name: string; contacts: ContactEntry[] }>()
-                  for (const r of contactIntel) {
-                    if (!byPeer.has(r.peer_user_id)) byPeer.set(r.peer_user_id, { display_name: r.peer_display_name, contacts: [] })
-                    for (const c of r.contacts as ContactEntry[]) {
-                      if (!adopted.has(intelContactFingerprint(r.peer_user_id, c))) {
-                        byPeer.get(r.peer_user_id)!.contacts.push(c)
+              <>
+                <div className={styles.readFields}>
+                  {(object.data?.contacts ?? []).map((c, i) => (
+                    <div key={i} className={styles.field}>
+                      <span className={styles.label}>{c.label || c.type}</span>
+                      <span className={styles.value}>{c.value}</span>
+                    </div>
+                  ))}
+                  {/* Coterie-shared contacts via coteries_shares table */}
+                  {(() => {
+                    const contactIntel = sharedIntel.filter(r => r.share_type === 'contacts' && r.contacts?.length > 0)
+                    if (contactIntel.length === 0) return null
+                    const adopted = new Set<string>(((object.data as any)?.adopted_intel ?? []) as string[])
+                    const byPeer = new Map<string, { display_name: string; contacts: ContactEntry[] }>()
+                    for (const r of contactIntel) {
+                      if (!byPeer.has(r.peer_user_id)) byPeer.set(r.peer_user_id, { display_name: r.peer_display_name, contacts: [] })
+                      for (const c of r.contacts as ContactEntry[]) {
+                        if (!adopted.has(intelContactFingerprint(r.peer_user_id, c))) {
+                          byPeer.get(r.peer_user_id)!.contacts.push(c)
+                        }
                       }
                     }
-                  }
-                  const entries = Array.from(byPeer.entries()).filter(([, v]) => v.contacts.length > 0)
-                  if (entries.length === 0) return null
-                  return (
-                    <div className={styles.coterieIntelSection}>
-                      <span className={styles.coterieIntelLabel}>Coterie Intel</span>
-                      {entries.map(([uid, { display_name, contacts }]) => (
-                        <div key={uid} className={styles.coterieIntelEntry}>
-                          <span className={styles.coterieIntelAuthor}>{display_name}</span>
-                          {contacts.map((c, i) => (
-                            <div key={i} className={styles.intelContactRow}>
-                              <div className={styles.field} style={{ flex: 1 }}>
-                                <span className={styles.label}>{c.label || c.type}</span>
-                                <span className={styles.value}>{c.value}</span>
+                    const entries = Array.from(byPeer.entries()).filter(([, v]) => v.contacts.length > 0)
+                    if (entries.length === 0) return null
+                    return (
+                      <div className={styles.coterieIntelSection}>
+                        <span className={styles.coterieIntelLabel}>Coterie Intel</span>
+                        {entries.map(([uid, { display_name, contacts }]) => (
+                          <div key={uid} className={styles.coterieIntelEntry}>
+                            <span className={styles.coterieIntelAuthor}>From {display_name}:</span>
+                            {contacts.map((c, i) => (
+                              <div key={i} className={styles.intelContactRow}>
+                                <div className={styles.field} style={{ flex: 1 }}>
+                                  <span className={styles.label}>{c.label || c.type}</span>
+                                  <span className={styles.value}>{c.value}</span>
+                                </div>
+                                <Tooltip text="Add to my intel">
+                                  <button
+                                    className={styles.intelAdoptBtn}
+                                    onClick={() => adoptIntelContact(uid, c)}
+                                  >
+                                    <Plus size={11} />
+                                  </button>
+                                </Tooltip>
                               </div>
-                              <Tooltip text="Add to my intel">
-                                <button
-                                  className={styles.intelAdoptBtn}
-                                  onClick={() => adoptIntelContact(uid, c)}
-                                >
-                                  <Plus size={11} />
-                                </button>
-                              </Tooltip>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })()}
-              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </div>
+                <div className={styles.addNewRowBar}>
+                  <button className={styles.addNewRow} onClick={() => {
+                    setEditContacts([...(object.data?.contacts ?? []), emptyContact()])
+                    setContactEditing(true)
+                  }}>
+                    <Plus size={12} /> Add contact info
+                  </button>
+                  <CoterieSharePicker objectId={object.id} shareType="contacts" tooltip="Share contact info with coterie" />
+                </div>
+              </>
             )}
           </div>
         )}
@@ -1862,48 +1857,6 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         {/* NOTES TAB */}
         {activeTab === 'notes' && (
           <div className={styles.tabSection}>
-            {!creatingNote && (
-              <div className={styles.tabFloatingAction}>
-                <Tooltip text="Add note">
-                  <button className={styles.iconButtonSm} onClick={() => setCreatingNote(true)}>
-                    <Plus size={12} />
-                  </button>
-                </Tooltip>
-              </div>
-            )}
-            {creatingNote && (
-              <div className={styles.createForm}>
-                <textarea
-                  className={styles.editTextarea}
-                  value={newNoteText}
-                  onChange={e => setNewNoteText(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Escape') { setCreatingNote(false); setNewNoteText('') }
-                  }}
-                  placeholder="Write a note..."
-                  autoFocus
-                  rows={3}
-                />
-                <div className={styles.createFormActions}>
-                  <button
-                    className={styles.addButton}
-                    onClick={createNote}
-                    disabled={saving || !newNoteText.trim()}
-                  >
-                    <Check size={12} /> {saving ? 'Saving...' : 'Save'}
-                  </button>
-                  <button
-                    className={styles.addButton}
-                    onClick={() => { setCreatingNote(false); setNewNoteText('') }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-            {connectedNotes.length === 0 && !creatingNote && (
-              <span className={styles.emptyState}>No notes yet</span>
-            )}
             {connectedNotes.length > 0 && (
               <div className={styles.itemList}>
                 {connectedNotes.map(note => (
@@ -1919,17 +1872,17 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                         />
                         <div className={styles.createFormActions}>
                           <button
-                            className={styles.addButton}
-                            onClick={() => saveEditNote(note.id)}
-                            disabled={saving || !editNoteText.trim()}
-                          >
-                            <Check size={12} /> {saving ? 'Saving...' : 'Save'}
-                          </button>
-                          <button
-                            className={styles.addButton}
+                            className={styles.formBtn}
                             onClick={() => { setEditingNoteId(null); setEditNoteText('') }}
                           >
                             Cancel
+                          </button>
+                          <button
+                            className={`${styles.formBtn} ${styles.formBtnPrimary}`}
+                            onClick={() => saveEditNote(note.id)}
+                            disabled={saving || !editNoteText.trim()}
+                          >
+                            {saving ? 'Saving...' : 'Save'}
                           </button>
                         </div>
                       </div>
@@ -1945,15 +1898,15 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                               <Pencil size={11} />
                             </button>
                           </Tooltip>
-                          <Tooltip text="Remove">
+                          <CoterieSharePicker objectId={note.id} shareType="note" />
+                          <Tooltip text="Delete">
                             <button
                               className={styles.iconButtonSmDanger}
                               onClick={() => deleteNote(note.id)}
                             >
-                              <X size={11} />
+                              <Trash2 size={11} />
                             </button>
                           </Tooltip>
-                          <CoterieSharePicker objectId={note.id} shareType="note" />
                         </div>
                       </div>
                     )}
@@ -1974,7 +1927,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                   <span className={styles.coterieIntelLabel}>Coterie Intel</span>
                   {Array.from(byPeer.entries()).map(([uid, { display_name, items }]) => (
                     <div key={uid} className={styles.coterieIntelEntry}>
-                      <span className={styles.coterieIntelAuthor}>{display_name}</span>
+                      <span className={styles.coterieIntelAuthor}>From {display_name}:</span>
                       {items.map(item => (
                         <p key={item.shared_object_id} className={styles.noteText}>{item.name || '(empty note)'}</p>
                       ))}
@@ -1983,25 +1936,46 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                 </div>
               )
             })()}
+            {creatingNote ? (
+              <div className={styles.createForm}>
+                <textarea
+                  className={styles.editTextarea}
+                  value={newNoteText}
+                  onChange={e => setNewNoteText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { setCreatingNote(false); setNewNoteText('') }
+                  }}
+                  placeholder="Write a note..."
+                  autoFocus
+                  rows={3}
+                />
+                <div className={styles.createFormActions}>
+                  <button
+                    className={styles.formBtn}
+                    onClick={() => { setCreatingNote(false); setNewNoteText('') }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className={`${styles.formBtn} ${styles.formBtnPrimary}`}
+                    onClick={createNote}
+                    disabled={saving || !newNoteText.trim()}
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className={styles.addNewRow} onClick={() => setCreatingNote(true)}>
+                <Plus size={12} /> Add note
+              </button>
+            )}
           </div>
         )}
 
         {/* PROJECTS TAB */}
         {activeTab === 'projects' && (
           <div className={styles.tabSection}>
-            {!creatingProject && (
-              <div className={styles.tabFloatingAction}>
-                <Tooltip text="Add project">
-                  <button className={styles.iconButtonSm} onClick={() => {
-                    resetCreateForm()
-                    setCreatingProject(true)
-                  }}>
-                    <Plus size={12} />
-                  </button>
-                </Tooltip>
-              </div>
-            )}
-            {creatingProject && renderCreateForm('project')}
             {renderItemList(connectedProjects, 'project')}
             {(() => {
               const projectIntel = sharedIntel.filter(r => r.share_type === 'project')
@@ -2016,38 +1990,51 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                   <span className={styles.coterieIntelLabel}>Coterie Intel</span>
                   {Array.from(byPeer.entries()).map(([uid, { display_name, items }]) => (
                     <div key={uid} className={styles.coterieIntelEntry}>
-                      <span className={styles.coterieIntelAuthor}>{display_name}</span>
-                      {items.map(item => (
-                        <div key={item.shared_object_id} className={styles.coterieIntelItem}>
-                          <span className={styles.itemName}>{item.name || '(unnamed)'}</span>
-                          {item.title && <span className={styles.coterieIntelItemDetail}>{item.title}</span>}
-                          {item.status && <span className={styles.coterieIntelItemDetail}>{item.status}</span>}
-                        </div>
-                      ))}
+                      <span className={styles.coterieIntelAuthor}>From {display_name}:</span>
+                      {items.map(item => {
+                        const isExpanded = expandedIntelId === item.shared_object_id
+                        return (
+                          <div key={item.shared_object_id} className={styles.item}>
+                            <button
+                              className={`${styles.itemHeader} ${isExpanded ? styles.itemHeaderExpanded : ''}`}
+                              onClick={() => setExpandedIntelId(isExpanded ? null : item.shared_object_id)}
+                            >
+                              <div className={styles.itemHeaderLeft}>
+                                {isExpanded
+                                  ? <ChevronDown size={12} className={styles.itemChevron} />
+                                  : <ChevronRight size={12} className={styles.itemChevron} />
+                                }
+                                <span className={styles.itemName}>{item.name || '(unnamed)'}</span>
+                              </div>
+                              {item.status && <span className={styles.itemStatus}>{item.status}</span>}
+                            </button>
+                            {isExpanded && (
+                              <div className={styles.itemBody}>
+                                {item.title && <p className={styles.itemDescription}>{item.title}</p>}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   ))}
                 </div>
               )
             })()}
+            {creatingProject ? renderCreateForm('project') : (
+              <button className={styles.addNewRow} onClick={() => {
+                resetCreateForm()
+                setCreatingProject(true)
+              }}>
+                <Plus size={12} /> Add project
+              </button>
+            )}
           </div>
         )}
 
         {/* EVENTS TAB */}
         {activeTab === 'events' && (
           <div className={styles.tabSection}>
-            {!creatingEvent && (
-              <div className={styles.tabFloatingAction}>
-                <Tooltip text="Add event">
-                  <button className={styles.iconButtonSm} onClick={() => {
-                    resetCreateForm()
-                    setCreatingEvent(true)
-                  }}>
-                    <Plus size={12} />
-                  </button>
-                </Tooltip>
-              </div>
-            )}
-            {creatingEvent && renderCreateForm('event')}
             {renderItemList(connectedEvents, 'event')}
             {(() => {
               const eventIntel = sharedIntel.filter(r => r.share_type === 'event')
@@ -2062,19 +2049,46 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                   <span className={styles.coterieIntelLabel}>Coterie Intel</span>
                   {Array.from(byPeer.entries()).map(([uid, { display_name, items }]) => (
                     <div key={uid} className={styles.coterieIntelEntry}>
-                      <span className={styles.coterieIntelAuthor}>{display_name}</span>
-                      {items.map(item => (
-                        <div key={item.shared_object_id} className={styles.coterieIntelItem}>
-                          <span className={styles.itemName}>{item.name || '(unnamed)'}</span>
-                          {item.title && <span className={styles.coterieIntelItemDetail}>{item.title}</span>}
-                          {item.event_date && <span className={styles.coterieIntelItemDetail}>{formatDate(item.event_date)}</span>}
-                        </div>
-                      ))}
+                      <span className={styles.coterieIntelAuthor}>From {display_name}:</span>
+                      {items.map(item => {
+                        const isExpanded = expandedIntelId === item.shared_object_id
+                        return (
+                          <div key={item.shared_object_id} className={styles.item}>
+                            <button
+                              className={`${styles.itemHeader} ${isExpanded ? styles.itemHeaderExpanded : ''}`}
+                              onClick={() => setExpandedIntelId(isExpanded ? null : item.shared_object_id)}
+                            >
+                              <div className={styles.itemHeaderLeft}>
+                                {isExpanded
+                                  ? <ChevronDown size={12} className={styles.itemChevron} />
+                                  : <ChevronRight size={12} className={styles.itemChevron} />
+                                }
+                                <span className={styles.itemName}>{item.name || '(unnamed)'}</span>
+                              </div>
+                              {item.event_date && <span className={styles.itemDate}>{formatDate(item.event_date)}</span>}
+                            </button>
+                            {isExpanded && (
+                              <div className={styles.itemBody}>
+                                {item.title && <p className={styles.itemDescription}>{item.title}</p>}
+                                {item.event_date && <div className={styles.itemMeta}>{formatDate(item.event_date)}</div>}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   ))}
                 </div>
               )
             })()}
+            {creatingEvent ? renderCreateForm('event') : (
+              <button className={styles.addNewRow} onClick={() => {
+                resetCreateForm()
+                setCreatingEvent(true)
+              }}>
+                <Plus size={12} /> Add event
+              </button>
+            )}
           </div>
         )}
       </div>

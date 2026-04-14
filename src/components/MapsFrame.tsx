@@ -362,14 +362,6 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
         ) : undefined
       }
     >
-      {/* Shared map banner */}
-      {map.origin_map_id && (
-        <div className={styles.sharedBanner}>
-          <Users size={12} className={styles.sharedBannerIcon} />
-          <span>Shared map &mdash; {members.length} {members.length === 1 ? 'member' : 'members'}</span>
-        </div>
-      )}
-
       {/* Delete confirmation */}
       {confirmDelete && (
         <div className={styles.deleteConfirm}>
@@ -563,7 +555,7 @@ interface MapsFrameProps {
 }
 
 export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighlightObjects, onMapEditModeChange, onMapSelected, onEnterPlacement }: MapsFrameProps) {
-  const { user, authUser } = useAuth()
+  const { user } = useAuth()
   const [maps, setMaps] = useState<MapRow[]>([])
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([])
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null)
@@ -622,11 +614,11 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
   }, [user])
 
   const loadPendingInvites = useCallback(async () => {
-    if (!authUser?.email) return
+    if (!user?.email) return
     const { data } = await supabase
       .from('maps_invitations')
       .select('id, map_id, created_at')
-      .eq('email', authUser.email)
+      .eq('email', user.email)
       .eq('status', 'pending')
     if (!data || data.length === 0) { setPendingInvites([]); return }
     // Get map names and sender names
@@ -648,7 +640,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
         created_at: d.created_at,
       }
     }))
-  }, [authUser?.email])
+  }, [user?.email])
 
   useEffect(() => { loadMaps(); loadPendingInvites() }, [loadMaps, loadPendingInvites])
 

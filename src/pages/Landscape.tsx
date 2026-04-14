@@ -5,9 +5,8 @@ import NavBar from '../components/NavBar'
 import type { FrameType } from '../components/NavBar'
 import SearchFrame from '../components/SearchFrame'
 import MapsFrame from '../components/MapsFrame'
-import CoteriesFrame from '../components/CoteriesFrame'
 import SettingsFrame from '../components/SettingsFrame'
-import CoterieUpdatesFrame from '../components/CoterieUpdatesFrame'
+import UpdatesFrame from '../components/UpdatesFrame'
 import NotificationBoxes from '../components/NotificationBoxes'
 import PlacementBar from '../components/PlacementBar'
 import HelpButton from '../components/HelpButton'
@@ -99,7 +98,7 @@ export default function Landscape() {
     cluster.onConfirm(anchor.x, anchor.y).then(() => {
       const items = cluster.items
       exitPlacementMode()
-      document.dispatchEvent(new Event('coterie:refresh-canvas'))
+      document.dispatchEvent(new Event('sharing:refresh-canvas'))
       // Zoom to placed cluster after nodes render
       setTimeout(() => {
         const minX = Math.min(...items.map(i => i.relativeX))
@@ -120,7 +119,7 @@ export default function Landscape() {
     placementClusterRef.current?.onCancel()
     exitPlacementMode()
     canvasRef.current?.restoreViewport()
-    document.dispatchEvent(new Event('coterie:refresh-canvas'))
+    document.dispatchEvent(new Event('sharing:refresh-canvas'))
   }, [exitPlacementMode])
 
   // Hotkeys — suppressed during placement mode
@@ -135,7 +134,6 @@ export default function Landscape() {
         case 'n': canvasRef.current?.triggerCreate(); break
         case 's': toggleFrame('search'); break
         case 'm': toggleFrame('maps'); break
-        case 'c': toggleFrame('coteries'); break
         case ',': toggleFrame('settings'); break
         default: return
       }
@@ -175,12 +173,12 @@ export default function Landscape() {
         const inv = invData?.[0]
         if (!inv || inv.status !== 'pending') return
 
-        const senderName = inv.sender_name || 'Your coterie'
+        const senderName = inv.sender_name || 'Someone'
 
         const accepted = await acceptInvitationByToken(user!.id, pendingToken)
         if (accepted) {
-          document.dispatchEvent(new Event('coterie:refresh-canvas'))
-          document.dispatchEvent(new Event('coterie:refresh-notifications'))
+          document.dispatchEvent(new Event('sharing:refresh-canvas'))
+          document.dispatchEvent(new Event('sharing:refresh-notifications'))
           setWelcomeModal({ senderName, needsName, step: needsName ? 'name' : 'intro' })
         }
         return
@@ -190,34 +188,36 @@ export default function Landscape() {
       const showWelcome = sessionStorage.getItem('showWelcomeModal')
       if (showWelcome) {
         sessionStorage.removeItem('showWelcomeModal')
-        let senderName = 'Your coterie'
+        let senderName = 'Someone'
 
-        const { data: membership } = await supabase
-          .from('coteries_members')
-          .select('coterie_id')
+        // Find the most recently joined shared map and get the origin owner's name
+        const { data: sharedMap } = await supabase
+          .from('maps')
+          .select('origin_map_id')
           .eq('user_id', user!.id)
-          .order('joined_at', { ascending: false })
+          .not('origin_map_id', 'is', null)
+          .order('created_at', { ascending: false })
           .limit(1)
           .single()
 
-        if (membership) {
-          const { data: coterie } = await supabase
-            .from('coteries')
-            .select('owner_id')
-            .eq('id', membership.coterie_id)
+        if (sharedMap?.origin_map_id) {
+          const { data: originMap } = await supabase
+            .from('maps')
+            .select('user_id')
+            .eq('id', sharedMap.origin_map_id)
             .single()
 
-          if (coterie?.owner_id) {
+          if (originMap?.user_id) {
             const { data: sender } = await supabase
               .from('profiles')
               .select('display_name')
-              .eq('user_id', coterie.owner_id)
+              .eq('user_id', originMap.user_id)
               .single()
             if (sender?.display_name) senderName = sender.display_name
           }
         }
 
-        document.dispatchEvent(new Event('coterie:refresh-notifications'))
+        document.dispatchEvent(new Event('sharing:refresh-notifications'))
         setWelcomeModal({ senderName, needsName, step: needsName ? 'name' : 'intro' })
         return
       }
@@ -237,8 +237,8 @@ export default function Landscape() {
       {!placementCluster && <NavBar onOpenFrame={openFrame} />}
       {!placementCluster && (
         <NotificationBoxes
-          onOpenCoteries={() => openFrame('coteries')}
-          onOpenUpdates={() => openFrame('coterie-updates')}
+          onOpenMaps={() => openFrame('maps')}
+          onOpenUpdates={() => openFrame('updates')}
         />
       )}
 
@@ -265,13 +265,11 @@ export default function Landscape() {
           onHighlightObjects={setHighlightedObjectIds}
           onMapEditModeChange={handleMapEditModeChange}
           onMapSelected={() => canvasRef.current?.clearSelection()}
+          onEnterPlacement={enterPlacementMode}
         />
       )}
-      {openFrames.has('coteries') && (
-        <CoteriesFrame onClose={() => closeFrame('coteries')} onOpenUpdates={() => openFrame('coterie-updates')} onEnterPlacement={enterPlacementMode} />
-      )}
-      {openFrames.has('coterie-updates') && (
-        <CoterieUpdatesFrame onClose={() => closeFrame('coterie-updates')} onEnterPlacement={enterPlacementMode} />
+      {openFrames.has('updates') && (
+        <UpdatesFrame onClose={() => closeFrame('updates')} onEnterPlacement={enterPlacementMode} />
       )}
       {openFrames.has('settings') && (
         <SettingsFrame onClose={() => closeFrame('settings')} />
@@ -323,8 +321,8 @@ export default function Landscape() {
                   It's private and unique to you. Change it, add to it, make it your own.
                 </p>
                 <p className={styles.modalText}>
-                  For objects shared in Coteries, collaborators are notified of each
-                  other's updates. You'll have the option to synchronize each change.
+                  For shared maps, collaborators are notified of each
+                  other&rsquo;s updates. You&rsquo;ll have the option to synchronize each change.
                 </p>
                 <p className={styles.modalText}>
                   Double click on an empty spot to create a new object.

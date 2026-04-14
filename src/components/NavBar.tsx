@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { User, Menu, Search, Map, Users, Settings, LogOut, Pencil, Check } from 'lucide-react'
+import { User, Menu, Search, Map, Settings, LogOut, Pencil, Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import Tooltip from './Tooltip'
@@ -8,12 +8,11 @@ import logoNameDark from '../assets/logo-name.svg'
 import logoNameLight from '../assets/logo-name-light.svg'
 import styles from './NavBar.module.css'
 
-export type FrameType = 'search' | 'maps' | 'coteries' | 'coterie-updates' | 'settings'
+export type FrameType = 'search' | 'maps' | 'updates' | 'settings'
 
 const menuItems: { type: FrameType; Icon: typeof Search; label: string; hotkey: string }[] = [
   { type: 'search', Icon: Search, label: 'Search', hotkey: 'S' },
   { type: 'maps', Icon: Map, label: 'Maps', hotkey: 'M' },
-  { type: 'coteries', Icon: Users, label: 'Coteries', hotkey: 'C' },
   { type: 'settings', Icon: Settings, label: 'Settings', hotkey: ',' },
 ]
 

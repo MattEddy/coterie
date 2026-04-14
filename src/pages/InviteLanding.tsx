@@ -116,7 +116,7 @@ function DemoDetailCard({ detail, onClose }: { detail: DemoDetail; onClose: () =
           )}
           {tab === 'notes' && (
             <p className={styles.detailMuted}>
-              Add shared notes visible to your coterie, or private notes just for you.
+              Add shared notes visible to your shared map, or private notes just for you.
             </p>
           )}
           {tab === 'projects' && (
@@ -139,9 +139,9 @@ function DemoDetailCard({ detail, onClose }: { detail: DemoDetail; onClose: () =
 /* ── Invitation data ───────────────────────────────────────────── */
 
 interface InviteData {
-  coterieName: string
+  mapName: string
   senderName: string
-  coterieId: string
+  mapId: string
   invitationId: string
 }
 
@@ -226,9 +226,9 @@ export default function InviteLanding() {
     // Dev shortcut: /invite/demo shows sample data
     if (token === 'demo') {
       setInvite({
-        coterieName: 'Literary Agents',
+        mapName: 'Literary Agents',
         senderName: 'Matt',
-        coterieId: 'demo',
+        mapId: 'demo',
         invitationId: 'demo',
       })
       setLoading(false)
@@ -238,15 +238,15 @@ export default function InviteLanding() {
     async function load() {
       const { data, error: rpcErr } = await supabase
         .rpc('get_invitation_by_token', { invite_token: token })
-        .single<{ status: string; coterie_name: string; sender_name: string; coterie_id: string; invitation_id: string }>()
+        .single<{ status: string; map_name: string; sender_name: string; map_id: string; invitation_id: string }>()
 
       if (rpcErr || !data) { setError('This invitation was not found.'); setLoading(false); return }
       if (data.status !== 'pending') { setError('This invitation has already been used.'); setLoading(false); return }
 
       setInvite({
-        coterieName: data.coterie_name || 'a coterie',
+        mapName: data.map_name || 'a shared map',
         senderName: data.sender_name || 'Someone',
-        coterieId: data.coterie_id,
+        mapId: data.map_id,
         invitationId: data.invitation_id,
       })
       setLoading(false)
@@ -295,7 +295,7 @@ export default function InviteLanding() {
           you can truly understand and harness your interpersonal landscape.
         </p>
         <p className={styles.explainer}>
-          Connect with trusted collaborators to share and sync your
+          Share maps with trusted collaborators to sync your
           Coterie information, keeping each other up to date and in the loop.
         </p>
 
@@ -310,7 +310,7 @@ export default function InviteLanding() {
         {/* Coterie blurb */}
         <p className={styles.blurb}>
           Join {invite!.senderName}'s{' '}
-          <em>{invite!.coterieName}</em> coterie and start sharing
+          <em>{invite!.mapName}</em> shared map and start sharing
           professional intel.
         </p>
 

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
-import { Map as MapIcon, Plus, Check, Pencil, Trash2, X, Search, Focus, MousePointerClick, ChevronRight, Share2, Users } from 'lucide-react'
+import { Map as MapIcon, Plus, Check, Pencil, Trash2, X, Search, Focus, MousePointerClick, ChevronRight, Share2, Users, Mail, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
 import Tooltip from './Tooltip'
+import type { PlacementCluster } from '../types'
 import styles from './MapsFrame.module.css'
 
 interface MapRow {
@@ -12,8 +13,29 @@ interface MapRow {
   description: string | null
   auto_add: boolean
   object_count: number
-  source_coterie_id: string | null
-  coterie_name: string | null
+  origin_map_id: string | null
+  member_count: number
+  is_admin: boolean
+}
+
+interface PendingInvite {
+  id: string
+  map_id: string
+  map_name: string
+  sender_name: string
+  created_at: string
+}
+
+interface SharedMember {
+  user_id: string
+  display_name: string
+  map_id: string  // their copy's map id
+}
+
+interface PendingMember {
+  email: string
+  invited_by: string
+  created_at: string
 }
 
 interface MapObject {
@@ -50,18 +72,22 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   const [editDesc, setEditDesc] = useState('')
   const [editAutoAdd, setEditAutoAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [coterieDeleteBlock, setCoterieDeleteBlock] = useState<string | null>(null)
+  const [confirmLeave, setConfirmLeave] = useState(false)
   const editInputRef = useRef<HTMLInputElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [highlightIndex, setHighlightIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // Share (create coterie) state
+  // Share state
   const [sharing, setSharing] = useState(false)
-  const [shareName, setShareName] = useState('')
   const [shareEmails, setShareEmails] = useState<string[]>([])
   const [shareEmailInput, setShareEmailInput] = useState('')
+
+  // Members state (for shared maps)
+  const [members, setMembers] = useState<SharedMember[]>([])
+  const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([])
+  const [inviteEmail, setInviteEmail] = useState('')
 
   const loadMapObjects = useCallback(async (mapId: string) => {
     if (!user) return
@@ -86,17 +112,51 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     })))
   }, [user])
 
+  // Load members for shared maps
+  const loadMembers = useCallback(async () => {
+    if (!map.origin_map_id) { setMembers([]); setPendingMembers([]); return }
+    const originId = map.origin_map_id
+    // All maps in the sharing group
+    const { data: groupMaps } = await supabase
+      .from('maps')
+      .select('id, user_id')
+      .eq('origin_map_id', originId)
+    if (!groupMaps) return
+    const userIds = groupMaps.map(m => m.user_id).filter(Boolean) as string[]
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('user_id, display_name')
+        .in('user_id', userIds)
+      setMembers((profiles || []).map(p => ({
+        user_id: p.user_id,
+        display_name: p.display_name || 'Unknown',
+        map_id: groupMaps.find(m => m.user_id === p.user_id)?.id || '',
+      })))
+    }
+    // Pending invitations
+    const { data: pending } = await supabase
+      .from('maps_invitations')
+      .select('email, invited_by, created_at')
+      .eq('map_id', originId)
+      .eq('status', 'pending')
+    setPendingMembers(pending || [])
+  }, [map.origin_map_id])
+
   // Reset on map change
   useEffect(() => {
     setEditing(false)
     setConfirmDelete(false)
+    setConfirmLeave(false)
     setSharing(false)
     setShareEmails([])
     setShareEmailInput('')
     setSearchQuery('')
     setSearchResults([])
+    setInviteEmail('')
     loadMapObjects(map.id)
-  }, [map.id, loadMapObjects])
+    loadMembers()
+  }, [map.id, loadMapObjects, loadMembers])
 
   // Refresh object list when maps:refresh fires (e.g., auto-add on object create)
   useEffect(() => {
@@ -107,7 +167,6 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
 
   const startShare = () => {
     setSharing(true)
-    setShareName(`${map.name} Coterie`)
     setShareEmails([])
     setShareEmailInput('')
   }
@@ -120,25 +179,43 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   }
 
   const handleShare = async () => {
-    // Scoop up any email typed but not yet added
     const pendingEmail = shareEmailInput.trim().toLowerCase()
     const finalEmails = pendingEmail && !shareEmails.includes(pendingEmail)
       ? [...shareEmails, pendingEmail]
       : shareEmails
-    if (!user || !shareName.trim() || finalEmails.length === 0) return
+    if (!user || finalEmails.length === 0) return
 
-    const { data: coterieId, error } = await supabase.rpc('share_map_as_coterie', {
+    const { error } = await supabase.rpc('share_map', {
       p_user_id: user.id,
-      p_name: shareName.trim(),
       p_map_id: map.id,
       p_emails: finalEmails,
     })
-    if (error || !coterieId) { console.error('Share error:', error); return }
+    if (error) { console.error('Share error:', error); return }
 
     setSharing(false)
-    // Notify maps + coteries lists to refresh
+    onMapUpdated({ ...map, origin_map_id: map.id, is_admin: true, member_count: 1 })
     document.dispatchEvent(new CustomEvent('maps:refresh'))
-    document.dispatchEvent(new CustomEvent('coteries:refresh'))
+    loadMembers()
+  }
+
+  const handleInviteMember = async () => {
+    if (!user || !inviteEmail.trim() || !map.origin_map_id) return
+    const originId = map.is_admin ? map.id : map.origin_map_id
+    const { error } = await supabase
+      .from('maps_invitations')
+      .insert({ map_id: originId, invited_by: user.id, email: inviteEmail.trim().toLowerCase() })
+    if (error) { console.error('Invite error:', error); return }
+    setInviteEmail('')
+    loadMembers()
+  }
+
+  const handleLeaveMap = async () => {
+    if (!user) return
+    // Set origin_map_id to NULL on user's map (leaves sharing group)
+    await supabase.from('maps').update({ origin_map_id: null }).eq('id', map.id)
+    setConfirmLeave(false)
+    onMapUpdated({ ...map, origin_map_id: null, member_count: 0, is_admin: false })
+    document.dispatchEvent(new CustomEvent('maps:refresh'))
   }
 
   const startEdit = () => {
@@ -224,25 +301,15 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     <Tooltip text="Save"><button className={styles.iconBtn} onClick={saveEdit}><Check size={14} /></button></Tooltip>
   ) : (
     <>
-      <Tooltip text="Share as Coterie"><button className={styles.iconBtn} onClick={startShare}><Share2 size={14} /></button></Tooltip>
+      {!map.origin_map_id && (
+        <Tooltip text="Share map"><button className={styles.iconBtn} onClick={startShare}><Share2 size={14} /></button></Tooltip>
+      )}
       <Tooltip text="Edit map"><button className={styles.iconBtn} onClick={startEdit}><Pencil size={14} /></button></Tooltip>
-      <Tooltip text="Delete map"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={async () => {
-        if (map.source_coterie_id) {
-          const { data: coterie } = await supabase
-            .from('coteries')
-            .select('name')
-            .eq('id', map.source_coterie_id)
-            .eq('is_active', true)
-            .maybeSingle()
-          if (coterie) {
-            setCoterieDeleteBlock(coterie.name || 'a coterie')
-          } else {
-            setConfirmDelete(true)
-          }
-        } else {
-          setConfirmDelete(true)
-        }
-      }}><Trash2 size={14} /></button></Tooltip>
+      {map.origin_map_id && !map.is_admin ? (
+        <Tooltip text="Leave shared map"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmLeave(true)}><LogOut size={14} /></button></Tooltip>
+      ) : (
+        <Tooltip text="Delete map"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmDelete(true)}><Trash2 size={14} /></button></Tooltip>
+      )}
     </>
   )
 
@@ -295,19 +362,11 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
         ) : undefined
       }
     >
-      {/* Coterie linkage banner */}
-      {map.coterie_name && (
-        <div className={styles.coterieBanner}>
-          <Users size={12} className={styles.coterieBannerIcon} />
-          <span>
-            {coterieDeleteBlock
-              ? <>Leave the <strong>{map.coterie_name}</strong> coterie before deleting this map.</>
-              : <>Linked to Coterie <strong>{map.coterie_name}</strong></>
-            }
-          </span>
-          {coterieDeleteBlock && (
-            <button className={styles.formBtn} onClick={() => setCoterieDeleteBlock(null)}>OK</button>
-          )}
+      {/* Shared map banner */}
+      {map.origin_map_id && (
+        <div className={styles.sharedBanner}>
+          <Users size={12} className={styles.sharedBannerIcon} />
+          <span>Shared map &mdash; {members.length} {members.length === 1 ? 'member' : 'members'}</span>
         </div>
       )}
 
@@ -324,16 +383,22 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
         </div>
       )}
 
-      {/* Share as coterie form */}
+      {/* Leave confirmation */}
+      {confirmLeave && (
+        <div className={styles.deleteConfirm}>
+          <span className={styles.deleteConfirmText}>
+            Leave this shared map? You&rsquo;ll keep your objects but stop receiving updates.
+          </span>
+          <div className={styles.deleteConfirmActions}>
+            <button className={styles.formBtn} onClick={() => setConfirmLeave(false)}>Cancel</button>
+            <button className={styles.deleteBtnConfirm} onClick={handleLeaveMap}>Leave</button>
+          </div>
+        </div>
+      )}
+
+      {/* Share form (for unshared maps) */}
       {sharing && (
         <div className={styles.deleteConfirm}>
-          <input
-            className={styles.input}
-            placeholder="Coterie name"
-            value={shareName}
-            onChange={e => setShareName(e.target.value)}
-            autoFocus
-          />
           <div className={styles.emailTags}>
             {shareEmails.map(e => (
               <span key={e} className={styles.emailTag}>
@@ -355,7 +420,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
                   setShareEmails(prev => prev.slice(0, -1))
                 }
               }}
-              onBlur={() => { /* handled by handleShare scoop-up */ }}
+              autoFocus
             />
           </div>
           <div className={styles.deleteConfirmActions}>
@@ -363,11 +428,51 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
             <button
               className={`${styles.formBtn} ${styles.formBtnPrimary}`}
               onClick={handleShare}
-              disabled={!shareName.trim() || (shareEmails.length === 0 && !shareEmailInput.trim())}
+              disabled={shareEmails.length === 0 && !shareEmailInput.trim()}
             >
               Share
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Members section (for shared maps) */}
+      {map.origin_map_id && !sharing && !editing && (
+        <div className={styles.section}>
+          <span className={styles.sectionLabel}>Members ({members.length})</span>
+          <div className={styles.objectList}>
+            {members.map(m => (
+              <div key={m.user_id} className={styles.objectItem}>
+                <Users size={12} />
+                <span className={styles.objectName}>
+                  {m.display_name}
+                  {m.user_id === user?.id && <span style={{ opacity: 0.5 }}> (you)</span>}
+                </span>
+              </div>
+            ))}
+            {pendingMembers.map(pm => (
+              <div key={pm.email} className={styles.objectItem} style={{ opacity: 0.5 }}>
+                <Mail size={12} />
+                <span className={styles.objectName}>{pm.email}</span>
+                <span className={styles.searchResultTitle}>pending</span>
+              </div>
+            ))}
+          </div>
+          {map.is_admin && (
+            <div className={styles.addSection}>
+              <div className={styles.searchInput}>
+                <Mail size={14} className={styles.searchIcon} />
+                <input
+                  type="email"
+                  placeholder="Invite by email..."
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleInviteMember() } }}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -454,11 +559,13 @@ interface MapsFrameProps {
   onHighlightObjects?: (objectIds: string[] | null) => void
   onMapEditModeChange?: (active: boolean, handler: ((objectId: string) => void) | null) => void
   onMapSelected?: () => void
+  onEnterPlacement?: (cluster: PlacementCluster) => void
 }
 
-export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighlightObjects, onMapEditModeChange, onMapSelected }: MapsFrameProps) {
-  const { user } = useAuth()
+export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighlightObjects, onMapEditModeChange, onMapSelected, onEnterPlacement }: MapsFrameProps) {
+  const { user, authUser } = useAuth()
   const [maps, setMaps] = useState<MapRow[]>([])
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([])
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null)
   const [openedMap, setOpenedMap] = useState<MapRow | null>(null)
   const [creating, setCreating] = useState(false)
@@ -478,7 +585,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     if (!user) return
     const { data } = await supabase
       .from('maps')
-      .select('id, name, description, auto_add, source_coterie_id')
+      .select('id, name, description, auto_add, origin_map_id')
       .eq('user_id', user.id)
       .order('name')
     if (!data) return
@@ -490,17 +597,17 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     )
     const counts = new Map<string, number>(countResults)
 
-    // Resolve coterie names for linked maps (all via source_coterie_id)
-    const coterieNames = new Map<string, string>()
-    const coterieIds = data.filter(m => m.source_coterie_id).map(m => m.source_coterie_id!)
-    if (coterieIds.length > 0) {
-      const { data: coteries } = await supabase
-        .from('coteries')
-        .select('id, name')
-        .in('id', coterieIds)
-      for (const c of coteries || []) {
-        for (const m of data) {
-          if (m.source_coterie_id === c.id) coterieNames.set(m.id, c.name)
+    // Count members for shared maps
+    const memberCounts = new Map<string, number>()
+    const sharedOrigins = [...new Set(data.filter(m => m.origin_map_id).map(m => m.origin_map_id!))]
+    if (sharedOrigins.length > 0) {
+      const { data: groupMaps } = await supabase
+        .from('maps')
+        .select('origin_map_id')
+        .in('origin_map_id', sharedOrigins)
+      if (groupMaps) {
+        for (const gm of groupMaps) {
+          if (gm.origin_map_id) memberCounts.set(gm.origin_map_id, (memberCounts.get(gm.origin_map_id) || 0) + 1)
         }
       }
     }
@@ -508,13 +615,44 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     setMaps(data.map(m => ({
       ...m,
       object_count: counts.get(m.id) ?? 0,
-      coterie_name: coterieNames.get(m.id) ?? null,
+      origin_map_id: m.origin_map_id ?? null,
+      member_count: m.origin_map_id ? (memberCounts.get(m.origin_map_id) || 1) : 0,
+      is_admin: m.origin_map_id === m.id,
     })))
   }, [user])
 
-  useEffect(() => { loadMaps() }, [loadMaps])
+  const loadPendingInvites = useCallback(async () => {
+    if (!authUser?.email) return
+    const { data } = await supabase
+      .from('maps_invitations')
+      .select('id, map_id, created_at')
+      .eq('email', authUser.email)
+      .eq('status', 'pending')
+    if (!data || data.length === 0) { setPendingInvites([]); return }
+    // Get map names and sender names
+    const mapIds = data.map(d => d.map_id)
+    const { data: mapData } = await supabase.from('maps').select('id, name, user_id').in('id', mapIds)
+    const senderIds = (mapData || []).map(m => m.user_id).filter(Boolean)
+    const { data: profiles } = senderIds.length > 0
+      ? await supabase.from('profiles').select('user_id, display_name').in('user_id', senderIds)
+      : { data: [] }
+    const profileMap = new Map((profiles || []).map(p => [p.user_id, p.display_name || 'Someone']))
+    const mapMap = new Map((mapData || []).map(m => [m.id, m]))
+    setPendingInvites(data.map(d => {
+      const map = mapMap.get(d.map_id)
+      return {
+        id: d.id,
+        map_id: d.map_id,
+        map_name: map?.name || 'Shared Map',
+        sender_name: map?.user_id ? (profileMap.get(map.user_id) || 'Someone') : 'Someone',
+        created_at: d.created_at,
+      }
+    }))
+  }, [authUser?.email])
 
-  // Listen for map creation from MultiSelectPanel + coterie linkage changes
+  useEffect(() => { loadMaps(); loadPendingInvites() }, [loadMaps, loadPendingInvites])
+
+  // Listen for map creation + refresh events
   useEffect(() => {
     const handleCreated = (e: Event) => {
       const mapId = (e as CustomEvent).detail?.mapId
@@ -522,14 +660,14 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
         if (mapId) setSelectedMapId(mapId)
       })
     }
-    const handleRefresh = () => loadMaps()
-    document.addEventListener('coterie:map-created', handleCreated)
+    const handleRefresh = () => { loadMaps(); loadPendingInvites() }
+    document.addEventListener('maps:map-created', handleCreated)
     document.addEventListener('maps:refresh', handleRefresh)
     return () => {
-      document.removeEventListener('coterie:map-created', handleCreated)
+      document.removeEventListener('maps:map-created', handleCreated)
       document.removeEventListener('maps:refresh', handleRefresh)
     }
-  }, [loadMaps])
+  }, [loadMaps, loadPendingInvites])
 
   // Load map object IDs when selection changes
   useEffect(() => {
@@ -585,10 +723,10 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     const handleNodeClick = () => setSelectedMapId(null)
 
     document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('coterie:node-click', handleNodeClick)
+    document.addEventListener('canvas:node-click', handleNodeClick)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('coterie:node-click', handleNodeClick)
+      document.removeEventListener('canvas:node-click', handleNodeClick)
     }
   }, [selectedMapId, mapEditMode])
 
@@ -672,7 +810,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     const { data, error } = await supabase
       .from('maps')
       .insert({ name: createName.trim(), description: createDesc.trim() || null, user_id: user.id })
-      .select('id, name, description, auto_add, source_coterie_id')
+      .select('id, name, description, auto_add, origin_map_id')
       .single()
     if (error) { console.error('Map create error:', error); return }
     if (data) {
@@ -680,7 +818,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
       setCreateName('')
       setCreateDesc('')
       await loadMaps()
-      const newMap = { ...data, object_count: 0, coterie_name: null }
+      const newMap: MapRow = { ...data, object_count: 0, origin_map_id: null, member_count: 0, is_admin: false }
       computeDetailPosition()
       setOpenedMap(newMap)
       setSelectedMapId(newMap.id)
@@ -692,12 +830,12 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     setMaps(prev => prev.map(m => m.id === updated.id ? updated : m))
   }
 
-  // Sync openedMap when maps list reloads (e.g., coterie linkage changes)
+  // Sync openedMap when maps list reloads
   useEffect(() => {
     if (openedMap) {
       const fresh = maps.find(m => m.id === openedMap.id)
-      if (fresh && fresh.coterie_name !== openedMap.coterie_name) {
-        setOpenedMap(prev => prev ? { ...prev, coterie_name: fresh.coterie_name } : prev)
+      if (fresh && (fresh.origin_map_id !== openedMap.origin_map_id || fresh.member_count !== openedMap.member_count)) {
+        setOpenedMap(prev => prev ? { ...prev, origin_map_id: fresh.origin_map_id, member_count: fresh.member_count, is_admin: fresh.is_admin } : prev)
       }
     }
   }, [maps])
@@ -712,6 +850,76 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
   return (
     <>
       <Frame ref={listFrameRef} title="Maps" titleTooltip="Organize and share filtered views of your Landscape" onClose={onClose} initialPosition={{ x: 60, y: 120 }} width={280} resizable persistKey="maps">
+        {/* Pending invitations */}
+        {pendingInvites.length > 0 && (
+          <div className={styles.section}>
+            <span className={styles.sectionLabel}>Invitations</span>
+            {pendingInvites.map(inv => (
+              <div key={inv.id} className={styles.inviteItem}>
+                <div className={styles.inviteInfo}>
+                  <span className={styles.inviteName}>{inv.map_name}</span>
+                  <span className={styles.inviteSender}>from {inv.sender_name}</span>
+                </div>
+                <div className={styles.inviteActions}>
+                  <button className={`${styles.formBtn} ${styles.formBtnPrimary}`} onClick={async () => {
+                    if (!user) return
+                    const { data: result, error } = await supabase.rpc('accept_map_invitation', {
+                      p_user_id: user.id,
+                      p_invitation_id: inv.id,
+                    })
+                    if (error || !result || result.error) { console.error('Accept error:', error || result?.error); return }
+                    if (result.items && result.items.length > 0 && onEnterPlacement) {
+                      onEnterPlacement({
+                        label: result.map_name || 'Shared Map',
+                        items: result.items.map((item: any) => ({
+                          objectId: item.objectId,
+                          name: item.name,
+                          class: item.class,
+                          relativeX: item.relativeX,
+                          relativeY: item.relativeY,
+                        })),
+                        connections: result.connections || [],
+                        onConfirm: async (anchorX: number, anchorY: number) => {
+                          await supabase.rpc('place_shared_objects', {
+                            p_user_id: user.id,
+                            p_origin_map_id: result.origin_map_id,
+                            p_anchor_x: anchorX,
+                            p_anchor_y: anchorY,
+                            p_items: result.items,
+                          })
+                          document.dispatchEvent(new Event('sharing:refresh-canvas'))
+                          loadMaps()
+                          loadPendingInvites()
+                        },
+                        onCancel: async () => {
+                          await supabase.rpc('place_shared_objects', {
+                            p_user_id: user.id,
+                            p_origin_map_id: result.origin_map_id,
+                            p_anchor_x: 0,
+                            p_anchor_y: 0,
+                            p_items: result.items,
+                          })
+                          document.dispatchEvent(new Event('sharing:refresh-canvas'))
+                          loadMaps()
+                          loadPendingInvites()
+                        },
+                      })
+                    } else {
+                      document.dispatchEvent(new Event('sharing:refresh-canvas'))
+                      loadMaps()
+                      loadPendingInvites()
+                    }
+                  }}>Accept</button>
+                  <button className={styles.formBtn} onClick={async () => {
+                    await supabase.from('maps_invitations').update({ status: 'declined' }).eq('id', inv.id)
+                    loadPendingInvites()
+                  }}>Decline</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {maps.length > 0 ? (
           <div className={styles.mapsList} onClick={() => { if (!mapEditMode) setSelectedMapId(null) }}>
             {maps.map(m => (
@@ -727,9 +935,9 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
                   <span className={styles.mapName}>{m.name}</span>
                   <span className={styles.mapCount}>
                     {m.object_count} {m.object_count === 1 ? 'object' : 'objects'}
-                    {m.coterie_name && (
-                      <Tooltip text={`Linked to ${m.coterie_name}`}>
-                        <Users size={13} className={styles.coterieBadge} />
+                    {m.origin_map_id && (
+                      <Tooltip text={`Shared \u2014 ${m.member_count} ${m.member_count === 1 ? 'member' : 'members'}`}>
+                        <Users size={13} className={styles.sharedBadge} />
                       </Tooltip>
                     )}
                   </span>

@@ -448,13 +448,13 @@
 }
 
 /* Coterie Intel sections */
-.coterieIntelSection {
+.sharedIntelSection {
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--color-border);
 }
 
-.coterieIntelLabel {
+.sharedIntelLabel {
   font-size: 10px;
   font-weight: 600;
   color: var(--color-accent);
@@ -464,22 +464,22 @@
   margin-bottom: 8px;
 }
 
-.coterieIntelEntry {
+.sharedIntelEntry {
   margin-bottom: 10px;
 }
 
-.coterieIntelEntry:last-child {
+.sharedIntelEntry:last-child {
   margin-bottom: 0;
 }
 
-.coterieIntelItem {
+.sharedIntelItem {
   display: flex;
   flex-direction: column;
   gap: 1px;
   margin-top: 4px;
 }
 
-.coterieIntelItemDetail {
+.sharedIntelItemDetail {
   font-size: 10px;
   color: var(--color-text-muted);
 }
@@ -513,7 +513,7 @@
   color: var(--color-accent);
 }
 
-.coterieIntelAuthor {
+.sharedIntelAuthor {
   font-size: 10px;
   font-weight: 600;
   color: var(--color-accent);

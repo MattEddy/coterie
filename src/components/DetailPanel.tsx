@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import type { ObjectNodeData, ContactEntry } from './ObjectNode'
 import type { NodeRect } from '../types'
 import Tooltip from './Tooltip'
-import CoterieSharePicker from './CoterieSharePicker'
+import SharePicker from './SharePicker'
 import TagInput from './TagInput'
 import ObjectSearch from './ObjectSearch'
 import styles from './DetailPanel.module.css'
@@ -135,7 +135,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [editNoteText, setEditNoteText] = useState('')
 
-  // Coterie shared intel via coteries_shares table (contacts, projects, events, notes)
+  // Shared intel via maps_shares table (contacts, projects, events, notes)
   interface SharedIntelRow { peer_user_id: string; peer_display_name: string; share_type: string; shared_object_id: string; object_class: string | null; name: string | null; title: string | null; status: string | null; event_date: string | null; contacts: any }
   const [sharedIntel, setSharedIntel] = useState<SharedIntelRow[]>([])
 
@@ -361,11 +361,11 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     if (activeTab === 'notes') loadConnectedItems(object.id, 'note')
   }, [activeTab, object.id, loadConnectedItems])
 
-  // Load coterie-shared intel (contacts, projects, events) via RPC
+  // Load shared intel (contacts, projects, events) via RPC
   useEffect(() => {
     async function loadSharedIntel() {
       if (!user) return
-      const { data } = await supabase.rpc('get_coterie_shared_intel', {
+      const { data } = await supabase.rpc('get_shared_intel', {
         p_user_id: user.id,
         p_object_id: object.id,
       })
@@ -1132,7 +1132,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                         <Link size={11} />
                       </button>
                     </Tooltip>
-                    <CoterieSharePicker objectId={item.id} shareType={targetClass} />
+                    <SharePicker objectId={item.id} shareType={targetClass} />
                     <Tooltip text="Delete">
                       <button
                         className={styles.iconButtonSmDanger}
@@ -1472,7 +1472,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                       <span className={styles.value}>{c.value}</span>
                     </div>
                   ))}
-                  {/* Coterie-shared contacts via coteries_shares table */}
+                  {/* Shared contacts via maps_shares table */}
                   {(() => {
                     const contactIntel = sharedIntel.filter(r => r.share_type === 'contacts' && r.contacts?.length > 0)
                     if (contactIntel.length === 0) return null
@@ -1489,11 +1489,11 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                     const entries = Array.from(byPeer.entries()).filter(([, v]) => v.contacts.length > 0)
                     if (entries.length === 0) return null
                     return (
-                      <div className={styles.coterieIntelSection}>
-                        <span className={styles.coterieIntelLabel}>Coterie Intel</span>
+                      <div className={styles.sharedIntelSection}>
+                        <span className={styles.sharedIntelLabel}>Shared Intel</span>
                         {entries.map(([uid, { display_name, contacts }]) => (
-                          <div key={uid} className={styles.coterieIntelEntry}>
-                            <span className={styles.coterieIntelAuthor}>From {display_name}:</span>
+                          <div key={uid} className={styles.sharedIntelEntry}>
+                            <span className={styles.sharedIntelAuthor}>From {display_name}:</span>
                             {contacts.map((c, i) => (
                               <div key={i} className={styles.intelContactRow}>
                                 <div className={styles.field} style={{ flex: 1 }}>
@@ -1523,7 +1523,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                   }}>
                     <Plus size={12} /> Add contact info
                   </button>
-                  <CoterieSharePicker objectId={object.id} shareType="contacts" tooltip="Share contact info with coterie" />
+                  <SharePicker objectId={object.id} shareType="contacts" tooltip="Share contact info" />
                 </div>
               </>
             )}
@@ -1574,7 +1574,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                               <Pencil size={11} />
                             </button>
                           </Tooltip>
-                          <CoterieSharePicker objectId={note.id} shareType="note" />
+                          <SharePicker objectId={note.id} shareType="note" />
                           <Tooltip text="Delete">
                             <button
                               className={styles.iconButtonSmDanger}
@@ -1599,11 +1599,11 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                 byPeer.get(r.peer_user_id)!.items.push(r)
               }
               return (
-                <div className={styles.coterieIntelSection}>
-                  <span className={styles.coterieIntelLabel}>Coterie Intel</span>
+                <div className={styles.sharedIntelSection}>
+                  <span className={styles.sharedIntelLabel}>Shared Intel</span>
                   {Array.from(byPeer.entries()).map(([uid, { display_name, items }]) => (
-                    <div key={uid} className={styles.coterieIntelEntry}>
-                      <span className={styles.coterieIntelAuthor}>From {display_name}:</span>
+                    <div key={uid} className={styles.sharedIntelEntry}>
+                      <span className={styles.sharedIntelAuthor}>From {display_name}:</span>
                       {items.map(item => (
                         <p key={item.shared_object_id} className={styles.noteText}>{item.name || '(empty note)'}</p>
                       ))}
@@ -1662,11 +1662,11 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                 byPeer.get(r.peer_user_id)!.items.push(r)
               }
               return (
-                <div className={styles.coterieIntelSection}>
-                  <span className={styles.coterieIntelLabel}>Coterie Intel</span>
+                <div className={styles.sharedIntelSection}>
+                  <span className={styles.sharedIntelLabel}>Shared Intel</span>
                   {Array.from(byPeer.entries()).map(([uid, { display_name, items }]) => (
-                    <div key={uid} className={styles.coterieIntelEntry}>
-                      <span className={styles.coterieIntelAuthor}>From {display_name}:</span>
+                    <div key={uid} className={styles.sharedIntelEntry}>
+                      <span className={styles.sharedIntelAuthor}>From {display_name}:</span>
                       {items.map(item => {
                         const isExpanded = expandedIntelId === item.shared_object_id
                         return (
@@ -1721,11 +1721,11 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
                 byPeer.get(r.peer_user_id)!.items.push(r)
               }
               return (
-                <div className={styles.coterieIntelSection}>
-                  <span className={styles.coterieIntelLabel}>Coterie Intel</span>
+                <div className={styles.sharedIntelSection}>
+                  <span className={styles.sharedIntelLabel}>Shared Intel</span>
                   {Array.from(byPeer.entries()).map(([uid, { display_name, items }]) => (
-                    <div key={uid} className={styles.coterieIntelEntry}>
-                      <span className={styles.coterieIntelAuthor}>From {display_name}:</span>
+                    <div key={uid} className={styles.sharedIntelEntry}>
+                      <span className={styles.sharedIntelAuthor}>From {display_name}:</span>
                       {items.map(item => {
                         const isExpanded = expandedIntelId === item.shared_object_id
                         return (

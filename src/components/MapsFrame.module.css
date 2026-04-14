@@ -63,12 +63,12 @@
   color: var(--color-text-muted);
 }
 
-.coterieBadge {
+.sharedBadge {
   color: var(--color-accent);
   flex-shrink: 0;
 }
 
-.coterieBanner {
+.sharedBanner {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -80,8 +80,46 @@
   margin-bottom: 4px;
 }
 
-.coterieBannerIcon {
+.sharedBannerIcon {
   color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.inviteItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--color-surface-2);
+  margin-bottom: 4px;
+}
+
+.inviteInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.inviteName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inviteSender {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.inviteActions {
+  display: flex;
+  gap: 4px;
   flex-shrink: 0;
 }
 

@@ -194,9 +194,9 @@ VALUES (
     (SELECT id FROM roles WHERE display_name = 'Deal Partner')
 );
 
--- Matt's map shared via the coterie
-INSERT INTO maps (id, name, description, user_id) VALUES
-    ('aafe1111-1111-1111-1111-111111111111', 'Studio Landscape', 'Major studios and key people', 'cccc1111-1111-1111-1111-111111111111');
+-- Matt's shared map (origin — origin_map_id = self)
+INSERT INTO maps (id, name, description, user_id, origin_map_id) VALUES
+    ('aafe1111-1111-1111-1111-111111111111', 'Studio Landscape', 'Major studios and key people', 'cccc1111-1111-1111-1111-111111111111', 'aafe1111-1111-1111-1111-111111111111');
 
 INSERT INTO maps_objects (map_id, object_ref_id) VALUES
     ('aafe1111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111'),  -- Disney
@@ -209,21 +209,9 @@ INSERT INTO maps_objects (map_id, object_ref_id) VALUES
     ('aafe1111-1111-1111-1111-111111111111', 'aaaa3333-3333-3333-3333-333333333333'),  -- J.J. Abrams
     ('aafe1111-1111-1111-1111-111111111111', 'aaaa4444-4444-4444-4444-444444444444');  -- Bryan Lourd
 
--- The coterie
-INSERT INTO coteries (id, name, owner_id) VALUES
-    ('dddd1111-1111-1111-1111-111111111111', 'Hollywood Tracking', 'cccc1111-1111-1111-1111-111111111111');
-
-INSERT INTO coteries_members (coterie_id, user_id, role) VALUES
-    ('dddd1111-1111-1111-1111-111111111111', 'cccc1111-1111-1111-1111-111111111111', 'owner'),
-    ('dddd1111-1111-1111-1111-111111111111', 'cccc2222-2222-2222-2222-222222222222', 'member');
-
--- Link Matt's map to the coterie (owner's map gets source_coterie_id)
-UPDATE maps SET source_coterie_id = 'dddd1111-1111-1111-1111-111111111111'
-WHERE id = 'aafe1111-1111-1111-1111-111111111111';
-
--- Billy's aggregated recipient map (created on invitation acceptance)
-INSERT INTO maps (id, name, user_id, source_coterie_id) VALUES
-    ('aafe2222-2222-2222-2222-222222222222', 'Hollywood Tracking', 'cccc2222-2222-2222-2222-222222222222', 'dddd1111-1111-1111-1111-111111111111');
+-- Billy's recipient map (origin_map_id -> Matt's map)
+INSERT INTO maps (id, name, user_id, origin_map_id) VALUES
+    ('aafe2222-2222-2222-2222-222222222222', 'Studio Landscape', 'cccc2222-2222-2222-2222-222222222222', 'aafe1111-1111-1111-1111-111111111111');
 
 INSERT INTO maps_objects (map_id, object_ref_id) VALUES
     ('aafe2222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111'),  -- Disney

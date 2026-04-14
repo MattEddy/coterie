@@ -14,7 +14,7 @@ interface WebhookPayload {
   table: string;
   record: {
     id: string;
-    coterie_id: string;
+    map_id: string;
     invited_by: string;
     email: string;
     token: string;
@@ -63,17 +63,17 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Fetch coterie name
-    const { data: coterie, error: coterieError } = await supabase
-      .from("coteries")
+    // Fetch map name
+    const { data: map, error: mapError } = await supabase
+      .from("maps")
       .select("name")
-      .eq("id", payload.record.coterie_id)
+      .eq("id", payload.record.map_id)
       .single();
 
-    if (coterieError) {
-      console.error("Coterie not found:", coterieError);
+    if (mapError) {
+      console.error("Map not found:", mapError);
       return new Response(
-        JSON.stringify({ error: "Coterie not found" }),
+        JSON.stringify({ error: "Map not found" }),
         { status: 404 },
       );
     }
@@ -86,7 +86,7 @@ serve(async (req) => {
       .single();
 
     const senderName = sender?.display_name || "Someone";
-    const coterieName = coterie?.name || "a coterie";
+    const mapName = map?.name || "a shared map";
     const inviteUrl = `${APP_URL}/invite/${payload.record.token}`;
 
     // Send email via Resend
@@ -94,7 +94,7 @@ serve(async (req) => {
       console.log("RESEND_API_KEY not set — logging email instead:");
       console.log(`To: ${payload.record.email}`);
       console.log(
-        `Subject: ${senderName} invited you to join ${coterieName} on Coterie`,
+        `Subject: ${senderName} invited you to join "${mapName}" on Coterie`,
       );
       console.log(`Link: ${inviteUrl}`);
       return new Response(JSON.stringify({ logged: true }), { status: 200 });
@@ -109,16 +109,16 @@ serve(async (req) => {
       body: JSON.stringify({
         from: "Coterie <invites@coterie.app>",
         to: [payload.record.email],
-        subject: `${senderName} invited you to join ${coterieName} on Coterie`,
+        subject: `${senderName} invited you to join "${mapName}" on Coterie`,
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
             <h2 style="color: #d4b468; font-size: 24px; margin-bottom: 4px;">Coterie</h2>
             <p style="color: #918888; font-size: 13px; margin-bottom: 24px;">Map your professional world.</p>
 
             <p style="font-size: 15px; color: #e0dcd8; line-height: 1.6;">
-              <strong>${senderName}</strong> has invited you to join the
-              <strong>${coterieName}</strong> coterie — a trusted circle for
-              sharing professional intel.
+              <strong>${senderName}</strong> has invited you to join
+              <strong>${mapName}</strong> — a shared map for tracking
+              professional intel together.
             </p>
 
             <div style="text-align: center; margin: 32px 0;">

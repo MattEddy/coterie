@@ -42,7 +42,6 @@ export default function HelpButton() {
               <div className={styles.row}><span className={styles.key}>N</span><span>New object</span></div>
               <div className={styles.row}><span className={styles.key}>S</span><span>Search</span></div>
               <div className={styles.row}><span className={styles.key}>M</span><span>Maps</span></div>
-              <div className={styles.row}><span className={styles.key}>C</span><span>Coteries</span></div>
               <div className={styles.row}><span className={styles.key}>,</span><span>Settings</span></div>
             </div>
           )}

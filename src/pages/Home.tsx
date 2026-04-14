@@ -120,7 +120,7 @@ function DemoDetailCard({ detail, onClose }: { detail: DemoDetail; onClose: () =
           )}
           {tab === 'notes' && (
             <p className={styles.detailMuted}>
-              Add shared notes visible to your coterie, or private notes just for you.
+              Add shared notes visible to your shared map, or private notes just for you.
             </p>
           )}
           {tab === 'projects' && (
@@ -163,9 +163,9 @@ const features = [
   },
   {
     thumb: thumbCoteries,
-    title: 'Coteries',
+    title: 'Shared Maps',
     description:
-      'Connect with trusted collaborators to share selected contact intel and keep each other in the loop — in real time.',
+      'Share maps with trusted collaborators to sync contact intel and keep each other in the loop — in real time.',
   },
 ]
 

@@ -34,16 +34,16 @@ const features = [
   },
   {
     thumb: thumbCoteries,
-    title: 'Coteries',
+    title: 'Shared Maps',
     description:
-      'Connect with trusted collaborators to share selected contact intel and keep each other in the loop — in real time.',
+      'Share maps with trusted collaborators to sync contact intel and keep each other in the loop — in real time.',
   },
 ]
 
 /* ── Invitation data ───────────────────────────────────────────── */
 
 interface InviteData {
-  coterieName: string
+  mapName: string
   senderName: string
   email: string
 }
@@ -64,7 +64,7 @@ export default function InviteJoin() {
     if (!token) { setError('Invalid invite link.'); setLoading(false); return }
 
     if (token === 'demo') {
-      setInvite({ coterieName: 'Literary Agents', senderName: 'Matt', email: 'demo@example.com' })
+      setInvite({ mapName: 'Literary Agents', senderName: 'Matt', email: 'demo@example.com' })
       setLoading(false)
       return
     }
@@ -72,13 +72,13 @@ export default function InviteJoin() {
     async function load() {
       const { data, error: rpcErr } = await supabase
         .rpc('get_invitation_by_token', { invite_token: token })
-        .single<{ status: string; coterie_name: string; sender_name: string; email: string }>()
+        .single<{ status: string; map_name: string; sender_name: string; email: string }>()
 
       if (rpcErr || !data) { setError('Invitation not found.'); setLoading(false); return }
       if (data.status !== 'pending') { setError('This invitation has already been used.'); setLoading(false); return }
 
       setInvite({
-        coterieName: data.coterie_name || 'a coterie',
+        mapName: data.map_name || 'a shared map',
         senderName: data.sender_name || 'Someone',
         email: data.email,
       })
@@ -153,13 +153,13 @@ export default function InviteJoin() {
           {invite && (
             <p className={styles.ctaBlurb}>
               Join {invite.senderName}'s{' '}
-              <em>{invite.coterieName}</em> coterie and start sharing
+              <em>{invite.mapName}</em> shared map and start sharing
               professional intel.
             </p>
           )}
           <p className={styles.pricingNote}>
             After your trial, you can continue using Coterie Free offline — you
-            keep all your information, with no cloud backup or coterie sharing.
+            keep all your information, with no cloud backup or map sharing.
             Upgrade anytime to reconnect.
           </p>
         </div>

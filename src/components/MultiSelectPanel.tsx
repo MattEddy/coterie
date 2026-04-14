@@ -105,7 +105,7 @@ export default function MultiSelectPanel({ items, position, onClose }: MultiSele
     if (error || !mapId) { console.error('Failed to create map:', error); return }
 
     setNewMapName('')
-    document.dispatchEvent(new CustomEvent('coterie:map-created', { detail: { mapId } }))
+    document.dispatchEvent(new CustomEvent('maps:map-created', { detail: { mapId } }))
     onClose()
   }
 

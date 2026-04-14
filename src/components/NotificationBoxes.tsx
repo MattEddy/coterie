@@ -5,11 +5,11 @@ import { useAuth } from '../contexts/AuthContext'
 import styles from './NotificationBoxes.module.css'
 
 interface NotificationBoxesProps {
-  onOpenCoteries: () => void
+  onOpenMaps: () => void
   onOpenUpdates: () => void
 }
 
-export default function NotificationBoxes({ onOpenCoteries, onOpenUpdates }: NotificationBoxesProps) {
+export default function NotificationBoxes({ onOpenMaps, onOpenUpdates }: NotificationBoxesProps) {
   const { user } = useAuth()
   const [inviteCount, setInviteCount] = useState(0)
   const [dissonanceCount, setDissonanceCount] = useState(0)
@@ -22,14 +22,14 @@ export default function NotificationBoxes({ onOpenCoteries, onOpenUpdates }: Not
     const { data: { user: authUser } } = await supabase.auth.getUser()
     if (authUser?.email) {
       const { count } = await supabase
-        .from('coteries_invitations')
+        .from('maps_invitations')
         .select('*', { count: 'exact', head: true })
         .eq('email', authUser.email)
         .eq('status', 'pending')
       const newCount = count ?? 0
       if (newCount !== prevInviteCountRef.current) {
         prevInviteCountRef.current = newCount
-        document.dispatchEvent(new CustomEvent('coteries:refresh'))
+        document.dispatchEvent(new CustomEvent('maps:refresh'))
       }
       setInviteCount(newCount)
     }
@@ -52,16 +52,16 @@ export default function NotificationBoxes({ onOpenCoteries, onOpenUpdates }: Not
     const handleCountPush = (e: Event) => {
       setDissonanceCount((e as CustomEvent).detail)
     }
-    document.addEventListener('coterie:dissonance-count', handleCountPush)
+    document.addEventListener('sharing:dissonance-count', handleCountPush)
 
     // Refresh after invite acceptance (welcome flow dispatches this)
     const handleRefreshNotifs = () => loadCountsRef.current?.()
-    document.addEventListener('coterie:refresh-notifications', handleRefreshNotifs)
+    document.addEventListener('sharing:refresh-notifications', handleRefreshNotifs)
 
     return () => {
       clearInterval(interval)
-      document.removeEventListener('coterie:dissonance-count', handleCountPush)
-      document.removeEventListener('coterie:refresh-notifications', handleRefreshNotifs)
+      document.removeEventListener('sharing:dissonance-count', handleCountPush)
+      document.removeEventListener('sharing:refresh-notifications', handleRefreshNotifs)
     }
   }, [loadCounts])
 
@@ -70,15 +70,15 @@ export default function NotificationBoxes({ onOpenCoteries, onOpenUpdates }: Not
   return (
     <div className={styles.container}>
       {inviteCount > 0 && (
-        <button className={styles.box} onClick={onOpenCoteries}>
+        <button className={styles.box} onClick={onOpenMaps}>
           <Mail size={14} className={styles.icon} />
-          <span>{inviteCount} coterie {inviteCount === 1 ? 'invitation' : 'invitations'}</span>
+          <span>{inviteCount} {inviteCount === 1 ? 'invitation' : 'invitations'}</span>
         </button>
       )}
       {dissonanceCount > 0 && (
         <button className={styles.box} onClick={onOpenUpdates}>
           <GitCompareArrows size={14} className={styles.icon} />
-          <span>{dissonanceCount} coterie {dissonanceCount === 1 ? 'update' : 'updates'}</span>
+          <span>{dissonanceCount} {dissonanceCount === 1 ? 'update' : 'updates'}</span>
         </button>
       )}
     </div>

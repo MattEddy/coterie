@@ -4,24 +4,24 @@ import { Share2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import Tooltip from './Tooltip'
-import styles from './CoterieSharePicker.module.css'
+import styles from './SharePicker.module.css'
 
-interface CoterieOption {
-  id: string
-  name: string
+interface SharedMapOption {
+  origin_map_id: string
+  map_name: string
   shared: boolean
 }
 
-interface CoterieSharePickerProps {
+interface SharePickerProps {
   objectId: string
   shareType: 'contacts' | 'project' | 'event' | 'note'
   tooltip?: string
 }
 
-export default function CoterieSharePicker({ objectId, shareType, tooltip }: CoterieSharePickerProps) {
+export default function SharePicker({ objectId, shareType, tooltip }: SharePickerProps) {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
-  const [coteries, setCoteries] = useState<CoterieOption[]>([])
+  const [sharedMaps, setSharedMaps] = useState<SharedMapOption[]>([])
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const btnRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -29,25 +29,39 @@ export default function CoterieSharePicker({ objectId, shareType, tooltip }: Cot
   const load = useCallback(async () => {
     if (!user) return
 
-    const { data: memberships } = await supabase
-      .from('coteries_members')
-      .select('coterie_id, coteries(name)')
+    // Get all the user's maps that belong to a sharing group (origin_map_id is set)
+    const { data: userMaps } = await supabase
+      .from('maps')
+      .select('id, name, origin_map_id')
       .eq('user_id', user.id)
-    if (!memberships?.length) { setCoteries([]); return }
+      .not('origin_map_id', 'is', null)
+    if (!userMaps?.length) { setSharedMaps([]); return }
 
+    // Deduplicate by origin_map_id and resolve origin map names
+    const originIds = [...new Set(userMaps.map(m => m.origin_map_id))]
+
+    // For each origin, find the origin map's name (where id = origin_map_id)
+    const { data: originMaps } = await supabase
+      .from('maps')
+      .select('id, name')
+      .in('id', originIds)
+
+    const originNameMap = new Map((originMaps || []).map(m => [m.id, m.name]))
+
+    // Get current share state from maps_shares
     const { data: shares } = await supabase
-      .from('coteries_shares')
-      .select('coterie_id')
+      .from('maps_shares')
+      .select('map_id')
       .eq('user_id', user.id)
       .eq('object_id', objectId)
       .eq('share_type', shareType)
 
-    const sharedIds = new Set((shares || []).map(s => s.coterie_id))
+    const sharedIds = new Set((shares || []).map(s => s.map_id))
 
-    setCoteries(memberships.map((m: any) => ({
-      id: m.coterie_id,
-      name: m.coteries?.name || 'Unknown',
-      shared: sharedIds.has(m.coterie_id),
+    setSharedMaps(originIds.map(originId => ({
+      origin_map_id: originId,
+      map_name: originNameMap.get(originId) || 'Unknown',
+      shared: sharedIds.has(originId),
     })))
   }, [user, objectId, shareType])
 
@@ -76,30 +90,30 @@ export default function CoterieSharePicker({ objectId, shareType, tooltip }: Cot
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
-  const toggle = async (coterieId: string, currently: boolean) => {
+  const toggle = async (originMapId: string, currently: boolean) => {
     if (!user) return
     if (currently) {
       await supabase
-        .from('coteries_shares')
+        .from('maps_shares')
         .delete()
-        .eq('coterie_id', coterieId)
+        .eq('map_id', originMapId)
         .eq('user_id', user.id)
         .eq('object_id', objectId)
     } else {
       await supabase
-        .from('coteries_shares')
-        .insert({ coterie_id: coterieId, user_id: user.id, object_id: objectId, share_type: shareType })
+        .from('maps_shares')
+        .insert({ map_id: originMapId, user_id: user.id, object_id: objectId, share_type: shareType })
     }
-    setCoteries(prev => prev.map(c => c.id === coterieId ? { ...c, shared: !currently } : c))
+    setSharedMaps(prev => prev.map(m => m.origin_map_id === originMapId ? { ...m, shared: !currently } : m))
   }
 
-  const anyShared = coteries.some(c => c.shared)
+  const anyShared = sharedMaps.some(m => m.shared)
 
   if (!user) return null
 
   return (
     <>
-      <Tooltip text={tooltip || "Share with coteries"}>
+      <Tooltip text={tooltip || "Share with shared maps"}>
         <button
           ref={btnRef}
           className={`${styles.shareBtn} ${anyShared ? styles.shareBtnActive : ''}`}
@@ -114,17 +128,17 @@ export default function CoterieSharePicker({ objectId, shareType, tooltip }: Cot
           className={styles.dropdown}
           style={{ top: pos.top, left: Math.max(8, pos.left) }}
         >
-          {coteries.length === 0 ? (
-            <span className={styles.empty}>No coteries</span>
+          {sharedMaps.length === 0 ? (
+            <span className={styles.empty}>No shared maps</span>
           ) : (
-            coteries.map(c => (
-              <label key={c.id} className={styles.option}>
+            sharedMaps.map(m => (
+              <label key={m.origin_map_id} className={styles.option}>
                 <input
                   type="checkbox"
-                  checked={c.shared}
-                  onChange={() => toggle(c.id, c.shared)}
+                  checked={m.shared}
+                  onChange={() => toggle(m.origin_map_id, m.shared)}
                 />
-                {c.name}
+                {m.map_name}
               </label>
             ))
           )}

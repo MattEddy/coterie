@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Frame from './Frame'
-import styles from './CoterieUpdatesFrame.module.css'
+import styles from './UpdatesFrame.module.css'
 import type { PlacementCluster } from '../types'
 
 interface Dissonance {
   dissonance_type: 'new_object' | 'new_connection' | 'deactivated_connection' | 'career_move' | 'type_change'
-  coterie_id: string
-  coterie_name: string
+  origin_map_id: string
+  map_name: string
   source_user_id: string
   source_user_name: string
   object_id: string | null
@@ -33,12 +33,12 @@ interface Dissonance {
   is_dismissed: boolean
 }
 
-interface CoterieUpdatesFrameProps {
+interface UpdatesFrameProps {
   onClose: () => void
   onEnterPlacement?: (cluster: PlacementCluster) => void
 }
 
-export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: CoterieUpdatesFrameProps) {
+export default function UpdatesFrame({ onClose, onEnterPlacement }: UpdatesFrameProps) {
   const { user } = useAuth()
   const [dissonances, setDissonances] = useState<Dissonance[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -59,7 +59,7 @@ export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: Coter
 
   // Push count directly to NotificationBoxes whenever local state changes
   useEffect(() => {
-    document.dispatchEvent(new CustomEvent('coterie:dissonance-count', { detail: dissonances.length }))
+    document.dispatchEvent(new CustomEvent('sharing:dissonance-count', { detail: dissonances.length }))
   }, [dissonances.length])
 
   const itemKey = (d: Dissonance) => `${d.ref_id}-${d.dissonance_type}`
@@ -69,7 +69,7 @@ export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: Coter
       !(x.ref_id === d.ref_id && x.source_user_id === d.source_user_id && x.dissonance_type === d.dissonance_type)
     ))
     setSelectedId(null)
-    document.dispatchEvent(new Event('coterie:notifications-changed'))
+    document.dispatchEvent(new Event('sharing:notifications-changed'))
   }
 
   const handleAccept = async (d: Dissonance) => {
@@ -108,15 +108,15 @@ export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: Coter
                 data: memberOv.data,
               })
 
-              const { data: aggMap } = await supabase
+              const { data: userMap } = await supabase
                 .from('maps')
                 .select('id')
                 .eq('user_id', user!.id)
-                .eq('source_coterie_id', d.coterie_id)
+                .eq('origin_map_id', d.origin_map_id)
                 .single()
-              if (aggMap) {
+              if (userMap) {
                 await supabase.from('maps_objects').upsert({
-                  map_id: aggMap.id,
+                  map_id: userMap.id,
                   object_ref_id: d.object_id!,
                 })
               }
@@ -143,15 +143,15 @@ export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: Coter
           data: memberOv.data,
         })
 
-        const { data: aggMap } = await supabase
+        const { data: userMap } = await supabase
           .from('maps')
           .select('id')
           .eq('user_id', user.id)
-          .eq('source_coterie_id', d.coterie_id)
+          .eq('origin_map_id', d.origin_map_id)
           .single()
-        if (aggMap && d.object_id) {
+        if (userMap && d.object_id) {
           await supabase.from('maps_objects').upsert({
-            map_id: aggMap.id,
+            map_id: userMap.id,
             object_ref_id: d.object_id,
           })
         }
@@ -251,12 +251,12 @@ export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: Coter
     }
 
     removeDissonance(d)
-    document.dispatchEvent(new Event('coterie:refresh-canvas'))
+    document.dispatchEvent(new Event('sharing:refresh-canvas'))
   }
 
   const handleIgnore = async (d: Dissonance) => {
     if (!user) return
-    const { error } = await supabase.from('coteries_reviews').insert({
+    const { error } = await supabase.from('maps_reviews').insert({
       user_id: user.id,
       source_user_id: d.source_user_id,
       ref_type: d.ref_type,
@@ -267,7 +267,7 @@ export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: Coter
   }
 
   return (
-    <Frame title="Coterie Updates" titleTooltip="Differences between your data and your coterie's" onClose={onClose} initialPosition={{ x: 60, y: 60 }} width={320} resizable persistKey="coterie-updates">
+    <Frame title="Updates" titleTooltip="Differences between your data and your shared maps" onClose={onClose} initialPosition={{ x: 60, y: 60 }} width={320} resizable persistKey="coterie-updates">
       {dissonances.length > 0 ? (
         <div className={styles.list}>
           {dissonances.map(d => {
@@ -326,7 +326,7 @@ export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: Coter
                         {d.your_types.filter(t => !d.their_types!.includes(t)).map(t => `−${t}`).join(' ')}
                       </span>
                     )}
-                    <span className={styles.coterieName}>{d.coterie_name}</span>
+                    <span className={styles.coterieName}>{d.map_name}</span>
                   </div>
                 </div>
                 <div className={styles.actions}>
@@ -343,7 +343,7 @@ export default function CoterieUpdatesFrame({ onClose, onEnterPlacement }: Coter
         </div>
       ) : (
         <div className={styles.empty}>
-          You're in sync with your coterie.
+          You're in sync with your shared maps.
         </div>
       )}
     </Frame>

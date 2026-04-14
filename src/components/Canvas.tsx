@@ -441,11 +441,11 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
     refreshData()
   }, [refreshData])
 
-  // Listen for external refresh requests (e.g. coterie invite accepted)
+  // Listen for external refresh requests (e.g. shared map invite accepted)
   useEffect(() => {
     const handler = () => { refreshData() }
-    document.addEventListener('coterie:refresh-canvas', handler)
-    return () => document.removeEventListener('coterie:refresh-canvas', handler)
+    document.addEventListener('sharing:refresh-canvas', handler)
+    return () => document.removeEventListener('sharing:refresh-canvas', handler)
   }, [refreshData])
 
   // Save position on drag end + recalculate edge handles
@@ -496,7 +496,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       }
 
       // Signal non-drag node click (for map deselection)
-      document.dispatchEvent(new Event('coterie:node-click'))
+      document.dispatchEvent(new Event('canvas:node-click'))
 
       clickHandledRef.current = true
       setTimeout(() => { clickHandledRef.current = false }, 50)

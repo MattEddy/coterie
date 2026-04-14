@@ -69,10 +69,15 @@ WHERE origin_map_id IS NOT NULL
 -- A3. Migrate coteries_invitations -> maps_invitations
 
 -- Must drop RLS policies before dropping coterie_id (policies reference it)
+-- Handle both naming conventions
 DROP POLICY IF EXISTS "coteries_invitations_read" ON coteries_invitations;
 DROP POLICY IF EXISTS "coteries_invitations_insert" ON coteries_invitations;
 DROP POLICY IF EXISTS "coteries_invitations_update" ON coteries_invitations;
 DROP POLICY IF EXISTS "coteries_invitations_delete" ON coteries_invitations;
+DROP POLICY IF EXISTS "coterie_invitations_read" ON coteries_invitations;
+DROP POLICY IF EXISTS "coterie_invitations_insert" ON coteries_invitations;
+DROP POLICY IF EXISTS "coterie_invitations_update" ON coteries_invitations;
+DROP POLICY IF EXISTS "coterie_invitations_delete" ON coteries_invitations;
 
 -- Add map_id column (will replace coterie_id)
 ALTER TABLE coteries_invitations ADD COLUMN map_id UUID;
@@ -104,10 +109,15 @@ ALTER INDEX IF EXISTS idx_coteries_invitations_coterie RENAME TO idx_maps_invita
 -- A4. Migrate coteries_shares -> maps_shares
 
 -- Must drop RLS policies before dropping coterie_id
+-- Handle both naming conventions (coteries_shares_* and coterie_shares_*)
 DROP POLICY IF EXISTS "coteries_shares_read_own" ON coteries_shares;
 DROP POLICY IF EXISTS "coteries_shares_read_coterie" ON coteries_shares;
 DROP POLICY IF EXISTS "coteries_shares_insert" ON coteries_shares;
 DROP POLICY IF EXISTS "coteries_shares_delete" ON coteries_shares;
+DROP POLICY IF EXISTS "coterie_shares_read_own" ON coteries_shares;
+DROP POLICY IF EXISTS "coterie_shares_read_coterie" ON coteries_shares;
+DROP POLICY IF EXISTS "coterie_shares_insert" ON coteries_shares;
+DROP POLICY IF EXISTS "coterie_shares_delete" ON coteries_shares;
 
 ALTER TABLE coteries_shares ADD COLUMN map_id UUID;
 
@@ -117,7 +127,9 @@ WHERE m.source_coterie_id = cs.coterie_id
   AND m.origin_map_id = m.id;
 
 ALTER TABLE coteries_shares DROP CONSTRAINT IF EXISTS coteries_shares_coterie_id_user_id_object_id_key;
+ALTER TABLE coteries_shares DROP CONSTRAINT IF EXISTS coterie_shares_coterie_id_user_id_object_id_key;
 ALTER TABLE coteries_shares DROP CONSTRAINT IF EXISTS coteries_shares_coterie_id_fkey;
+ALTER TABLE coteries_shares DROP CONSTRAINT IF EXISTS coterie_shares_coterie_id_fkey;
 ALTER TABLE coteries_shares DROP COLUMN coterie_id;
 
 ALTER TABLE coteries_shares ALTER COLUMN map_id SET NOT NULL;

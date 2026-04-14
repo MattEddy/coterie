@@ -76,8 +76,7 @@ A **map** is a named collection of objects (`maps` + `maps_objects` tables). Ser
 A **coterie** is a named trust circle for sharing relationship intelligence. Full spec: `docs/COTERIE_SHARING.md`.
 
 **Core concepts:**
-- Coteries require maps — sharing is map-based via `coteries_maps` join table
-- Recipients get ONE aggregated map per coterie (`maps.source_coterie_id`)
+- **1:1 map-coterie model** — each coterie has exactly one shared map, each map can belong to at most one coterie. `source_coterie_id` on `maps` is the sole link (set on both owner's and recipients' maps). No `coteries_maps` join table. Any member can add objects to their coterie-linked map, surfacing as dissonances for other members.
 - Three sharing channels:
   - **Channel 1 — Intel** (passive): notes shared via `coteries_shares` on shared objects, attributed. Pure query pattern.
   - **Channel 2 — Updates** (diff-based): structural differences surface as dissonances. Self-correcting — reversed changes evaporate automatically.
@@ -123,20 +122,20 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 - **Auto-create profile + subscription on signup** via trigger
 - **Subscriptions table** tracks trial/payment status per user — `user_tier(uid)` returns `'pro'`/`'trial'`/`'free'`
 - **VIP status** for internal users (billing-exempt, full Pro access) — just a subscription status value, not a separate role
-- **RLS helper functions** — all cross-table membership/visibility checks MUST use SECURITY DEFINER helpers to avoid RLS recursion. PostgreSQL flags re-entry on the same table as infinite recursion, even across different policy types (e.g., INSERT policy → queries table B → B's SELECT policy → queries original table). Helpers: `is_coterie_admin(coterie_id)`, `is_coterie_member(coterie_id)`, `is_shared_via_coterie(object_id, target_user_id)`, `is_map_shared_with_user(map_id)`. NEVER raw-query `coteries_members` or `coteries_maps` from an RLS policy — always use the helper.
+- **RLS helper functions** — all cross-table membership/visibility checks MUST use SECURITY DEFINER helpers to avoid RLS recursion. PostgreSQL flags re-entry on the same table as infinite recursion, even across different policy types (e.g., INSERT policy → queries table B → B's SELECT policy → queries original table). Helpers: `is_coterie_admin(coterie_id)`, `is_coterie_member(coterie_id)`, `is_coterie_invitee(coterie_id)`, `is_shared_via_coterie(object_id, target_user_id)`, `is_map_shared_with_user(map_id)`. NEVER raw-query `coteries_members` or `maps` from an RLS policy — always use the helper.
 - **Invite acceptance RPCs** — `accept_coterie_invitation(p_user_id, p_invitation_id, p_token)` handles acceptance + member creation + recipient map + returns placement data as JSONB. `place_coterie_objects(p_user_id, p_coterie_id, p_anchor_x, p_anchor_y, p_items)` finalizes placement. Two-step design supports the ghost placement UX (user picks anchor point before committing). Replaces old `accept_invitation_by_token`.
 - **`get_dissonances()` is SECURITY DEFINER** — reads across multiple users' overrides; RLS would be prohibitively complex. Function already scopes to calling user's coteries.
 - **`get_coterie_shared_intel()` is SECURITY DEFINER** — reads peers' `connections_overrides` (RLS requires both endpoints in shared maps, but projects/events aren't in maps) and `coteries_shares` to find shared contacts/projects/events.
 - **`coteries_shares` table** — universal per-coterie, per-item intel sharing. Replaces earlier `share_contacts` (on `coteries_members`) and `coterie_shared` (on `objects_overrides`) flags which were too blunt. Schema: `(coterie_id, user_id, object_id, share_type)` with `share_type` in ('contacts', 'project', 'event', 'note'). Private by default.
 - **Notes are objects** — class='note', `landscape_visible=false`. Connected to parent via 'note_on' connection. Text stored in `objects_overrides.name`. Each note independently shareable per-coterie via `coteries_shares`. Replaced old `shared_notes`/`private_notes` TEXT columns (dropped from `objects_overrides` and `connections_overrides`).
-- **Server-side RPCs for all multi-step operations** — 12 SECURITY DEFINER functions in `20260410100000_rpc_operations.sql` replace ~970 lines of frontend DB orchestration. Every future client (iPad, etc.) gets this logic for free. RPCs: `create_note`, `create_connected_item`, `delete_object_with_cleanup`, `delete_connected_item`, `delete_multiple_objects`, `create_coterie_with_maps`, `share_map_as_coterie`, `accept_coterie_invitation` + `place_coterie_objects` (two-step for placement UX), `save_item_with_types`, `link_existing_item`, `create_map_with_objects`.
+- **Server-side RPCs for all multi-step operations** — 12 SECURITY DEFINER functions replace ~970 lines of frontend DB orchestration. Every future client (iPad, etc.) gets this logic for free. RPCs: `create_note`, `create_connected_item`, `delete_object_with_cleanup`, `delete_connected_item`, `delete_multiple_objects`, `create_coterie_with_map` (singular — sets `source_coterie_id` on owner's map), `share_map_as_coterie`, `accept_coterie_invitation` + `place_coterie_objects` (two-step for placement UX), `save_item_with_types`, `link_existing_item`, `create_map_with_objects`.
 - **Contact info stays JSONB** — contacts in `objects_overrides.data.contacts` are shared all-or-nothing per person per coterie. Intentionally NOT objectified — the access pattern (read/write as a group) doesn't benefit from per-item granularity.
 - **Cross-platform input** — Canvas multi-select checks both `metaKey` (Mac Cmd) and `ctrlKey` (Windows Ctrl). `multiSelectionKeyCode` is platform-detected. Pan via middle-click drag or Space+drag.
 
 ## Known Gotchas
 
 ### RLS Recursion — The #1 Gotcha
-PostgreSQL detects **any** policy re-entry on the same table as infinite recursion — even if it's a SELECT policy checking during an INSERT. The chain `table_A INSERT → policy queries table_B → table_B SELECT policy queries table_A` = crash. Fix: ALL cross-table checks in RLS policies must use SECURITY DEFINER helper functions. We hit this on `coteries_members`, `coteries_maps`, and `maps` before creating the full set of helpers. If adding new RLS policies, NEVER raw-query `coteries_members`, `coteries_maps`, or `maps` — use `is_coterie_member()`, `is_map_shared_with_user()`, etc.
+PostgreSQL detects **any** policy re-entry on the same table as infinite recursion — even if it's a SELECT policy checking during an INSERT. The chain `table_A INSERT → policy queries table_B → table_B SELECT policy queries table_A` = crash. Fix: ALL cross-table checks in RLS policies must use SECURITY DEFINER helper functions. We hit this on `coteries_members`, `maps`, and `coteries_invitations` before creating the full set of helpers. If adding new RLS policies, NEVER raw-query `coteries_members` or `maps` — use `is_coterie_member()`, `is_map_shared_with_user()`, etc.
 
 ### Supabase Realtime postgres_changes (Local Dev)
 Unreliable in local dev (JWT/RLS issues, GitHub #21624). **Workaround:** polling every 30s. Swap to Broadcast/Realtime on Supabase Cloud.
@@ -256,6 +255,7 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [x] DetailPanel UI polish — persistent add buttons, themed controls, consistent save/cancel, expandable intel
 - [x] Help button — floating `?` reference card with controls/shortcuts/panel keys
 - [x] Cross-platform input fixes — Ctrl+click multi-select on Windows, platform-detected lasso modifier
+- [x] 1:1 map-coterie model — dropped `coteries_maps`, bidirectional object sharing via `source_coterie_id`
 - [ ] Stripe integration for subscription billing
 - [ ] DetailPanel migration to Frame component (back burner)
 - [ ] Light mode polish (back burner)

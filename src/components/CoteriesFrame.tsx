@@ -14,7 +14,6 @@ interface CoterieRow {
   name: string
   owner_id: string | null
   member_count: number
-  map_count: number
 }
 
 interface CoterieMember {
@@ -96,28 +95,31 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
       setPendingMembers(inviteData.map((i: any) => ({ email: i.email })))
     }
 
-    // Load linked maps
-    const { data: mapData } = await supabase
-      .from('coteries_maps')
-      .select('map_id, maps(name)')
-      .eq('coterie_id', coterie.id)
-    if (mapData) {
-      const mapRows = await Promise.all(
-        (mapData as any[]).map(async (m) => {
-          const { count } = await supabase
-            .from('maps_objects')
-            .select('*', { count: 'exact', head: true })
-            .eq('map_id', m.map_id)
-          return {
-            map_id: m.map_id,
-            name: m.maps?.name ?? 'Unknown',
-            object_count: count ?? 0,
-          }
-        })
-      )
-      setMaps(mapRows)
+    // Load linked map (1:1 — user's map with source_coterie_id)
+    if (user) {
+      const { data: mapData } = await supabase
+        .from('maps')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .eq('source_coterie_id', coterie.id)
+      if (mapData) {
+        const mapRows = await Promise.all(
+          mapData.map(async (m) => {
+            const { count } = await supabase
+              .from('maps_objects')
+              .select('*', { count: 'exact', head: true })
+              .eq('map_id', m.id)
+            return {
+              map_id: m.id,
+              name: m.name ?? 'Unknown',
+              object_count: count ?? 0,
+            }
+          })
+        )
+        setMaps(mapRows)
+      }
     }
-  }, [coterie.id])
+  }, [coterie.id, user])
 
   useEffect(() => {
     setConfirmDelete(false)
@@ -259,6 +261,14 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
         </div>
       )}
 
+      {/* Linked map banner */}
+      {maps.length > 0 && (
+        <div className={styles.linkedBanner}>
+          <MapIcon size={12} className={styles.linkedBannerIcon} />
+          <span>Linked to Map <strong>{maps[0].name}</strong></span>
+        </div>
+      )}
+
       {/* Members */}
       <div className={styles.detailSection}>
         <span className={styles.sectionLabel}>Members ({members.length})</span>
@@ -305,22 +315,6 @@ const CoterieDetailCard = forwardRef<HTMLDivElement, CoterieDetailCardProps>(fun
         </div>
       )}
 
-      {/* Linked maps */}
-      <div className={styles.detailSection}>
-        <span className={styles.sectionLabel}>Maps ({maps.length})</span>
-        <div className={styles.mapList}>
-          {maps.map(m => (
-            <div key={m.map_id} className={styles.mapItem}>
-              <MapIcon size={14} className={styles.mapItemIcon} />
-              <span className={styles.mapItemName}>{m.name}</span>
-              <span className={styles.coterieMeta}>{m.object_count}</span>
-            </div>
-          ))}
-          {maps.length === 0 && (
-            <span className={styles.coterieMeta} style={{ padding: '4px 8px' }}>No maps shared yet</span>
-          )}
-        </div>
-      </div>
     </Frame>
   )
 })
@@ -338,15 +332,16 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
   const [emails, setEmails] = useState<string[]>([])
   const [emailInput, setEmailInput] = useState('')
   const [maps, setMaps] = useState<MapOption[]>([])
-  const [selectedMapIds, setSelectedMapIds] = useState<Set<string>>(new Set())
+  const [selectedMapId, setSelectedMapId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
     const load = async () => {
       const { data } = await supabase
         .from('maps')
-        .select('id, name')
+        .select('id, name, source_coterie_id')
         .eq('user_id', user.id)
+        .is('source_coterie_id', null)
         .order('name')
       if (!data) return
       const withCounts = await Promise.all(
@@ -374,15 +369,11 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
     setEmails(prev => prev.filter(e => e !== email))
   }
 
-  const toggleMap = (mapId: string) => {
-    setSelectedMapIds(prev => {
-      const next = new Set(prev)
-      if (next.has(mapId)) next.delete(mapId)
-      else next.add(mapId)
-      return next
-    })
-    // Auto-populate name from first selected map
-    if (!selectedMapIds.has(mapId) && !name) {
+  const selectMap = (mapId: string) => {
+    const newId = selectedMapId === mapId ? null : mapId
+    setSelectedMapId(newId)
+    // Auto-populate name from selected map
+    if (newId && !name) {
       const map = maps.find(m => m.id === mapId)
       if (map) setName(`${map.name} Coterie`)
     }
@@ -394,12 +385,12 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
     const finalEmails = pendingEmail && !emails.includes(pendingEmail)
       ? [...emails, pendingEmail]
       : emails
-    if (!user || !name.trim() || selectedMapIds.size === 0) return
+    if (!user || !name.trim() || !selectedMapId) return
 
-    const { data: coterieId, error } = await supabase.rpc('create_coterie_with_maps', {
+    const { data: coterieId, error } = await supabase.rpc('create_coterie_with_map', {
       p_user_id: user.id,
       p_name: name.trim(),
-      p_map_ids: Array.from(selectedMapIds),
+      p_map_id: selectedMapId,
       p_emails: finalEmails,
     })
     if (error || !coterieId) { console.error('Coterie create error:', error); return }
@@ -421,14 +412,14 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
       </div>
 
       <div>
-        <div className={styles.fieldLabel}>Maps</div>
+        <div className={styles.fieldLabel}>Map</div>
         {maps.length > 0 ? (
           <div className={styles.mapPicker}>
             {maps.map(m => (
               <button
                 key={m.id}
-                className={`${styles.mapPickerItem} ${selectedMapIds.has(m.id) ? styles.mapPickerItemSelected : ''}`}
-                onClick={() => toggleMap(m.id)}
+                className={`${styles.mapPickerItem} ${selectedMapId === m.id ? styles.mapPickerItemSelected : ''}`}
+                onClick={() => selectMap(m.id)}
               >
                 <MapIcon size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
                 <span className={styles.mapPickerName}>{m.name}</span>
@@ -473,7 +464,7 @@ function CreateCoterieForm({ onCreated, onCancel }: CreateCoterieFormProps) {
         <button
           className={`${styles.formBtn} ${styles.formBtnPrimary}`}
           onClick={handleCreate}
-          disabled={!name.trim() || selectedMapIds.size === 0}
+          disabled={!name.trim() || !selectedMapId}
         >
           Create
         </button>
@@ -524,11 +515,11 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
 
     const rows = await Promise.all(
       coterieData.map(async (c) => {
-        const [{ count: memberCount }, { count: mapCount }] = await Promise.all([
-          supabase.from('coteries_members').select('*', { count: 'exact', head: true }).eq('coterie_id', c.id),
-          supabase.from('coteries_maps').select('*', { count: 'exact', head: true }).eq('coterie_id', c.id),
-        ])
-        return { ...c, member_count: memberCount ?? 0, map_count: mapCount ?? 0 }
+        const { count: memberCount } = await supabase
+          .from('coteries_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('coterie_id', c.id)
+        return { ...c, member_count: memberCount ?? 0 }
       })
     )
     setCoteries(rows)
@@ -750,7 +741,7 @@ export default function CoteriesFrame({ onClose, onOpenUpdates, onEnterPlacement
                     )}
                   </div>
                   <span className={styles.coterieMeta}>
-                    {c.member_count} {c.member_count === 1 ? 'member' : 'members'} · {c.map_count} {c.map_count === 1 ? 'map' : 'maps'}
+                    {c.member_count} {c.member_count === 1 ? 'member' : 'members'}
                   </span>
                 </div>
                 {selectedCoterieId === c.id && (

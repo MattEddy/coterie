@@ -448,33 +448,21 @@
   font-style: italic;
 }
 
-.mapList {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.mapItem {
+.linkedBanner {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  padding: 6px 8px;
   border-radius: 4px;
+  background: var(--color-surface-2);
+  margin-bottom: 4px;
 }
 
-.mapItemIcon {
+.linkedBannerIcon {
   color: var(--color-accent);
   flex-shrink: 0;
-}
-
-.mapItemName {
-  font-size: 13px;
-  color: var(--color-text);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Icon buttons (detail card header) */

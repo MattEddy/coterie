@@ -302,7 +302,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
           <span>
             {coterieDeleteBlock
               ? <>Leave the <strong>{map.coterie_name}</strong> coterie before deleting this map.</>
-              : <>Linked to <strong>{map.coterie_name}</strong></>
+              : <>Linked to Coterie <strong>{map.coterie_name}</strong></>
             }
           </span>
           {coterieDeleteBlock && (
@@ -490,36 +490,17 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     )
     const counts = new Map<string, number>(countResults)
 
-    // Resolve coterie names for linked maps (recipient: source_coterie_id, sender: coteries_maps)
+    // Resolve coterie names for linked maps (all via source_coterie_id)
     const coterieNames = new Map<string, string>()
-    const recipientIds = data.filter(m => m.source_coterie_id).map(m => m.source_coterie_id!)
-    if (recipientIds.length > 0) {
-      const { data: coteries } = await supabase
-        .from('coteries')
-        .select('id, name')
-        .in('id', recipientIds)
-      for (const c of coteries || []) {
-        for (const m of data) {
-          if (m.source_coterie_id === c.id) coterieNames.set(m.id, c.name)
-        }
-      }
-    }
-    // Sender maps linked via coteries_maps
-    const mapIds = data.map(m => m.id)
-    const { data: cmRows } = await supabase
-      .from('coteries_maps')
-      .select('map_id, coterie_id')
-      .in('map_id', mapIds)
-    if (cmRows?.length) {
-      const coterieIds = [...new Set(cmRows.map(r => r.coterie_id))]
+    const coterieIds = data.filter(m => m.source_coterie_id).map(m => m.source_coterie_id!)
+    if (coterieIds.length > 0) {
       const { data: coteries } = await supabase
         .from('coteries')
         .select('id, name')
         .in('id', coterieIds)
-      const nameMap = new Map((coteries || []).map(c => [c.id, c.name]))
-      for (const r of cmRows) {
-        if (!coterieNames.has(r.map_id)) {
-          coterieNames.set(r.map_id, nameMap.get(r.coterie_id) || 'a coterie')
+      for (const c of coteries || []) {
+        for (const m of data) {
+          if (m.source_coterie_id === c.id) coterieNames.set(m.id, c.name)
         }
       }
     }

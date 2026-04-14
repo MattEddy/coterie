@@ -90,24 +90,24 @@ INSERT INTO connections (object_a_id, object_b_id, role_a, role_b) VALUES
 -- =============================================================================
 -- Layout: studios top-left, people center, agencies right
 
-INSERT INTO objects_overrides (user_id, object_id, map_x, map_y, shared_notes) VALUES
+INSERT INTO objects_overrides (user_id, object_id, map_x, map_y) VALUES
     -- Orgs
-    ('cccc1111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 0, 0, 'Great relationships here'),
-    ('cccc1111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 300, 0, NULL),
-    ('cccc1111-1111-1111-1111-111111111111', '33333333-3333-3333-3333-333333333333', 600, 0, 'Expanding original film slate'),
-    ('cccc1111-1111-1111-1111-111111111111', '44444444-4444-4444-4444-444444444444', 900, 100, NULL),
-    ('cccc1111-1111-1111-1111-111111111111', '55555555-5555-5555-5555-555555555555', 300, 250, NULL),
+    ('cccc1111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 0, 0),
+    ('cccc1111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 300, 0),
+    ('cccc1111-1111-1111-1111-111111111111', '33333333-3333-3333-3333-333333333333', 600, 0),
+    ('cccc1111-1111-1111-1111-111111111111', '44444444-4444-4444-4444-444444444444', 900, 100),
+    ('cccc1111-1111-1111-1111-111111111111', '55555555-5555-5555-5555-555555555555', 300, 250),
     -- People
-    ('cccc1111-1111-1111-1111-111111111111', 'aaaa1111-1111-1111-1111-111111111111', 50, 200, 'Met at Sundance 2025'),
-    ('cccc1111-1111-1111-1111-111111111111', 'aaaa2222-2222-2222-2222-222222222222', -100, 200, NULL),
-    ('cccc1111-1111-1111-1111-111111111111', 'aaaa3333-3333-3333-3333-333333333333', 450, 400, 'Very engaged on sci-fi projects'),
-    ('cccc1111-1111-1111-1111-111111111111', 'aaaa4444-4444-4444-4444-444444444444', 850, 300, NULL),
+    ('cccc1111-1111-1111-1111-111111111111', 'aaaa1111-1111-1111-1111-111111111111', 50, 200),
+    ('cccc1111-1111-1111-1111-111111111111', 'aaaa2222-2222-2222-2222-222222222222', -100, 200),
+    ('cccc1111-1111-1111-1111-111111111111', 'aaaa3333-3333-3333-3333-333333333333', 450, 400),
+    ('cccc1111-1111-1111-1111-111111111111', 'aaaa4444-4444-4444-4444-444444444444', 850, 300),
     -- Projects (no map position — off-landscape, shown in detail panels)
-    ('cccc1111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', NULL, NULL, NULL),
-    ('cccc1111-1111-1111-1111-111111111111', 'bbbb2222-2222-2222-2222-222222222222', NULL, NULL, NULL),
+    ('cccc1111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', NULL, NULL),
+    ('cccc1111-1111-1111-1111-111111111111', 'bbbb2222-2222-2222-2222-222222222222', NULL, NULL),
     -- Events (no map position — off-landscape, data lives in overrides per Option B)
-    ('cccc1111-1111-1111-1111-111111111111', 'eeee1111-1111-1111-1111-111111111111', NULL, NULL, NULL),
-    ('cccc1111-1111-1111-1111-111111111111', 'eeee2222-2222-2222-2222-222222222222', NULL, NULL, NULL);
+    ('cccc1111-1111-1111-1111-111111111111', 'eeee1111-1111-1111-1111-111111111111', NULL, NULL),
+    ('cccc1111-1111-1111-1111-111111111111', 'eeee2222-2222-2222-2222-222222222222', NULL, NULL);
 
 -- Event data in overrides (Option B: user-created object data lives in overrides)
 UPDATE objects_overrides SET
@@ -147,15 +147,13 @@ INSERT INTO objects_overrides (user_id, object_id, map_x, map_y) VALUES
     ('cccc2222-2222-2222-2222-222222222222', 'aaaa3333-3333-3333-3333-333333333333', 550, 400),  -- J.J. Abrams
     ('cccc2222-2222-2222-2222-222222222222', 'aaaa4444-4444-4444-4444-444444444444', 950, 300);  -- Bryan Lourd
 
--- Coterie Intel: Billy has shared notes and contacts on shared objects
+-- Coterie Intel: Billy has contacts and career diffs on shared objects
 UPDATE objects_overrides SET
-  shared_notes = 'Just got promoted — taking over features and streaming.',
   title = 'Chairman, Disney Entertainment'
 WHERE user_id = 'cccc2222-2222-2222-2222-222222222222'
   AND object_id = 'aaaa1111-1111-1111-1111-111111111111';
 
 UPDATE objects_overrides SET
-  shared_notes = 'Really focused on genre — horror, sci-fi, action.',
   data = '{"contacts": [{"type": "phone", "label": "Office", "value": "310-555-0199"}, {"type": "email", "label": "Asst", "value": "jj.office@badrobot.com"}]}'
 WHERE user_id = 'cccc2222-2222-2222-2222-222222222222'
   AND object_id = 'aaaa3333-3333-3333-3333-333333333333';
@@ -219,9 +217,9 @@ INSERT INTO coteries_members (coterie_id, user_id, role) VALUES
     ('dddd1111-1111-1111-1111-111111111111', 'cccc1111-1111-1111-1111-111111111111', 'owner'),
     ('dddd1111-1111-1111-1111-111111111111', 'cccc2222-2222-2222-2222-222222222222', 'member');
 
--- Link Matt's map to the coterie
-INSERT INTO coteries_maps (coterie_id, map_id) VALUES
-    ('dddd1111-1111-1111-1111-111111111111', 'aafe1111-1111-1111-1111-111111111111');
+-- Link Matt's map to the coterie (owner's map gets source_coterie_id)
+UPDATE maps SET source_coterie_id = 'dddd1111-1111-1111-1111-111111111111'
+WHERE id = 'aafe1111-1111-1111-1111-111111111111';
 
 -- Billy's aggregated recipient map (created on invitation acceptance)
 INSERT INTO maps (id, name, user_id, source_coterie_id) VALUES

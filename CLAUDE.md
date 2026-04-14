@@ -34,10 +34,10 @@ Landscape coordinates are always per-user (in overrides), never canonical.
 
 Four tiers planned — building in order:
 
-1. **Pro** (in development): Web app, full features (coteries, maps, sharing). Standard encryption (AES-256 at rest via AWS/Supabase, TLS in transit, RLS access control) — matches Google/Apple/Outlook security model.
-2. **Secure** (Pro add-on): E2EE on `objects_overrides.data.contacts` only. Client-side encryption with per-user keypair + coterie group keys for shared contacts. Exceeds Proton (they leave email unencrypted; we encrypt ALL personal reachability). Canon layer unaffected — contact info is structurally excluded by CHECK constraint, so E2EE has zero impact on platform features. Identity fields (name, title, types) remain plaintext.
+1. **Pro** (in development): Web app, full features (maps, sharing, intel). Standard encryption (AES-256 at rest via AWS/Supabase, TLS in transit, RLS access control) — matches Google/Apple/Outlook security model.
+2. **Secure** (Pro add-on): E2EE on `objects_overrides.data.contacts` only. Client-side encryption with per-user keypair + map group keys for shared contacts. Exceeds Proton (they leave email unencrypted; we encrypt ALL personal reachability). Canon layer unaffected — contact info is structurally excluded by CHECK constraint, so E2EE has zero impact on platform features. Identity fields (name, title, types) remain plaintext.
 3. **Studio** (Pro + AI): AI-powered contact intelligence, classification, etc.
-4. **Free** (later, marketing funnel): Standalone local app (Tauri + React + SQLite). No auth, no server, no coteries — just the landscape tool. Upgrade trigger = sharing/backup/sync. Sync via PowerSync (Supabase ↔ local SQLite). Same React UI wrapped in Tauri.
+4. **Free** (later, marketing funnel): Standalone local app (Tauri + React + SQLite). No auth, no server, no sharing — just the landscape tool. Upgrade trigger = sharing/backup/sync. Sync via PowerSync (Supabase ↔ local SQLite). Same React UI wrapped in Tauri.
 
 ## Data Model (Graph-based)
 
@@ -71,16 +71,24 @@ The user's entire sector universe — one giant canvas. Every user has one Lands
 
 A **map** is a named collection of objects (`maps` + `maps_objects` tables). Serves three roles: store packages (curated, with relative coords), user maps (personal filtered views), and shared/installed maps (from packages or coteries). Installation = "accept and place" — user picks an anchor point, new objects positioned relative to it. `auto_add` boolean for auto-membership of new objects.
 
-### Coterie Sharing
+### Map Sharing (replacing Coteries)
 
-A **coterie** is a named trust circle for sharing relationship intelligence. Full spec: `docs/COTERIE_SHARING.md`.
+> **Migration planned (2026-04-14):** Collapsing the coterie abstraction into maps. The 1:1 map-coterie relationship made the coterie layer redundant. "Coterie" becomes purely the brand name, not a feature. See below for the target model. Current code still has the coterie tables — migration not yet implemented.
 
-**Core concepts:**
-- **1:1 map-coterie model** — each coterie has exactly one shared map, each map can belong to at most one coterie. `source_coterie_id` on `maps` is the sole link (set on both owner's and recipients' maps). No `coteries_maps` join table. Any member can add objects to their coterie-linked map, surfacing as dissonances for other members.
+**Target model — origin_map_id:**
+- `maps.origin_map_id` — self-referential for the origin map (points to own ID), points to origin for recipient copies, NULL for unshared standalone maps
+- **Membership is derived**, not stored: `SELECT user_id FROM maps WHERE origin_map_id = :origin` returns all members including the owner. No `maps_members` table needed.
+- Origin map owner = admin. No role types beyond that.
+- Tables to drop: `coteries`, `coteries_members`, `coteries_invitations` → `maps_invitations`; `coteries_shares` → `maps_shares`
+- All SECURITY DEFINER helpers and RPCs rewrite from coterie-scoped to map-scoped
+
+**Sharing flow (unchanged functionally):**
+- User A shares Map X → B gets Map Y (`origin_map_id = X`), C gets Map Z (`origin_map_id = X`). A's map has `origin_map_id = X` (self-ref).
+- Each recipient gets a **copy** — their own `maps` row, `maps_objects`, `objects_overrides` with positions + data. Not linked, not synced.
 - Three sharing channels:
-  - **Channel 1 — Intel** (passive): notes shared via `coteries_shares` on shared objects, attributed. Pure query pattern.
+  - **Channel 1 — Intel** (passive): notes shared via `maps_shares` on shared objects, attributed. Pure query pattern.
   - **Channel 2 — Updates** (diff-based): structural differences surface as dissonances. Self-correcting — reversed changes evaporate automatically.
-  - **Channel 3 — Explicit shares** (`coteries_shares` table): per-coterie, per-item sharing of contacts, projects, and events. One row = "I share this thing with this coterie." Private by default, explicit opt-in. `get_coterie_shared_intel()` SECURITY DEFINER RPC fetches shared intel from peers. `CoterieSharePicker` component provides the UI (share icon → coterie dropdown with checkboxes).
+  - **Channel 3 — Explicit shares** (`maps_shares` table): per-map, per-item sharing of contacts, projects, and events. One row = "I share this thing with this map's share group." Private by default, explicit opt-in.
 - Five dissonance types: `new_object`, `new_connection`, `deactivated_connection`, `career_move`, `type_change`
 
 ### Connection Roles
@@ -104,38 +112,38 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 
 ## Key Design Decisions
 
-- **Deletion**: Canonical tables use soft delete (`is_active`) — `objects`, `connections`, `coteries`. User tables use hard delete. Maps use hard delete (no `is_active`). Orphaned user-created objects are hard-deleted. `connections_overrides.deactivated` boolean for canonical overrides only.
+- **Deletion**: Canonical tables use soft delete (`is_active`) — `objects`, `connections`. User tables use hard delete. Maps use hard delete (no `is_active`). Orphaned user-created objects are hard-deleted. `connections_overrides.deactivated` boolean for canonical overrides only.
 - **Option B storage**: user-created objects = skeleton `objects` row + all content in `objects_overrides`
 - **Every object gets a registry row** — `is_canon` distinguishes vetted from user-created
 - **`objects_overrides.object_id` always set** — overrides always point to an `objects` row
 - **Coordinates always in overrides**, never canonical
 - **Connections direction-agnostic** — `object_a_id`/`object_b_id`, no ordering; `connections_overrides` has no FK
 - **UUID PKs for vocabulary** — `types` and `roles` prevent slug collisions; views join to `display_name`
-- **Coterie sharing is diff-based** — self-correcting when changes reversed
-- **Coterie intel is a query pattern** — join members' overrides, exclude `private_notes`
-- **Ownerless coteries** — when owner deletes their account, `owner_id` → NULL. All remaining members get admin privileges (invite, delete, manage maps). No forced ownership transfer. Coterie keeps working as a co-op.
+- **Map sharing replaces coteries** — the 1:1 map-coterie model made the coterie abstraction redundant. Maps are now the sharing primitive directly. `origin_map_id` (self-ref for origin, points to origin for copies, NULL for unshared) is the sole connective tissue. Membership derived from query, not a join table. "Coterie" = brand only.
+- **Sharing is diff-based** — self-correcting when changes reversed
+- **Shared intel is a query pattern** — join members' overrides via shared map group
 - **Maps are catalogs, not canvases** — collections with optional relative positioning
 - **All FKs reference `profiles(user_id)`** not `auth.users(id)`
 - **`created_by` is provenance, not a FK** — `types.created_by`, `roles.created_by`, `objects.created_by` have no FK constraint. NULL = platform-seeded, UUID = user-created (preserved after user deletion). `is_canon` is the authoritative flag, not `created_by`.
-- **Account deletion** — must cascade cleanly through `auth.users` → `profiles` → all user data. `coteries.owner_id` SET NULL, `coteries_invitations.invited_by` CASCADE, `created_by` columns have no FK (provenance preserved). Apple 5.1.1(v) compliant.
-- **Invite lookup for anonymous users** — `get_invitation_by_token()` SECURITY DEFINER RPC, callable by anon. No anon SELECT policy on `coteries_invitations` (would expose emails).
+- **Account deletion** — must cascade cleanly through `auth.users` → `profiles` → all user data. Shared maps persist (origin transfers or orphans). `created_by` columns have no FK (provenance preserved). Apple 5.1.1(v) compliant.
+- **Invite lookup for anonymous users** — `get_invitation_by_token()` SECURITY DEFINER RPC, callable by anon. No anon SELECT policy on invitations table (would expose emails).
 - **Auto-create profile + subscription on signup** via trigger
 - **Subscriptions table** tracks trial/payment status per user — `user_tier(uid)` returns `'pro'`/`'trial'`/`'free'`
 - **VIP status** for internal users (billing-exempt, full Pro access) — just a subscription status value, not a separate role
-- **RLS helper functions** — all cross-table membership/visibility checks MUST use SECURITY DEFINER helpers to avoid RLS recursion. PostgreSQL flags re-entry on the same table as infinite recursion, even across different policy types (e.g., INSERT policy → queries table B → B's SELECT policy → queries original table). Helpers: `is_coterie_admin(coterie_id)`, `is_coterie_member(coterie_id)`, `is_coterie_invitee(coterie_id)`, `is_shared_via_coterie(object_id, target_user_id)`, `is_map_shared_with_user(map_id)`. NEVER raw-query `coteries_members` or `maps` from an RLS policy — always use the helper.
-- **Invite acceptance RPCs** — `accept_coterie_invitation(p_user_id, p_invitation_id, p_token)` handles acceptance + member creation + recipient map + returns placement data as JSONB. `place_coterie_objects(p_user_id, p_coterie_id, p_anchor_x, p_anchor_y, p_items)` finalizes placement. Two-step design supports the ghost placement UX (user picks anchor point before committing). Replaces old `accept_invitation_by_token`.
-- **`get_dissonances()` is SECURITY DEFINER** — reads across multiple users' overrides; RLS would be prohibitively complex. Function already scopes to calling user's coteries.
-- **`get_coterie_shared_intel()` is SECURITY DEFINER** — reads peers' `connections_overrides` (RLS requires both endpoints in shared maps, but projects/events aren't in maps) and `coteries_shares` to find shared contacts/projects/events.
-- **`coteries_shares` table** — universal per-coterie, per-item intel sharing. Replaces earlier `share_contacts` (on `coteries_members`) and `coterie_shared` (on `objects_overrides`) flags which were too blunt. Schema: `(coterie_id, user_id, object_id, share_type)` with `share_type` in ('contacts', 'project', 'event', 'note'). Private by default.
-- **Notes are objects** — class='note', `landscape_visible=false`. Connected to parent via 'note_on' connection. Text stored in `objects_overrides.name`. Each note independently shareable per-coterie via `coteries_shares`. Replaced old `shared_notes`/`private_notes` TEXT columns (dropped from `objects_overrides` and `connections_overrides`).
-- **Server-side RPCs for all multi-step operations** — 12 SECURITY DEFINER functions replace ~970 lines of frontend DB orchestration. Every future client (iPad, etc.) gets this logic for free. RPCs: `create_note`, `create_connected_item`, `delete_object_with_cleanup`, `delete_connected_item`, `delete_multiple_objects`, `create_coterie_with_map` (singular — sets `source_coterie_id` on owner's map), `share_map_as_coterie`, `accept_coterie_invitation` + `place_coterie_objects` (two-step for placement UX), `save_item_with_types`, `link_existing_item`, `create_map_with_objects`.
-- **Contact info stays JSONB** — contacts in `objects_overrides.data.contacts` are shared all-or-nothing per person per coterie. Intentionally NOT objectified — the access pattern (read/write as a group) doesn't benefit from per-item granularity.
+- **RLS helper functions** — all cross-table membership/visibility checks MUST use SECURITY DEFINER helpers to avoid RLS recursion. PostgreSQL flags re-entry on the same table as infinite recursion, even across different policy types (e.g., INSERT policy → queries table B → B's SELECT policy → queries original table). Helpers will be rewritten from coterie-scoped to map-scoped during migration. NEVER raw-query membership tables from an RLS policy — always use helpers.
+- **Invite acceptance RPCs** — two-step: accept invitation (creates recipient map copy + overrides, returns placement data as JSONB) then place objects (user picks anchor point, positions finalized). Ghost placement UX.
+- **`get_dissonances()` is SECURITY DEFINER** — reads across multiple users' overrides; RLS would be prohibitively complex. Scopes to calling user's shared map groups.
+- **`get_shared_intel()` is SECURITY DEFINER** — reads peers' overrides and `maps_shares` to find shared contacts/projects/events.
+- **`maps_shares` table** (was `coteries_shares`) — universal per-map-group, per-item intel sharing. Schema: `(map_id, user_id, object_id, share_type)` where `map_id` = origin map. `share_type` in ('contacts', 'project', 'event', 'note'). Private by default.
+- **Notes are objects** — class='note', `landscape_visible=false`. Connected to parent via 'note_on' connection. Text stored in `objects_overrides.name`. Each note independently shareable per map group via `maps_shares`. Replaced old `shared_notes`/`private_notes` TEXT columns (dropped from `objects_overrides` and `connections_overrides`).
+- **Server-side RPCs for all multi-step operations** — SECURITY DEFINER functions for all multi-step DB orchestration. Every future client (iPad, etc.) gets this logic for free. RPCs to be updated during coterie→map migration.
+- **Contact info stays JSONB** — contacts in `objects_overrides.data.contacts` are shared all-or-nothing per person per map group. Intentionally NOT objectified — the access pattern (read/write as a group) doesn't benefit from per-item granularity.
 - **Cross-platform input** — Canvas multi-select checks both `metaKey` (Mac Cmd) and `ctrlKey` (Windows Ctrl). `multiSelectionKeyCode` is platform-detected. Pan via middle-click drag or Space+drag.
 
 ## Known Gotchas
 
 ### RLS Recursion — The #1 Gotcha
-PostgreSQL detects **any** policy re-entry on the same table as infinite recursion — even if it's a SELECT policy checking during an INSERT. The chain `table_A INSERT → policy queries table_B → table_B SELECT policy queries table_A` = crash. Fix: ALL cross-table checks in RLS policies must use SECURITY DEFINER helper functions. We hit this on `coteries_members`, `maps`, and `coteries_invitations` before creating the full set of helpers. If adding new RLS policies, NEVER raw-query `coteries_members` or `maps` — use `is_coterie_member()`, `is_map_shared_with_user()`, etc.
+PostgreSQL detects **any** policy re-entry on the same table as infinite recursion — even if it's a SELECT policy checking during an INSERT. The chain `table_A INSERT → policy queries table_B → table_B SELECT policy queries table_A` = crash. Fix: ALL cross-table checks in RLS policies must use SECURITY DEFINER helper functions. We hit this on membership tables and `maps` before creating the full set of helpers. If adding new RLS policies, NEVER raw-query `maps` or sharing tables — always use helpers.
 
 ### Supabase Realtime postgres_changes (Local Dev)
 Unreliable in local dev (JWT/RLS issues, GitHub #21624). **Workaround:** polling every 30s. Swap to Broadcast/Realtime on Supabase Cloud.
@@ -256,6 +264,7 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [x] Help button — floating `?` reference card with controls/shortcuts/panel keys
 - [x] Cross-platform input fixes — Ctrl+click multi-select on Windows, platform-detected lasso modifier
 - [x] 1:1 map-coterie model — dropped `coteries_maps`, bidirectional object sharing via `source_coterie_id`
+- [ ] **Collapse coteries into maps** — origin_map_id model, drop coterie tables, maps become sharing primitive
 - [ ] Stripe integration for subscription billing
 - [ ] DetailPanel migration to Frame component (back burner)
 - [ ] Light mode polish (back burner)

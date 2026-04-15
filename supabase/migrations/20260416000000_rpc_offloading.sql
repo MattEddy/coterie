@@ -573,6 +573,12 @@ AS $$
     SELECT DISTINCT m.origin_map_id
     FROM public.maps m
     WHERE m.user_id = p_user_id AND m.origin_map_id IS NOT NULL
+      -- Only maps where this object is a member
+      AND EXISTS (
+        SELECT 1 FROM public.maps_objects mo
+        JOIN public.maps m2 ON m2.id = mo.map_id
+        WHERE mo.object_ref_id = p_object_id AND m2.origin_map_id = m.origin_map_id
+      )
   )
   SELECT
     usm.origin_map_id,

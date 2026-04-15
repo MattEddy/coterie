@@ -4,7 +4,7 @@ import styles from './HelpButton.module.css'
 
 type HelpTab = 'canvas' | 'shortcuts' | 'panel'
 
-const isMac = navigator.platform.includes('Mac')
+const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
 
 export default function HelpButton() {
   const [open, setOpen] = useState(false)

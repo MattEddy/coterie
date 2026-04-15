@@ -20,7 +20,7 @@ import logoIcon from '../assets/logo-icon.svg'
 import thumbLandscape from '../assets/thumb-landscape.svg'
 import thumbDetails from '../assets/thumb-details.svg'
 import thumbMaps from '../assets/thumb-maps.svg'
-import thumbCoteries from '../assets/thumb-coteries.svg'
+import thumbSharedMaps from '../assets/thumb-coteries.svg'
 import styles from './Home.module.css'
 
 /* ── Demo canvas data ──────────────────────────────────────────── */
@@ -162,7 +162,7 @@ const features = [
       'Organize your Landscape into focused subsections — by project, by sector, by whatever makes sense to you.',
   },
   {
-    thumb: thumbCoteries,
+    thumb: thumbSharedMaps,
     title: 'Shared Maps',
     description:
       'Share maps with trusted collaborators to sync contact intel and keep each other in the loop — in real time.',

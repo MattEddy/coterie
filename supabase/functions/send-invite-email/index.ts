@@ -85,8 +85,9 @@ serve(async (req) => {
       .eq("user_id", payload.record.invited_by)
       .single();
 
-    const senderName = sender?.display_name || "Someone";
-    const mapName = map?.name || "a shared map";
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const senderName = esc(sender?.display_name || "Someone");
+    const mapName = esc(map?.name || "a shared map");
     const inviteUrl = `${APP_URL}/invite/${payload.record.token}`;
 
     // Send email via Resend

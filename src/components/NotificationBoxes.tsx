@@ -48,7 +48,7 @@ export default function NotificationBoxes({ onOpenMaps, onOpenUpdates }: Notific
     // Poll for cross-user changes (swap to Supabase Realtime when feasible)
     const interval = setInterval(() => loadCountsRef.current?.(), 30000)
 
-    // Direct count push from CoterieUpdatesFrame (instant for own actions)
+    // Direct count push from UpdatesFrame (instant for own actions)
     const handleCountPush = (e: Event) => {
       setDissonanceCount((e as CustomEvent).detail)
     }

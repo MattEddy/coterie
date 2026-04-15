@@ -680,56 +680,29 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   const handleCreateObject = useCallback(async (className: string, name: string) => {
     if (!user) return
 
-    // 1. Skeleton objects row
-    const { data: obj, error: objError } = await supabase
-      .from('objects')
-      .insert({ class: className, is_canon: false, created_by: user.id })
-      .select('id')
-      .single()
-
-    if (objError || !obj) {
-      console.error('Failed to create object:', objError)
-      return
-    }
-
-    // 2. Override row with name + position
     const flowPos = createForm!.flow
-    const { error: ovError } = await supabase
-      .from('objects_overrides')
-      .insert({
-        object_id: obj.id,
-        user_id: user.id,
-        name,
-        map_x: flowPos.x,
-        map_y: flowPos.y,
-      })
+    const { data: objId, error } = await supabase.rpc('create_object', {
+      p_user_id: user.id,
+      p_class: className,
+      p_name: name,
+      p_map_x: flowPos.x,
+      p_map_y: flowPos.y,
+    })
 
-    if (ovError) {
-      console.error('Failed to create override:', ovError)
+    if (error || !objId) {
+      console.error('Failed to create object:', error)
       return
     }
 
-    // 3. Auto-add to maps with auto_add enabled
-    const { data: autoMaps } = await supabase
-      .from('maps')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('auto_add', true)
-    if (autoMaps && autoMaps.length > 0) {
-      await supabase
-        .from('maps_objects')
-        .insert(autoMaps.map(m => ({ map_id: m.id, object_ref_id: obj.id })))
-      document.dispatchEvent(new Event('maps:refresh'))
-    }
-
+    document.dispatchEvent(new Event('maps:refresh'))
     setCreateForm(null)
     await refreshData()
 
     // Auto-select the new node so the detail panel opens
     setSelectedItems([{
-      nodeId: obj.id,
+      nodeId: objId,
       data: {
-        id: obj.id,
+        id: objId,
         name,
         title: null,
         class: className,
@@ -768,88 +741,18 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
     })
   }, [flowToScreenPosition])
 
-  const resolveRoleId = useCallback(async (value: string | null): Promise<string | null> => {
-    if (!value || !user) return null
-
-    // Look up by display_name first (handles both existing selections and typed text)
-    const { data: existing } = await supabase
-      .from('roles')
-      .select('id')
-      .eq('display_name', value)
-      .maybeSingle()
-
-    if (existing) return existing.id
-
-    // Don't create junk roles from accidental short input
-    if (value.trim().length < 2) return null
-
-    // Create a new custom role (UUID auto-generated)
-    const { data: newRole, error } = await supabase
-      .from('roles')
-      .insert({
-        display_name: value,
-        is_canon: false,
-        created_by: user.id,
-      })
-      .select('id')
-      .single()
-
-    if (error || !newRole) return null
-    return newRole.id
-  }, [user])
-
   const handleConnectSubmit = useCallback(async (roleA: string | null, roleB: string | null) => {
     if (!user || !connectForm) return
 
-    const resolvedA = await resolveRoleId(roleA)
-    const resolvedB = await resolveRoleId(roleB)
-
-    if (connectForm.editingConnectionId) {
-      // Editing existing connection
-      if (connectForm.isUserCreated) {
-        await supabase
-          .from('connections_overrides')
-          .update({ role_a: resolvedA, role_b: resolvedB })
-          .eq('id', connectForm.editingConnectionId)
-      } else {
-        // Canonical connection — create/update override
-        const { data: existing } = await supabase
-          .from('connections_overrides')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('connection_id', connectForm.editingConnectionId)
-          .maybeSingle()
-
-        if (existing) {
-          await supabase
-            .from('connections_overrides')
-            .update({ role_a: resolvedA, role_b: resolvedB })
-            .eq('id', existing.id)
-        } else {
-          await supabase
-            .from('connections_overrides')
-            .insert({
-              user_id: user.id,
-              connection_id: connectForm.editingConnectionId,
-              object_a_id: connectForm.objectA.id,
-              object_b_id: connectForm.objectB.id,
-              role_a: resolvedA,
-              role_b: resolvedB,
-            })
-        }
-      }
-    } else {
-      // Creating new connection
-      await supabase
-        .from('connections_overrides')
-        .insert({
-          user_id: user.id,
-          object_a_id: connectForm.objectA.id,
-          object_b_id: connectForm.objectB.id,
-          role_a: resolvedA,
-          role_b: resolvedB,
-        })
-    }
+    await supabase.rpc('upsert_connection', {
+      p_user_id: user.id,
+      p_object_a_id: connectForm.objectA.id,
+      p_object_b_id: connectForm.objectB.id,
+      p_role_a_name: roleA || null,
+      p_role_b_name: roleB || null,
+      p_editing_connection_id: connectForm.editingConnectionId || null,
+      p_is_user_created: connectForm.isUserCreated || false,
+    })
 
     const objectAId = connectForm.objectA.id
     const objectBId = connectForm.objectB.id
@@ -868,7 +771,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         return e
       })
     )
-  }, [user, connectForm, refreshData, resolveRoleId, setEdges])
+  }, [user, connectForm, refreshData, setEdges])
 
   const handleConnectDelete = useCallback(async () => {
     if (!user || !connectForm?.editingConnectionId) return
@@ -880,30 +783,13 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         .delete()
         .eq('id', connectForm.editingConnectionId)
     } else {
-      // Deactivate canonical connection
-      const { data: existing } = await supabase
-        .from('connections_overrides')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('connection_id', connectForm.editingConnectionId)
-        .maybeSingle()
-
-      if (existing) {
-        await supabase
-          .from('connections_overrides')
-          .update({ deactivated: true })
-          .eq('id', existing.id)
-      } else {
-        await supabase
-          .from('connections_overrides')
-          .insert({
-            user_id: user.id,
-            connection_id: connectForm.editingConnectionId,
-            object_a_id: connectForm.objectA.id,
-            object_b_id: connectForm.objectB.id,
-            deactivated: true,
-          })
-      }
+      // Deactivate canonical connection (single upsert)
+      await supabase.rpc('deactivate_connection', {
+        p_user_id: user.id,
+        p_connection_id: connectForm.editingConnectionId,
+        p_object_a_id: connectForm.objectA.id,
+        p_object_b_id: connectForm.objectB.id,
+      })
     }
 
     setConnectForm(null)
@@ -991,7 +877,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         selectionOnDrag={!mapEditMode}
         selectionMode={SelectionMode.Partial}
         elementsSelectable={!mapEditMode}
-        multiSelectionKeyCode={navigator.platform.includes('Mac') ? 'Meta' : 'Control'}
+        multiSelectionKeyCode={/Mac|iPhone|iPad/.test(navigator.userAgent) ? 'Meta' : 'Control'}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--color-dots)" />

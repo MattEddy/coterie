@@ -979,7 +979,7 @@
   text-transform: capitalize;
 }
 
-.coterieSharedToggle {
+.sharedToggle {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -989,7 +989,7 @@
   margin-top: 6px;
 }
 
-.coterieSharedToggle input[type="checkbox"] {
+.sharedToggle input[type="checkbox"] {
   accent-color: var(--color-accent);
   color-scheme: dark;
 }

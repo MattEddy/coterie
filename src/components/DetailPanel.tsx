@@ -184,21 +184,13 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
   const loadObjectMaps = useCallback(async () => {
     if (!user) return
-    const { data: moData } = await supabase
-      .from('maps_objects')
-      .select('map_id')
-      .eq('object_ref_id', object.id)
-    if (!moData) return
-    const mapIds = moData.map(d => d.map_id)
-    if (mapIds.length === 0) { setObjectMaps([]); return }
     const { data } = await supabase
       .from('maps')
-      .select('id, name')
-      .in('id', mapIds)
+      .select('id, name, maps_objects!inner(object_ref_id)')
       .eq('user_id', user.id)
-      .eq('is_active', true)
+      .eq('maps_objects.object_ref_id', object.id)
       .order('name')
-    setObjectMaps(data ?? [])
+    setObjectMaps((data ?? []).map(m => ({ id: m.id, name: m.name })))
   }, [user, object.id])
 
   const loadAllMaps = useCallback(async () => {
@@ -207,7 +199,6 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       .from('maps')
       .select('id, name')
       .eq('user_id', user.id)
-      .eq('is_active', true)
       .order('name')
     setAllMaps(data ?? [])
   }, [user])
@@ -285,70 +276,20 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const loadConnectedItems = useCallback(async (objectId: string, targetClass: 'project' | 'event' | 'note') => {
     if (!user) return
 
-    const conns = await getEffectiveConnections(objectId, user.id)
-    const itemIds = new Set<string>()
-    for (const c of conns) {
-      const otherId = otherObjectId(c, objectId)
-      if (otherId) itemIds.add(otherId)
-    }
+    const { data } = await supabase.rpc('get_connected_items', {
+      p_user_id: user.id,
+      p_object_id: objectId,
+      p_class: targetClass,
+    })
 
-    if (itemIds.size === 0) {
-      if (targetClass === 'project') setConnectedProjects([])
-      else if (targetClass === 'event') setConnectedEvents([])
-      else setConnectedNotes([])
-      return
-    }
-
-    // Fetch the connected objects — try user_objects first, fall back to objects
-    const ids = Array.from(itemIds)
-    const { data: userObjs } = await supabase
-      .from('user_objects')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('class', targetClass)
-      .in('id', ids)
-
-    // For any IDs not found in user_objects (no override row), query objects directly
-    const foundIds = new Set((userObjs || []).map(o => o.id))
-    const missingIds = ids.filter(id => !foundIds.has(id))
-    let fallbackObjs: typeof userObjs = []
-    if (missingIds.length > 0) {
-      const { data } = await supabase
-        .from('objects')
-        .select('id, class, name, title, status, event_date')
-        .eq('class', targetClass)
-        .eq('is_active', true)
-        .in('id', missingIds)
-      fallbackObjs = data || []
-    }
-
-    const items: ConnectedItem[] = [
-      ...(userObjs || []).map(o => ({
-        id: o.id,
-        name: o.name || '(unnamed)',
-        title: o.title,
-        status: o.status,
-        event_date: o.event_date,
-        types: o.types || [],
-      })),
-      ...(fallbackObjs || []).map(o => ({
-        id: o.id,
-        name: o.name || '(unnamed)',
-        title: o.title,
-        status: o.status,
-        event_date: o.event_date,
-        types: [],
-      })),
-    ]
-
-    // Sort: events by date desc, notes by newest first (reverse alpha as proxy), projects alphabetically
-    if (targetClass === 'event') {
-      items.sort((a, b) => (b.event_date || '').localeCompare(a.event_date || ''))
-    } else if (targetClass === 'note') {
-      items.reverse()
-    } else {
-      items.sort((a, b) => (a.name).localeCompare(b.name))
-    }
+    const items: ConnectedItem[] = (data || []).map((o: any) => ({
+      id: o.id,
+      name: o.name || '(unnamed)',
+      title: o.title,
+      status: o.status,
+      event_date: o.event_date,
+      types: o.types || [],
+    }))
 
     if (targetClass === 'project') setConnectedProjects(items)
     else if (targetClass === 'event') setConnectedEvents(items)
@@ -538,31 +479,14 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     onObjectUpdated?.()
   }
 
-  async function resolveTypeIds(displayNames: string[]): Promise<string[]> {
-    if (displayNames.length === 0) return []
-    const { data } = await supabase
-      .from('types')
-      .select('id, display_name')
-      .in('display_name', displayNames)
-      .eq('class', object.class)
-    return (data || []).map(t => t.id)
-  }
-
   async function saveTypes() {
     if (!user) return
-    await supabase
-      .from('objects_types_overrides')
-      .delete()
-      .eq('object_id', object.id)
-      .eq('user_id', user.id)
-    if (editTypes.length > 0) {
-      const typeIds = await resolveTypeIds(editTypes)
-      if (typeIds.length > 0) {
-        await supabase
-          .from('objects_types_overrides')
-          .insert(typeIds.map(typeId => ({ user_id: user.id, object_id: object.id, type_id: typeId })))
-      }
-    }
+    await supabase.rpc('set_object_types', {
+      p_user_id: user.id,
+      p_object_id: object.id,
+      p_class: object.class,
+      p_type_names: editTypes,
+    })
     setShowTagInput(false)
     onObjectUpdated?.()
   }
@@ -653,61 +577,20 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   async function initiateDelete() {
     if (!user) return
 
-    // Get all object IDs on the user's landscape
-    const { data: userObjRows } = await supabase
-      .from('objects_overrides')
-      .select('object_id')
-      .eq('user_id', user.id)
+    const { data } = await supabase.rpc('preflight_delete_object', {
+      p_user_id: user.id,
+      p_object_id: object.id,
+    })
 
-    const userObjectIds = new Set((userObjRows || []).map(r => r.object_id))
-
-    const conns = await getEffectiveConnections(object.id, user.id)
-
-    // Only count connections where the other endpoint is on the user's landscape
-    const totalConnections = conns.filter(c => {
-      return userObjectIds.has(otherObjectId(c, object.id))
-    }).length
-
-    // Find connected off-landscape objects (projects/events) that would be orphaned
-    const relatedIds = new Set<string>()
-    for (const c of conns) {
-      relatedIds.add(otherObjectId(c, object.id))
+    if (data) {
+      setDeleteConfirm({
+        connections: data.connections ?? 0,
+        orphanedProjects: data.orphanedProjects ?? 0,
+        orphanedEvents: data.orphanedEvents ?? 0,
+      })
+    } else {
+      setDeleteConfirm({ connections: 0, orphanedProjects: 0, orphanedEvents: 0 })
     }
-
-    // Check which are orphans (only connected to this object)
-    let orphanedProjects = 0
-    let orphanedEvents = 0
-    for (const relId of relatedIds) {
-      const { count: otherConns } = await supabase
-        .from('connections')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .or(`object_a_id.eq.${relId},object_b_id.eq.${relId}`)
-        .neq('object_a_id', object.id)
-        .neq('object_b_id', object.id)
-
-      const { count: otherUserConns } = await supabase
-        .from('connections_overrides')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .is('connection_id', null)
-        .or(`object_a_id.eq.${relId},object_b_id.eq.${relId}`)
-        .neq('object_a_id', object.id)
-        .neq('object_b_id', object.id)
-
-      if ((otherConns || 0) + (otherUserConns || 0) === 0) {
-        const { data: relObj } = await supabase
-          .from('objects')
-          .select('class')
-          .eq('id', relId)
-          .single()
-
-        if (relObj?.class === 'project') orphanedProjects++
-        else if (relObj?.class === 'event') orphanedEvents++
-      }
-    }
-
-    setDeleteConfirm({ connections: totalConnections, orphanedProjects, orphanedEvents })
   }
 
   async function executeDelete() {

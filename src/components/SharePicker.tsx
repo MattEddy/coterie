@@ -28,41 +28,12 @@ export default function SharePicker({ objectId, shareType, tooltip }: SharePicke
 
   const load = useCallback(async () => {
     if (!user) return
-
-    // Get all the user's maps that belong to a sharing group (origin_map_id is set)
-    const { data: userMaps } = await supabase
-      .from('maps')
-      .select('id, name, origin_map_id')
-      .eq('user_id', user.id)
-      .not('origin_map_id', 'is', null)
-    if (!userMaps?.length) { setSharedMaps([]); return }
-
-    // Deduplicate by origin_map_id and resolve origin map names
-    const originIds = [...new Set(userMaps.map(m => m.origin_map_id))]
-
-    // For each origin, find the origin map's name (where id = origin_map_id)
-    const { data: originMaps } = await supabase
-      .from('maps')
-      .select('id, name')
-      .in('id', originIds)
-
-    const originNameMap = new Map((originMaps || []).map(m => [m.id, m.name]))
-
-    // Get current share state from maps_shares
-    const { data: shares } = await supabase
-      .from('maps_shares')
-      .select('map_id')
-      .eq('user_id', user.id)
-      .eq('object_id', objectId)
-      .eq('share_type', shareType)
-
-    const sharedIds = new Set((shares || []).map(s => s.map_id))
-
-    setSharedMaps(originIds.map(originId => ({
-      origin_map_id: originId,
-      map_name: originNameMap.get(originId) || 'Unknown',
-      shared: sharedIds.has(originId),
-    })))
+    const { data } = await supabase.rpc('get_share_picker_state', {
+      p_user_id: user.id,
+      p_object_id: objectId,
+      p_share_type: shareType,
+    })
+    setSharedMaps(data || [])
   }, [user, objectId, shareType])
 
   // Load on mount to show gold indicator, and reload when dropdown opens

@@ -75,180 +75,52 @@ export default function UpdatesFrame({ onClose, onEnterPlacement }: UpdatesFrame
   const handleAccept = async (d: Dissonance) => {
     if (!user) return
 
-    switch (d.dissonance_type) {
-      case 'new_object': {
-        const { data: memberOv } = await supabase
-          .from('objects_overrides')
-          .select('name, title, status, map_x, map_y, event_date, data')
-          .eq('id', d.ref_id)
-          .single()
-        if (!memberOv) return
+    if (d.dissonance_type === 'new_object' && onEnterPlacement && d.object_id) {
+      // For new_object with placement mode, we need the member's data for the ghost preview
+      const { data: memberOv } = await supabase
+        .from('objects_overrides')
+        .select('name, title, status')
+        .eq('id', d.ref_id)
+        .single()
+      if (!memberOv) return
 
-        if (onEnterPlacement && d.object_id) {
-          onEnterPlacement({
-            label: memberOv.name ?? d.object_name ?? 'New Object',
-            items: [{
-              objectId: d.object_id,
-              name: memberOv.name ?? d.object_name ?? 'Unknown',
-              class: d.object_class ?? 'person',
-              relativeX: 0,
-              relativeY: 0,
-            }],
-            connections: [],
-            onConfirm: async (anchorX, anchorY) => {
-              await supabase.from('objects_overrides').insert({
-                user_id: user!.id,
-                object_id: d.object_id,
-                name: memberOv.name,
-                title: memberOv.title,
-                status: memberOv.status,
-                map_x: anchorX,
-                map_y: anchorY,
-                event_date: memberOv.event_date,
-                data: memberOv.data,
-              })
-
-              const { data: userMap } = await supabase
-                .from('maps')
-                .select('id')
-                .eq('user_id', user!.id)
-                .eq('origin_map_id', d.origin_map_id)
-                .single()
-              if (userMap) {
-                await supabase.from('maps_objects').upsert({
-                  map_id: userMap.id,
-                  object_ref_id: d.object_id!,
-                })
-              }
-
-              removeDissonance(d)
-            },
-            onCancel: () => {
-              // User cancelled — dissonance stays in the list
-            },
+      onEnterPlacement({
+        label: memberOv.name ?? d.object_name ?? 'New Object',
+        items: [{
+          objectId: d.object_id,
+          name: memberOv.name ?? d.object_name ?? 'Unknown',
+          class: d.object_class ?? 'person',
+          relativeX: 0,
+          relativeY: 0,
+        }],
+        connections: [],
+        onConfirm: async (anchorX, anchorY) => {
+          await supabase.rpc('accept_dissonance', {
+            p_user_id: user!.id,
+            p_dissonance_type: 'new_object',
+            p_ref_id: d.ref_id,
+            p_object_id: d.object_id,
+            p_origin_map_id: d.origin_map_id,
+            p_map_x: anchorX,
+            p_map_y: anchorY,
           })
-          return // Don't remove dissonance yet
-        }
-
-        // Fallback: no placement mode, auto-place at member's position
-        await supabase.from('objects_overrides').insert({
-          user_id: user.id,
-          object_id: d.object_id,
-          name: memberOv.name,
-          title: memberOv.title,
-          status: memberOv.status,
-          map_x: memberOv.map_x,
-          map_y: memberOv.map_y,
-          event_date: memberOv.event_date,
-          data: memberOv.data,
-        })
-
-        const { data: userMap } = await supabase
-          .from('maps')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('origin_map_id', d.origin_map_id)
-          .single()
-        if (userMap && d.object_id) {
-          await supabase.from('maps_objects').upsert({
-            map_id: userMap.id,
-            object_ref_id: d.object_id,
-          })
-        }
-        break
-      }
-
-      case 'new_connection': {
-        const { data: memberConn } = await supabase
-          .from('connections_overrides')
-          .select('object_a_id, object_b_id, role_a, role_b, data')
-          .eq('id', d.ref_id)
-          .single()
-        if (!memberConn) return
-
-        await supabase.from('connections_overrides').insert({
-          user_id: user.id,
-          object_a_id: memberConn.object_a_id,
-          object_b_id: memberConn.object_b_id,
-          role_a: memberConn.role_a,
-          role_b: memberConn.role_b,
-          data: memberConn.data,
-        })
-        break
-      }
-
-      case 'deactivated_connection': {
-        const { data: memberDeact } = await supabase
-          .from('connections_overrides')
-          .select('connection_id')
-          .eq('id', d.ref_id)
-          .single()
-        if (!memberDeact?.connection_id) return
-
-        const { data: existing } = await supabase
-          .from('connections_overrides')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('connection_id', memberDeact.connection_id)
-          .maybeSingle()
-
-        if (existing) {
-          await supabase.from('connections_overrides')
-            .update({ deactivated: true })
-            .eq('id', existing.id)
-        } else {
-          await supabase.from('connections_overrides').insert({
-            user_id: user.id,
-            connection_id: memberDeact.connection_id,
-            deactivated: true,
-          })
-        }
-        break
-      }
-
-      case 'career_move': {
-        const updates: Record<string, string | null> = {}
-        if (d.their_name !== d.your_name) updates.name = d.their_name
-        if (d.their_title !== d.your_title) updates.title = d.their_title
-        if (d.their_status !== d.your_status) updates.status = d.their_status
-
-        if (Object.keys(updates).length > 0) {
-          await supabase
-            .from('objects_overrides')
-            .update(updates)
-            .eq('user_id', user.id)
-            .eq('object_id', d.object_id)
-        }
-        break
-      }
-
-      case 'type_change': {
-        if (!d.their_types || !d.object_id) break
-        // Replace user's type overrides with member's types
-        await supabase
-          .from('objects_types_overrides')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('object_id', d.object_id)
-
-        // Resolve display_names to type IDs
-        const { data: typeRows } = await supabase
-          .from('types')
-          .select('id, display_name')
-          .in('display_name', d.their_types)
-          .eq('class', d.object_class!)
-        if (typeRows && typeRows.length > 0) {
-          await supabase.from('objects_types_overrides').insert(
-            typeRows.map(t => ({
-              user_id: user.id,
-              object_id: d.object_id!,
-              type_id: t.id,
-            }))
-          )
-        }
-        break
-      }
+          removeDissonance(d)
+        },
+        onCancel: () => {
+          // User cancelled — dissonance stays in the list
+        },
+      })
+      return // Don't remove dissonance yet
     }
+
+    // All other types (and new_object without placement mode) go through the RPC
+    await supabase.rpc('accept_dissonance', {
+      p_user_id: user.id,
+      p_dissonance_type: d.dissonance_type,
+      p_ref_id: d.ref_id,
+      p_object_id: d.object_id || null,
+      p_origin_map_id: d.origin_map_id || null,
+    })
 
     removeDissonance(d)
     document.dispatchEvent(new Event('sharing:refresh-canvas'))
@@ -267,7 +139,7 @@ export default function UpdatesFrame({ onClose, onEnterPlacement }: UpdatesFrame
   }
 
   return (
-    <Frame title="Updates" titleTooltip="Differences between your data and your shared maps" onClose={onClose} initialPosition={{ x: 60, y: 60 }} width={320} resizable persistKey="coterie-updates">
+    <Frame title="Updates" titleTooltip="Differences between your data and your shared maps" onClose={onClose} initialPosition={{ x: 60, y: 60 }} width={320} resizable persistKey="updates">
       {dissonances.length > 0 ? (
         <div className={styles.list}>
           {dissonances.map(d => {
@@ -326,7 +198,7 @@ export default function UpdatesFrame({ onClose, onEnterPlacement }: UpdatesFrame
                         {d.your_types.filter(t => !d.their_types!.includes(t)).map(t => `−${t}`).join(' ')}
                       </span>
                     )}
-                    <span className={styles.coterieName}>{d.map_name}</span>
+                    <span className={styles.mapName}>{d.map_name}</span>
                   </div>
                 </div>
                 <div className={styles.actions}>

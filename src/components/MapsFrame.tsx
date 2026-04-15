@@ -172,13 +172,15 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   const addShareEmail = () => {
     const email = shareEmailInput.trim().toLowerCase()
     if (!email || shareEmails.includes(email)) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return
     setShareEmails(prev => [...prev, email])
     setShareEmailInput('')
   }
 
   const handleShare = async () => {
     const pendingEmail = shareEmailInput.trim().toLowerCase()
-    const finalEmails = pendingEmail && !shareEmails.includes(pendingEmail)
+    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pendingEmail)
+    const finalEmails = pendingEmail && isValidEmail && !shareEmails.includes(pendingEmail)
       ? [...shareEmails, pendingEmail]
       : shareEmails
     if (!user || finalEmails.length === 0) return
@@ -198,8 +200,11 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
 
   const handleLeaveMap = async () => {
     if (!user) return
-    // Set origin_map_id to NULL on user's map (leaves sharing group)
-    await supabase.from('maps').update({ origin_map_id: null }).eq('id', map.id)
+    const { error } = await supabase.rpc('leave_shared_map', {
+      p_user_id: user.id,
+      p_map_id: map.id,
+    })
+    if (error) { console.error('Failed to leave map:', error); return }
     setConfirmLeave(false)
     onMapUpdated({ ...map, origin_map_id: null, member_count: 0, is_admin: false })
     document.dispatchEvent(new CustomEvent('maps:refresh'))
@@ -545,71 +550,19 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
 
   const loadMaps = useCallback(async () => {
     if (!user) return
-    const { data } = await supabase
-      .from('maps')
-      .select('id, name, description, auto_add, origin_map_id')
-      .eq('user_id', user.id)
-      .order('name')
+    const { data } = await supabase.rpc('get_user_maps', { p_user_id: user.id })
     if (!data) return
-    const countResults = await Promise.all(
-      data.map(m =>
-        supabase.from('maps_objects').select('*', { count: 'exact', head: true }).eq('map_id', m.id)
-          .then(({ count }) => [m.id, count ?? 0] as const)
-      )
-    )
-    const counts = new Map<string, number>(countResults)
-
-    // Count members for shared maps
-    const memberCounts = new Map<string, number>()
-    const sharedOrigins = [...new Set(data.filter(m => m.origin_map_id).map(m => m.origin_map_id!))]
-    if (sharedOrigins.length > 0) {
-      const { data: groupMaps } = await supabase
-        .from('maps')
-        .select('origin_map_id')
-        .in('origin_map_id', sharedOrigins)
-      if (groupMaps) {
-        for (const gm of groupMaps) {
-          if (gm.origin_map_id) memberCounts.set(gm.origin_map_id, (memberCounts.get(gm.origin_map_id) || 0) + 1)
-        }
-      }
-    }
-
-    setMaps(data.map(m => ({
+    setMaps(data.map((m: any) => ({
       ...m,
-      object_count: counts.get(m.id) ?? 0,
-      origin_map_id: m.origin_map_id ?? null,
-      member_count: m.origin_map_id ? (memberCounts.get(m.origin_map_id) || 1) : 0,
-      is_admin: m.origin_map_id === m.id,
+      object_count: Number(m.object_count),
+      member_count: Number(m.member_count),
     })))
   }, [user])
 
   const loadPendingInvites = useCallback(async () => {
     if (!user?.email) return
-    const { data } = await supabase
-      .from('maps_invitations')
-      .select('id, map_id, created_at')
-      .eq('email', user.email)
-      .eq('status', 'pending')
-    if (!data || data.length === 0) { setPendingInvites([]); return }
-    // Get map names and sender names
-    const mapIds = data.map(d => d.map_id)
-    const { data: mapData } = await supabase.from('maps').select('id, name, user_id').in('id', mapIds)
-    const senderIds = (mapData || []).map(m => m.user_id).filter(Boolean)
-    const { data: profiles } = senderIds.length > 0
-      ? await supabase.from('profiles').select('user_id, display_name').in('user_id', senderIds)
-      : { data: [] }
-    const profileMap = new Map((profiles || []).map(p => [p.user_id, p.display_name || 'Someone']))
-    const mapMap = new Map((mapData || []).map(m => [m.id, m]))
-    setPendingInvites(data.map(d => {
-      const map = mapMap.get(d.map_id)
-      return {
-        id: d.id,
-        map_id: d.map_id,
-        map_name: map?.name || 'Shared Map',
-        sender_name: map?.user_id ? (profileMap.get(map.user_id) || 'Someone') : 'Someone',
-        created_at: d.created_at,
-      }
-    }))
+    const { data } = await supabase.rpc('get_pending_invites', { p_email: user.email })
+    setPendingInvites(data || [])
   }, [user?.email])
 
   useEffect(() => { loadMaps(); loadPendingInvites() }, [loadMaps, loadPendingInvites])
@@ -724,10 +677,22 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
     if (isInMap) {
       const { error } = await supabase.from('maps_objects').delete()
         .eq('map_id', selectedMapId).eq('object_ref_id', objectId)
-      if (error) console.error('Failed to remove object from map:', error)
+      if (error) {
+        console.error('Failed to remove object from map:', error)
+        mapObjectIdsRef.current = currentIds
+        setMapObjectIds(currentIds)
+        setMaps(prev => prev.map(m => m.id === selectedMapId ? { ...m, object_count: m.object_count - countDelta } : m))
+        setOpenedMap(prev => prev?.id === selectedMapId ? { ...prev, object_count: prev.object_count - countDelta } : prev)
+      }
     } else {
       const { error } = await supabase.from('maps_objects').insert({ map_id: selectedMapId, object_ref_id: objectId })
-      if (error) console.error('Failed to add object to map:', error)
+      if (error) {
+        console.error('Failed to add object to map:', error)
+        mapObjectIdsRef.current = currentIds
+        setMapObjectIds(currentIds)
+        setMaps(prev => prev.map(m => m.id === selectedMapId ? { ...m, object_count: m.object_count - countDelta } : m))
+        setOpenedMap(prev => prev?.id === selectedMapId ? { ...prev, object_count: prev.object_count - countDelta } : prev)
+      }
     }
   }, [selectedMapId])
 
@@ -854,6 +819,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
                           loadPendingInvites()
                         },
                         onCancel: async () => {
+                          // Place at default (0,0) — user can reposition later
                           await supabase.rpc('place_shared_objects', {
                             p_user_id: user.id,
                             p_origin_map_id: result.origin_map_id,

@@ -72,7 +72,6 @@ BEGIN
     IF v_role_a IS NULL AND length(trim(p_role_a_name)) >= 2 THEN
       INSERT INTO public.roles (display_name, is_canon, created_by)
       VALUES (trim(p_role_a_name), FALSE, p_user_id)
-      ON CONFLICT (display_name) DO UPDATE SET display_name = EXCLUDED.display_name
       RETURNING id INTO v_role_a;
     END IF;
   END IF;
@@ -83,7 +82,6 @@ BEGIN
     IF v_role_b IS NULL AND length(trim(p_role_b_name)) >= 2 THEN
       INSERT INTO public.roles (display_name, is_canon, created_by)
       VALUES (trim(p_role_b_name), FALSE, p_user_id)
-      ON CONFLICT (display_name) DO UPDATE SET display_name = EXCLUDED.display_name
       RETURNING id INTO v_role_b;
     END IF;
   END IF;

@@ -87,7 +87,6 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
   // Members state (for shared maps)
   const [members, setMembers] = useState<SharedMember[]>([])
   const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([])
-  const [inviteEmail, setInviteEmail] = useState('')
 
   const loadMapObjects = useCallback(async (mapId: string) => {
     if (!user) return
@@ -153,7 +152,6 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     setShareEmailInput('')
     setSearchQuery('')
     setSearchResults([])
-    setInviteEmail('')
     loadMapObjects(map.id)
     loadMembers()
   }, [map.id, loadMapObjects, loadMembers])
@@ -195,17 +193,6 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     setSharing(false)
     onMapUpdated({ ...map, origin_map_id: map.id, is_admin: true, member_count: 1 })
     document.dispatchEvent(new CustomEvent('maps:refresh'))
-    loadMembers()
-  }
-
-  const handleInviteMember = async () => {
-    if (!user || !inviteEmail.trim() || !map.origin_map_id) return
-    const originId = map.is_admin ? map.id : map.origin_map_id
-    const { error } = await supabase
-      .from('maps_invitations')
-      .insert({ map_id: originId, invited_by: user.id, email: inviteEmail.trim().toLowerCase() })
-    if (error) { console.error('Invite error:', error); return }
-    setInviteEmail('')
     loadMembers()
   }
 
@@ -301,9 +288,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     <Tooltip text="Save"><button className={styles.iconBtn} onClick={saveEdit}><Check size={14} /></button></Tooltip>
   ) : (
     <>
-      {!map.origin_map_id && (
-        <Tooltip text="Share map"><button className={styles.iconBtn} onClick={startShare}><Share2 size={14} /></button></Tooltip>
-      )}
+      <Tooltip text="Share map"><button className={styles.iconBtn} onClick={startShare}><Share2 size={14} /></button></Tooltip>
       <Tooltip text="Edit map"><button className={styles.iconBtn} onClick={startEdit}><Pencil size={14} /></button></Tooltip>
       {map.origin_map_id && !map.is_admin ? (
         <Tooltip text="Leave shared map"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmLeave(true)}><LogOut size={14} /></button></Tooltip>
@@ -450,21 +435,6 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
               </div>
             ))}
           </div>
-          {map.is_admin && (
-            <div className={styles.addSection}>
-              <div className={styles.searchInput}>
-                <Mail size={14} className={styles.searchIcon} />
-                <input
-                  type="email"
-                  placeholder="Invite by email..."
-                  value={inviteEmail}
-                  onChange={e => setInviteEmail(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleInviteMember() } }}
-                  autoComplete="off"
-                />
-              </div>
-            </div>
-          )}
         </div>
       )}
 

@@ -71,18 +71,17 @@ The user's entire sector universe — one giant canvas. Every user has one Lands
 
 A **map** is a named collection of objects (`maps` + `maps_objects` tables). Serves three roles: store packages (curated, with relative coords), user maps (personal filtered views), and shared/installed maps (from packages or coteries). Installation = "accept and place" — user picks an anchor point, new objects positioned relative to it. `auto_add` boolean for auto-membership of new objects.
 
-### Map Sharing (replacing Coteries)
+### Map Sharing
 
-> **Migration planned (2026-04-14):** Collapsing the coterie abstraction into maps. The 1:1 map-coterie relationship made the coterie layer redundant. "Coterie" becomes purely the brand name, not a feature. See below for the target model. Current code still has the coterie tables — migration not yet implemented.
+Maps are the sharing primitive. "Coterie" is purely the brand name, not a feature. The coterie abstraction was collapsed into maps on 2026-04-14 (migration `20260415000000`).
 
-**Target model — origin_map_id:**
+**origin_map_id model:**
 - `maps.origin_map_id` — self-referential for the origin map (points to own ID), points to origin for recipient copies, NULL for unshared standalone maps
-- **Membership is derived**, not stored: `SELECT user_id FROM maps WHERE origin_map_id = :origin` returns all members including the owner. No `maps_members` table needed.
+- **Membership is derived**, not stored: `SELECT user_id FROM maps WHERE origin_map_id = :origin` returns all members including the owner. No membership table needed.
 - Origin map owner = admin. No role types beyond that.
-- Tables to drop: `coteries`, `coteries_members`, `coteries_invitations` → `maps_invitations`; `coteries_shares` → `maps_shares`
-- All SECURITY DEFINER helpers and RPCs rewrite from coterie-scoped to map-scoped
+- Supporting tables: `maps_invitations`, `maps_shares`, `maps_reviews`
 
-**Sharing flow (unchanged functionally):**
+**Sharing flow:**
 - User A shares Map X → B gets Map Y (`origin_map_id = X`), C gets Map Z (`origin_map_id = X`). A's map has `origin_map_id = X` (self-ref).
 - Each recipient gets a **copy** — their own `maps` row, `maps_objects`, `objects_overrides` with positions + data. Not linked, not synced.
 - Three sharing channels:
@@ -90,6 +89,12 @@ A **map** is a named collection of objects (`maps` + `maps_objects` tables). Ser
   - **Channel 2 — Updates** (diff-based): structural differences surface as dissonances. Self-correcting — reversed changes evaporate automatically.
   - **Channel 3 — Explicit shares** (`maps_shares` table): per-map, per-item sharing of contacts, projects, and events. One row = "I share this thing with this map's share group." Private by default, explicit opt-in.
 - Five dissonance types: `new_object`, `new_connection`, `deactivated_connection`, `career_move`, `type_change`
+
+**SECURITY DEFINER helpers:** `is_map_admin(origin_map_id)`, `is_map_member(origin_map_id)`, `is_map_invitee(origin_map_id)`, `is_shared_via_map(object_id, target_user_id)`, `is_map_shared_with_user(map_id)`. NEVER raw-query `maps` from an RLS policy — always use helpers.
+
+**RPCs:** `share_map` (idempotent — works for initial share + adding invites), `accept_map_invitation` + `place_shared_objects` (two-step for placement UX), `get_dissonances`, `get_shared_intel`, `get_invitation_by_token`.
+
+**Frontend:** `SharePicker` component for per-object sharing toggles, `UpdatesFrame` for dissonance viewer. Sharing UI lives in `MapsFrame` — share button opens email form (same flow for first share and subsequent invites). `CoteriesFrame` no longer exists.
 
 ### Connection Roles
 
@@ -195,7 +200,7 @@ When accepting a shared map, the recipient's `objects_overrides` must include `n
 ### Frame System
 All UI panels use a shared `Frame` component: draggable, resizable, z-index-on-click (starts at 100, NavBar at 200). Key props: `actions`, `headerContent`, `titleClassName`, `resizable`, `persistKey` (localStorage + Supabase), `titleTooltip`. Double-click title bar to collapse/expand. `forwardRef` support.
 
-NavBar: fixed top-right (account dropdown, hamburger menu, logo SVG). Hotkeys: N/S/M/C/, (toggle, suppressed in inputs).
+NavBar: fixed top-right (account dropdown, hamburger menu, logo SVG). Hotkeys: N/S/M/, (toggle, suppressed in inputs).
 
 ### Logo Assets
 SVG logos in `src/assets/`: `logo-name.svg` (dark), `logo-name-light.svg` (light), `logo-icon.svg`/`logo-icon-light.svg`, `logo-name-motto.svg` (with "Map your professional world" — marketing pages only). Two golds from the logo ARE the accent colors: `#d4b468` (lighter, dark-mode primary) and `#a68830` (darker, light-mode primary). Theme-aware via `useTheme().resolvedTheme`.
@@ -215,8 +220,8 @@ See `docs/UI_REFERENCE.md` for MapsFrame architecture, workspace persistence, co
 - **Frame** (`Frame.tsx`): ESC closes, Tab focus-trapped (cycles within panel), auto-focuses on mount/click
 - **DetailPanel**: Tab focus-trapped, Enter toggles edit mode (opens when idle, saves when editing), Delete/Backspace triggers delete confirmation
 - **MultiSelectPanel**: Delete/Backspace triggers bulk delete confirmation
-- **MapsFrame/CoteriesFrame**: Right arrow opens detail card from list item
-- **NavBar**: Hotkey hints shown on menu items (S/M/C/,)
+- **MapsFrame**: Right arrow opens detail card from list item
+- **NavBar**: Hotkey hints shown on menu items (S/M/,)
 
 ## Running Locally
 
@@ -264,7 +269,7 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [x] Help button — floating `?` reference card with controls/shortcuts/panel keys
 - [x] Cross-platform input fixes — Ctrl+click multi-select on Windows, platform-detected lasso modifier
 - [x] 1:1 map-coterie model — dropped `coteries_maps`, bidirectional object sharing via `source_coterie_id`
-- [ ] **Collapse coteries into maps** — origin_map_id model, drop coterie tables, maps become sharing primitive
+- [x] Collapse coteries into maps — origin_map_id model, drop coterie tables, maps become sharing primitive
 - [ ] Stripe integration for subscription billing
 - [ ] DetailPanel migration to Frame component (back burner)
 - [ ] Light mode polish (back burner)

@@ -545,6 +545,14 @@ BEGIN
 
   -- Disconnect from sharing group — map becomes a standalone personal map
   UPDATE public.maps SET origin_map_id = NULL WHERE id = p_map_id;
+
+  -- If the owner is now alone, revert their map to unshared too
+  IF NOT EXISTS (
+    SELECT 1 FROM public.maps
+    WHERE origin_map_id = v_map.origin_map_id AND id != v_map.origin_map_id
+  ) THEN
+    UPDATE public.maps SET origin_map_id = NULL WHERE id = v_map.origin_map_id;
+  END IF;
 END;
 $$;
 

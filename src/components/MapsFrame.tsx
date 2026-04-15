@@ -138,7 +138,6 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
       .from('maps_invitations')
       .select('email, invited_by, created_at')
       .eq('map_id', originId)
-      .eq('status', 'pending')
     setPendingMembers(pending || [])
   }, [map.origin_map_id])
 
@@ -296,7 +295,7 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
       <Tooltip text="Share map"><button className={styles.iconBtn} onClick={startShare}><Share2 size={14} /></button></Tooltip>
       <Tooltip text="Edit map"><button className={styles.iconBtn} onClick={startEdit}><Pencil size={14} /></button></Tooltip>
       {map.origin_map_id && !map.is_admin ? (
-        <Tooltip text="Leave shared map"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmLeave(true)}><LogOut size={14} /></button></Tooltip>
+        <Tooltip text="Exit map sharing"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmLeave(true)}><LogOut size={14} /></button></Tooltip>
       ) : (
         <Tooltip text="Delete map"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmDelete(true)}><Trash2 size={14} /></button></Tooltip>
       )}
@@ -369,11 +368,11 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
       {confirmLeave && (
         <div className={styles.deleteConfirm}>
           <span className={styles.deleteConfirmText}>
-            Leave this shared map? You&rsquo;ll keep your objects but stop receiving updates.
+            Stop sharing this map? You&rsquo;ll keep the map and its objects, but will stop receiving updates.
           </span>
           <div className={styles.deleteConfirmActions}>
             <button className={styles.formBtn} onClick={() => setConfirmLeave(false)}>Cancel</button>
-            <button className={styles.deleteBtnConfirm} onClick={handleLeaveMap}>Leave</button>
+            <button className={styles.deleteBtnConfirm} onClick={handleLeaveMap}>Stop Sharing</button>
           </div>
         </div>
       )}
@@ -839,7 +838,7 @@ export default function MapsFrame({ onClose, activeMapId, onActivateMap, onHighl
                     }
                   }}>Accept</button>
                   <button className={styles.formBtn} onClick={async () => {
-                    await supabase.from('maps_invitations').update({ status: 'declined' }).eq('id', inv.id)
+                    await supabase.from('maps_invitations').delete().eq('id', inv.id)
                     loadPendingInvites()
                   }}>Decline</button>
                 </div>

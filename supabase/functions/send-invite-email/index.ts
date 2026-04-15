@@ -15,7 +15,6 @@ interface WebhookPayload {
     invited_by: string;
     email: string;
     token: string;
-    status: string;
   };
 }
 
@@ -58,10 +57,6 @@ serve(async (req) => {
     }
 
     const payload: WebhookPayload = JSON.parse(body);
-
-    if (payload.record.status !== "pending") {
-      return new Response(JSON.stringify({ skipped: true }), { status: 200 });
-    }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 

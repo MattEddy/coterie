@@ -106,7 +106,11 @@ Maps are the sharing primitive. "Coterie" is purely the brand name, not a featur
 
 **RPCs:** `share_map` (idempotent — works for initial share + adding invites), `accept_map_invitation` + `place_shared_objects` (two-step for placement UX), `get_dissonances`, `get_shared_intel`, `get_invitation_by_token`.
 
-**Frontend:** `SharePicker` component for per-object sharing toggles, `UpdatesFrame` for dissonance viewer. Sharing UI lives in `MapsFrame` — share button opens email form (same flow for first share and subsequent invites). `CoteriesFrame` no longer exists.
+**Invitations as work queue:** `maps_invitations` has NO status column. Rows exist only while pending. Accept = DELETE + create recipient map. Decline = DELETE. Re-inviting someone just inserts a fresh row (no conflict). When the last member exits a shared map, the owner's `origin_map_id` auto-reverts to NULL (map becomes unshared again).
+
+**Exit sharing UX:** Members can "Exit map sharing" — disconnects from the group but keeps the map and its objects as a standalone personal map. Admin cannot exit (must delete). Tooltip: "Exit map sharing", button: "Stop Sharing".
+
+**Frontend:** `SharePicker` component for per-object sharing toggles (filtered to only show maps containing the object), `UpdatesFrame` for dissonance viewer. Sharing UI lives in `MapsFrame` — share button opens email form (same flow for first share and subsequent invites). `CoteriesFrame` no longer exists.
 
 ### Connection Roles
 
@@ -153,7 +157,7 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 - **`get_shared_intel()` is SECURITY DEFINER** — reads peers' overrides and `maps_shares` to find shared contacts/projects/events.
 - **`maps_shares` table** (was `coteries_shares`) — universal per-map-group, per-item intel sharing. Schema: `(map_id, user_id, object_id, share_type)` where `map_id` = origin map. `share_type` in ('contacts', 'project', 'event', 'note'). Private by default.
 - **Notes are objects** — class='note', `landscape_visible=false`. Connected to parent via 'note_on' connection. Text stored in `objects_overrides.name`. Each note independently shareable per map group via `maps_shares`. Replaced old `shared_notes`/`private_notes` TEXT columns (dropped from `objects_overrides` and `connections_overrides`).
-- **Server-side RPCs for all multi-step operations** — SECURITY DEFINER functions for all multi-step DB orchestration. Every future client (iPad, etc.) gets this logic for free. RPCs to be updated during coterie→map migration.
+- **Server-side RPCs for all multi-step operations** — SECURITY DEFINER functions for all multi-step DB orchestration. Every future client (iPad, etc.) gets this logic for free. 23 RPCs total after the 2026-04-15 offloading session (migration `20260416000000`): `create_object`, `upsert_connection`, `deactivate_connection`, `get_user_maps`, `get_pending_invites`, `get_connected_items`, `preflight_delete_object`, `set_object_types`, `accept_dissonance`, `leave_shared_map`, `get_share_picker_state` + the 12 originals.
 - **Contact info stays JSONB** — contacts in `objects_overrides.data.contacts` are shared all-or-nothing per person per map group. Intentionally NOT objectified — the access pattern (read/write as a group) doesn't benefit from per-item granularity.
 - **Cross-platform input** — Canvas multi-select checks both `metaKey` (Mac Cmd) and `ctrlKey` (Windows Ctrl). `multiSelectionKeyCode` is platform-detected. Pan via middle-click drag or Space+drag.
 
@@ -204,6 +208,12 @@ Import as `{ Map as MapIcon }`.
 ### Login `<Navigate>` Races useEffect
 `<Navigate>` renders synchronously, but `useEffect` runs after render. Two rules for guard states like `checkingProfile`: (1) initialize to `true` (`useState(true)`), and (2) **only set `false` at the end of the successful async path** — never in early-return branches like `if (!user) return` or after `signOut()`. If the null-user branch sets `checkingProfile=false`, then when user transitions from null→non-null, the render fires Navigate before the effect can set it back to `true`. The effect's `setCheckingProfile(true)` runs too late. Discovered twice: first the initial state, then the early-return reset.
 
+### Stale Closures in useEffect Keydown Handlers
+If a `useEffect` registers a `keydown` listener, every piece of state read inside the handler MUST be in the dependency array. Otherwise the handler captures a stale snapshot. Hit this with `deleteConfirm` in DetailPanel — Enter key triggered edit mode instead of confirming delete because the handler always saw `deleteConfirm` as null.
+
+### Delete RPCs Must Clean Up maps_objects
+`delete_object_with_cleanup` and `delete_multiple_objects` must explicitly `DELETE FROM maps_objects WHERE object_ref_id = ... AND map_id IN (user's maps)`. The FK CASCADE on `maps_objects.object_ref_id → objects.id` only fires when the `objects` row is hard-deleted, which doesn't happen for canonical objects. Without explicit cleanup, `get_user_maps` reports inflated object counts.
+
 ### Coterie Acceptance Must Copy Override Data
 When accepting a shared map, the recipient's `objects_overrides` must include `name`, `title`, `status` from the owner's overrides — not just `map_x`/`map_y`. User-created objects have `objects.name = NULL` (skeleton row), so without copying, they render as blank shapes. Same for `connections_overrides`: owner's user-created connections (`connection_id IS NULL`) must be duplicated for the recipient to avoid spurious `new_connection` dissonances.
 
@@ -241,18 +251,25 @@ See `docs/UI_REFERENCE.md` for MapsFrame architecture, workspace persistence, co
 # Local dev
 supabase start              # Requires Docker
 open http://127.0.0.1:54323 # Studio UI
-supabase db reset           # Reset after schema changes
+supabase db reset           # Reset after schema changes (wipes local data)
 npm run dev                 # → http://localhost:5173
+npm test                    # 17 RPC integration tests (requires local Supabase)
+npm run check               # TypeScript + Vite build verification
+
+# OTP codes for local dev: check Mailpit at http://127.0.0.1:54324
+# Test accounts: matt@test.com, billy@test.com
 
 # Cloud: Supabase project "coterie" in Buckethead org (sbgxgveornxaxxiowwsh, us-west-1)
-# .env.local has cloud credentials (local config commented out for switching)
 # Auth: 6-digit email OTP (no passwords) — works for both signup and login
 ```
+
+**Dev workflow:** Work on `dev` branch → push to GitHub (safe backup, not live). When ready to ship: `npm test` + `npm run check` → `supabase db push` (migrations to cloud) → merge `dev` into `main` with `--no-ff` (triggers Vercel deploy).
+
+**`.env.local`** controls which DB localhost talks to. Currently pointed at **local Supabase**. Say "switch to cloud" or "switch to local" to toggle. coteriepro.com always uses cloud (env vars in Vercel dashboard).
 
 Deploy: Supabase Cloud (`supabase db push`) + Vercel (auto-deploys from GitHub push to main).
 Production: `https://coteriepro.com` (Vercel) + Supabase Cloud (sbgxgveornxaxxiowwsh, us-west-1).
 Domain DNS: Porkbun → A record `76.76.21.21` + CNAME `www` → `cname.vercel-dns.com`.
-`.env.local` is pointed at Supabase Cloud (local dev config commented out).
 
 ## Status
 
@@ -282,6 +299,9 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [x] Cross-platform input fixes — Ctrl+click multi-select on Windows, platform-detected lasso modifier
 - [x] 1:1 map-coterie model — dropped `coteries_maps`, bidirectional object sharing via `source_coterie_id`
 - [x] Collapse coteries into maps — origin_map_id model, drop coterie tables, maps become sharing primitive
+- [x] Code review + RPC offloading — 11 new RPCs replacing ~60 round trips, bug fixes, invitations as queue
+- [x] Test suite — Vitest RPC integration tests (17 tests), `npm test` / `npm run check`
+- [x] Dev branch workflow — work on `dev`, merge to `main` with `--no-ff` to deploy
 - [ ] Stripe integration for subscription billing
 - [ ] DetailPanel migration to Frame component (back burner)
 - [ ] Light mode polish (back burner)

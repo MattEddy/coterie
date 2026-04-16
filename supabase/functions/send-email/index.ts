@@ -99,12 +99,26 @@ async function signRequest(
 }
 
 serve(async (req) => {
-  // Auth: only allow calls from our own service_role key
+  // Auth: verify the JWT has service_role privileges
+  // Supabase's infrastructure validates the JWT signature before it reaches us.
+  // We just need to check the role claim to ensure only service_role calls get through.
   const authHeader = req.headers.get("authorization");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-  if (authHeader !== `Bearer ${serviceRoleKey}`) {
+  if (!authHeader?.startsWith("Bearer ")) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    });
+  }
+
+  try {
+    const token = authHeader.replace("Bearer ", "");
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (payload.role !== "service_role") {
+      return new Response(JSON.stringify({ error: "Requires service_role" }), {
+        status: 403,
+      });
+    }
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid token" }), {
       status: 401,
     });
   }

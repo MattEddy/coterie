@@ -29,8 +29,20 @@ Landscape coordinates are always per-user (in overrides), never canonical.
 - **Web App**: Vite + React, deployed to Vercel
 - **Backend**: Supabase (PostgreSQL), deployed to Supabase Cloud
 - **AI**: Claude API (Haiku for classification)
+- **Email**: AWS SES via shared `send-email` Edge Function (hosted on this project's Supabase)
 - **Dev**: Supabase local (Docker), single migration file during early dev
 - **Schema**: `supabase/migrations/20260203000000_pro_schema.sql` (edit directly, `supabase db reset` to rebuild)
+
+## Email Infrastructure
+
+This Supabase project hosts the **shared `send-email` Edge Function** used by all of Matt's apps (Bossword, Vivi, Subscriptix, Survival Box). AWS SES credentials are stored as Supabase secrets (`AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY`).
+
+**Edge Functions:**
+- `send-email` — Generic email sender. Accepts `{ app, to, subject, html, text }`. Maps `app` to sender address. Requires service_role JWT auth.
+- `send-invite-email` — Coterie-specific. Triggered by webhook on `maps_invitations` INSERT. Calls `send-email` internally. Sends branded invitation with map name, sender name, and invite link.
+
+**Sending domain:** `coteriepro.com` (verified in SES, DKIM + MAIL FROM DNS at Porkbun)
+**Sender address:** `Coterie <noreply@coteriepro.com>`
 
 Four tiers planned — building in order:
 
@@ -251,7 +263,7 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [x] Supabase Cloud deployment + OTP auth
 - [x] Non-user invitation flow — landing page, join page, auth handoff, welcome modal
 - [x] Subscriptions table + `user_tier()` function
-- [x] Edge Function for invite emails (Resend, not yet deployed/configured)
+- [x] Edge Function for invite emails (migrated from Resend to AWS SES, deployed 2026-04-14)
 - [x] RLS policies — 65 policies across 20 tables, helper functions, SECURITY DEFINER RPCs
 - [x] Vercel deployment + domain — coteriepro.com, SPA rewrites, env vars configured
 - [x] Landing page (`/home`) — hero, interactive demo, features, waitlist CTA

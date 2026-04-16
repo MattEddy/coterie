@@ -25,7 +25,6 @@ export default function NotificationBoxes({ onOpenMaps, onOpenUpdates }: Notific
         .from('maps_invitations')
         .select('*', { count: 'exact', head: true })
         .eq('email', authUser.email)
-        .eq('status', 'pending')
       const newCount = count ?? 0
       if (newCount !== prevInviteCountRef.current) {
         prevInviteCountRef.current = newCount

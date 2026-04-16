@@ -707,6 +707,13 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
         const onButton = active && active.tagName === 'BUTTON'
         if (inInput || onButton) return
 
+        // If delete confirmation is showing, Enter confirms the delete
+        if (deleteConfirm) {
+          e.preventDefault()
+          executeDelete()
+          return
+        }
+
         if (headerEditing) {
           e.preventDefault()
           saveHeader()
@@ -747,7 +754,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     }
     panel.addEventListener('keydown', handleKeyDown)
     return () => panel.removeEventListener('keydown', handleKeyDown)
-  }, [headerEditing, showTagInput, contactEditing, creatingNote, editingNoteId, creatingProject, creatingEvent, editingItemId, showLinkSearch, onClose])
+  }, [headerEditing, showTagInput, contactEditing, creatingNote, editingNoteId, creatingProject, creatingEvent, editingItemId, showLinkSearch, onClose, deleteConfirm])
 
   // Off-screen detection
   const nodeOffScreen = !nodeRect ||

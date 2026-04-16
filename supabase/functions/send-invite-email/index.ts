@@ -3,10 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const WEBHOOK_SECRET = Deno.env.get("SUPABASE_WEBHOOK_SECRET");
-
-// App URL for invite links (set in Supabase Edge Function secrets)
 const APP_URL = Deno.env.get("APP_URL") || "http://localhost:5173";
 
 interface WebhookPayload {
@@ -18,12 +15,14 @@ interface WebhookPayload {
     invited_by: string;
     email: string;
     token: string;
-    status: string;
   };
 }
 
-async function verifyWebhookSignature(req: Request, body: string): Promise<boolean> {
-  if (!WEBHOOK_SECRET) return true; // Skip verification if secret not configured
+async function verifyWebhookSignature(
+  req: Request,
+  body: string,
+): Promise<boolean> {
+  if (!WEBHOOK_SECRET) return true;
   const signature = req.headers.get("x-supabase-signature");
   if (!signature) return false;
 
@@ -35,7 +34,11 @@ async function verifyWebhookSignature(req: Request, body: string): Promise<boole
     false,
     ["sign"],
   );
-  const expectedSig = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
+  const expectedSig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(body),
+  );
   const expectedHex = Array.from(new Uint8Array(expectedSig))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
@@ -47,7 +50,6 @@ serve(async (req) => {
   try {
     const body = await req.text();
 
-    // Verify webhook signature
     if (!(await verifyWebhookSignature(req, body))) {
       return new Response(JSON.stringify({ error: "Invalid signature" }), {
         status: 401,
@@ -56,14 +58,8 @@ serve(async (req) => {
 
     const payload: WebhookPayload = JSON.parse(body);
 
-    // Only handle new pending invitations
-    if (payload.record.status !== "pending") {
-      return new Response(JSON.stringify({ skipped: true }), { status: 200 });
-    }
-
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Fetch map name
     const { data: map, error: mapError } = await supabase
       .from("maps")
       .select("name")
@@ -72,44 +68,32 @@ serve(async (req) => {
 
     if (mapError) {
       console.error("Map not found:", mapError);
-      return new Response(
-        JSON.stringify({ error: "Map not found" }),
-        { status: 404 },
-      );
+      return new Response(JSON.stringify({ error: "Map not found" }), {
+        status: 404,
+      });
     }
 
-    // Fetch sender name
     const { data: sender } = await supabase
       .from("profiles")
       .select("display_name")
       .eq("user_id", payload.record.invited_by)
       .single();
 
-    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const esc = (s: string) =>
+      s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
     const senderName = esc(sender?.display_name || "Someone");
     const mapName = esc(map?.name || "a shared map");
     const inviteUrl = `${APP_URL}/invite/${payload.record.token}`;
 
-    // Send email via Resend
-    if (!RESEND_API_KEY) {
-      console.log("RESEND_API_KEY not set — logging email instead:");
-      console.log(`To: ${payload.record.email}`);
-      console.log(
-        `Subject: ${senderName} invited you to join "${mapName}" on Coterie`,
-      );
-      console.log(`Link: ${inviteUrl}`);
-      return new Response(JSON.stringify({ logged: true }), { status: 200 });
-    }
-
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "Coterie <invites@coterie.app>",
-        to: [payload.record.email],
+    // Send via shared send-email Edge Function
+    const { error } = await supabase.functions.invoke("send-email", {
+      body: {
+        app: "coterie",
+        to: payload.record.email,
         subject: `${senderName} invited you to join "${mapName}" on Coterie`,
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
@@ -139,23 +123,18 @@ serve(async (req) => {
             </p>
           </div>
         `,
-      }),
+      },
     });
 
-    if (!emailResponse.ok) {
-      const errorBody = await emailResponse.text();
-      console.error("Resend API error:", emailResponse.status, errorBody);
+    if (error) {
+      console.error("send-email error:", error);
       return new Response(
-        JSON.stringify({ error: `Email send failed: ${emailResponse.status}` }),
+        JSON.stringify({ error: `Email send failed: ${error.message}` }),
         { status: 500 },
       );
     }
 
-    const emailResult = await emailResponse.json();
-
-    return new Response(JSON.stringify({ sent: true, result: emailResult }), {
-      status: 200,
-    });
+    return new Response(JSON.stringify({ sent: true }), { status: 200 });
   } catch (error) {
     console.error("Error sending invite email:", error);
     return new Response(

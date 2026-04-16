@@ -536,16 +536,23 @@ BEGIN
     RAISE EXCEPTION 'Admin cannot leave their own shared map. Delete the map instead.';
   END IF;
 
-  -- Clean up: remove shares, reviews, and objects for this map
+  -- Clean up sharing data (but keep the map and its objects)
   DELETE FROM public.maps_shares WHERE map_id = v_map.origin_map_id AND user_id = p_user_id;
   DELETE FROM public.maps_reviews WHERE user_id = p_user_id
     AND source_user_id IN (
       SELECT m.user_id FROM public.maps m WHERE m.origin_map_id = v_map.origin_map_id
     );
-  DELETE FROM public.maps_objects WHERE map_id = p_map_id;
 
-  -- Disconnect from sharing group
+  -- Disconnect from sharing group — map becomes a standalone personal map
   UPDATE public.maps SET origin_map_id = NULL WHERE id = p_map_id;
+
+  -- If the owner is now alone, revert their map to unshared too
+  IF NOT EXISTS (
+    SELECT 1 FROM public.maps
+    WHERE origin_map_id = v_map.origin_map_id AND id != v_map.origin_map_id
+  ) THEN
+    UPDATE public.maps SET origin_map_id = NULL WHERE id = v_map.origin_map_id;
+  END IF;
 END;
 $$;
 
@@ -573,6 +580,12 @@ AS $$
     SELECT DISTINCT m.origin_map_id
     FROM public.maps m
     WHERE m.user_id = p_user_id AND m.origin_map_id IS NOT NULL
+      -- Only maps where this object is a member
+      AND EXISTS (
+        SELECT 1 FROM public.maps_objects mo
+        JOIN public.maps m2 ON m2.id = mo.map_id
+        WHERE mo.object_ref_id = p_object_id AND m2.origin_map_id = m.origin_map_id
+      )
   )
   SELECT
     usm.origin_map_id,

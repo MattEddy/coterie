@@ -108,7 +108,8 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
 
   const panelRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: 0, top: 0 })
-  const initialTopSet = useRef<string | null>(null)
+  const placementKey = useRef<string | null>(null)
+  const offsetRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 })
 
   // Tabs
   const [activeTab, setActiveTab] = useState<TabId>('contact')
@@ -426,39 +427,45 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     setEditContacts(object.data?.contacts ?? [])
   }, [object.id])
 
-  // Position panel adjacent to node
+  // Position panel: smart-anchor on initial placement (or preferredSide change for
+  // multi-select handoff), then lock a fixed offset from the node and follow it
+  // verbatim on drag/pan/zoom. Off-screen is fine — panel stays glued to the pill.
   useLayoutEffect(() => {
     const el = panelRef.current
     if (!el || !nodeRect) return
 
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    const nodeCenterY = (nodeRect.top + nodeRect.bottom) / 2
-    const h = el.scrollHeight
+    const key = `${object.id}|${preferredSide ?? 'auto'}`
 
-    let left: number
-    if (preferredSide === 'left') {
-      left = nodeRect.left - PANEL_WIDTH - GAP
-    } else if (preferredSide === 'right') {
-      left = nodeRect.right + GAP
-    } else {
-      left = (vw - nodeRect.right) >= nodeRect.left
-        ? nodeRect.right + GAP
-        : nodeRect.left - PANEL_WIDTH - GAP
-    }
-    left = Math.max(GAP, Math.min(left, vw - PANEL_WIDTH - GAP))
+    if (placementKey.current !== key) {
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const nodeCenterY = (nodeRect.top + nodeRect.bottom) / 2
+      const h = el.scrollHeight
 
-    // Only calculate top on initial placement (new object); keep it stable as content grows
-    if (initialTopSet.current !== object.id) {
+      let left: number
+      if (preferredSide === 'left') {
+        left = nodeRect.left - PANEL_WIDTH - GAP
+      } else if (preferredSide === 'right') {
+        left = nodeRect.right + GAP
+      } else {
+        left = (vw - nodeRect.right) >= nodeRect.left
+          ? nodeRect.right + GAP
+          : nodeRect.left - PANEL_WIDTH - GAP
+      }
+      left = Math.max(GAP, Math.min(left, vw - PANEL_WIDTH - GAP))
+
       const anchorRatio = Math.max(0, Math.min(1, nodeCenterY / vh))
       let top = nodeCenterY - (h * anchorRatio)
       top = Math.max(GAP, Math.min(top, vh - h - GAP))
-      initialTopSet.current = object.id
+
+      offsetRef.current = { dx: left - nodeRect.left, dy: top - nodeRect.top }
+      placementKey.current = key
       setPos({ left, top })
     } else {
-      setPos(prev => ({ ...prev, left }))
+      const { dx, dy } = offsetRef.current
+      setPos({ left: nodeRect.left + dx, top: nodeRect.top + dy })
     }
-  }, [nodeRect, activeTab, headerEditing, contactEditing, creatingNote, editingNoteId, showTagInput, creatingProject, creatingEvent, expandedItemId, editingItemId, object.id])
+  }, [nodeRect, object.id, preferredSide])
 
   // --- Save functions ---
 

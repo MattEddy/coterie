@@ -5,31 +5,46 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-04-14
-**Branch:** main
+**Date:** 2026-04-15
+**Branch:** dev (merged to main at end of session)
 
 ### Narrative
 
-**Designed and implemented the coterie→map collapse.** Session started as a design jam (Matt: "I had a crazy thought") and progressed to full implementation in a single session.
+**Full code review + RPC offloading + test infrastructure + workflow improvements.** Big session covering code quality, performance, and dev process.
 
-**Design phase:** Validated that the coterie abstraction was pure indirection after the 1:1 migration. Every coterie concept maps 1:1 to a map concept. Matt emphasized the brand benefit — "coterie" as both app name and feature name made marketing copy awkward. Landed on `origin_map_id` (self-ref for origin, NULL for unshared) as the connective tissue. Matt specifically asked NULL vs self-ref for the owner — self-ref won because every query becomes `WHERE origin_map_id = :origin` (no OR clause needed).
+**Code review** (two parallel agents): Found 2 critical bugs, several high/medium issues, and 17 opportunities to move frontend queries to Supabase RPCs.
 
-**Implementation:** Full stack in one session:
-- **SQL migration** (`20260415000000_collapse_coteries_into_maps.sql`): Added `origin_map_id` to maps, migrated data from coterie relationships, renamed `coteries_invitations`/`coteries_shares`/`coteries_reviews` → `maps_*`, dropped `coteries` + `coteries_members`, rewrote all 5 SECURITY DEFINER helpers and all RPCs, rewrote all RLS policies. Hit a cloud-vs-local policy naming issue (cloud had `coterie_shares_*` without the 's', local had `coteries_shares_*`) — fixed with `DROP POLICY IF EXISTS` for both variants.
-- **Frontend** (22 files, net -1,767 lines): Deleted `CoteriesFrame` entirely. `MapsFrame` absorbed sharing UI — members list, pending invitations with accept/place flow, share action. Renamed `CoterieUpdatesFrame` → `UpdatesFrame`, `CoterieSharePicker` → `SharePicker`. Updated all event names (`coterie:*` → `sharing:*`/`canvas:*`/`maps:*`). Updated `DetailPanel` (RPC + labels), `NavBar` (removed C hotkey), `Landscape` (removed coteries frame type), `NotificationBoxes`, invitation pages, Home page.
-- **Edge function** (`send-invite-email`): Updated to reference `maps_invitations` + `maps` table.
+**Critical bug fixes:**
+- `MultiSelectPanel.tsx` dispatched `coterie:refresh-canvas` (stale event name) — canvas never refreshed after multi-delete. Fixed to `sharing:refresh-canvas`.
+- `DetailPanel.tsx` queried `maps.is_active` (column dropped in earlier migration) — Maps popover was always empty. Removed the filter.
 
-**Bugs found during testing:**
-- `authUser` doesn't exist in `useAuth()` — the Supabase `User` object (with `.email`) is just `user`. Fixed.
-- Cloud migration failed first attempt due to policy name mismatch — policies on cloud were `coterie_shares_*` (from an earlier rename migration) vs `coteries_shares_*` locally. Fixed by adding both naming variants to DROP POLICY statements.
-- Matt flagged: after sharing a map, the inline "Invite by email" input stayed visible with no submit button. Simplified: share button is always available in the header — opens email form for both initial sharing and adding more collaborators. Removed the inline invite input entirely.
-- Matt flagged: redundant "Shared map — 1 member" banner above Members section. Removed — the section label already says "Members (N)".
+**Other bug fixes:** HTML escaping in invite email template, optimistic toggle rollback on DB failure, email validation on share input, `navigator.platform` → `navigator.userAgent`, cosmetic coterie→map renames (CSS classes, persistKeys, import variables, comments).
 
-**Deployed:** Migration pushed to Supabase Cloud, frontend pushed to GitHub/Vercel. Webhook for invite emails was never configured on cloud (noted as future task).
+**11 new RPCs** (migration `20260416000000_rpc_offloading.sql`): `create_object`, `upsert_connection`, `deactivate_connection`, `get_user_maps`, `get_pending_invites`, `get_connected_items`, `preflight_delete_object`, `set_object_types`, `accept_dissonance`, `leave_shared_map`, `get_share_picker_state`. Eliminates ~60 round trips from common user actions, adds transaction safety. All frontend files updated to call RPCs instead of direct queries.
+
+**Test infrastructure:** Installed Vitest, created `tests/rpc.test.ts` (17 integration tests against local Supabase) and `tests/supabase.ts` (shared client). Added `npm test`, `npm run check`, `npm run test:watch` scripts. Tests caught a real bug in `upsert_connection` (ON CONFLICT on nonexistent unique constraint for roles). Matt asked about testing approach — agreed that RPC integration tests are high-value now, Playwright E2E should wait until UI stabilizes.
+
+**Dev branch workflow:** Matt asked about backing up to GitHub without going live. Set up `dev` branch — day-to-day work pushes to `dev`, merge to `main` with `--no-ff` when ready to ship. Explained the `.env.local` toggle for local vs cloud Supabase.
+
+**Local dev testing:** Switched `.env.local` to point at local Supabase. Matt tested the full app locally for the first time. Found several bugs during testing:
+- **Delete modal + Enter key:** Pressing Enter toggled edit mode on the panel behind the delete confirmation instead of confirming the delete. Stale closure — `deleteConfirm` wasn't in the `useEffect` dependency array.
+- **Map object count wrong after deletion:** `delete_object_with_cleanup` and `delete_multiple_objects` didn't clean up `maps_objects` rows for canonical objects (FK CASCADE only fires on hard-delete). Fixed in migration `20260416200000`.
+- **Re-invite failure:** `maps_invitations` had unique constraint on `(map_id, email)`. After someone accepted and left, re-inviting them hit the constraint silently.
+
+**Invitations as work queue:** Matt suggested deleting invitation rows after acceptance instead of keeping them with a status. This simplified everything — dropped the `status` column entirely (migration `20260416300000`). Rows exist only while pending. Accept = DELETE. Decline = DELETE. Re-invitations just INSERT fresh rows.
+
+**Exit sharing UX:** Matt felt "Leave shared map" was wrong — should keep the map, just disconnect from sharing. Changed to "Exit map sharing" with confirmation "Stop sharing this map? You'll keep the map and its objects, but will stop receiving updates." Button label: "Stop Sharing". RPC keeps `maps_objects` intact.
+
+**Auto-revert owner map:** Matt noticed that after everyone leaves a shared map, the owner's map still shows as "shared with nobody." Added logic to `leave_shared_map` RPC: when the last member exits, the owner's `origin_map_id` reverts to NULL automatically.
+
+**Share picker filtering:** Matt asked about the share picker showing all shared maps vs only relevant ones. Changed `get_share_picker_state` to only show maps where the object is actually a member.
+
+**Deployed:** All migrations pushed to Supabase Cloud, `dev` merged to `main` with `--no-ff`, auto-deployed to Vercel.
 
 ### Open Items / Next Steps
-1. **Configure invite email webhook** — Supabase Dashboard → Webhooks → `maps_invitations` INSERT → `send-invite-email` Edge Function (+ Resend API key)
-2. **Stripe integration** — wire up Checkout, webhooks to update subscription status
-3. **Polling → Realtime** — NotificationBoxes and UpdatesFrame poll at 30s
-4. **DetailPanel → Frame migration** — back burner
-5. **Light mode polish** — back burner
+1. **Configure invite email webhook** — Supabase Dashboard → Webhooks → `maps_invitations` INSERT → `send-invite-email` Edge Function
+2. **AWS SES production access** — submitted 2026-04-14, pending approval (sandbox mode limits sending)
+3. **Stripe integration** — wire up Checkout, webhooks to update subscription status
+4. **Polling → Realtime** — NotificationBoxes and UpdatesFrame poll at 30s
+5. **DetailPanel → Frame migration** — back burner
+6. **Light mode polish** — back burner

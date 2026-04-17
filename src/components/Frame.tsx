@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, forwardRef, type ReactNode } from 'react'
+import { X } from 'lucide-react'
 import { useWorkspace } from '../contexts/WorkspaceContext'
 import Tooltip from './Tooltip'
 import styles from './Frame.module.css'
@@ -236,7 +237,7 @@ const Frame = forwardRef<HTMLDivElement, FrameProps>(function Frame(
           <div className={styles.headerRight}>
             {!collapsed && actions}
             <Tooltip text="Close">
-              <button className={styles.close} onClick={onClose}>&times;</button>
+              <button className={styles.close} onClick={onClose}><X size={16} /></button>
             </Tooltip>
           </div>
         </div>

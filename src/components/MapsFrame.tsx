@@ -292,8 +292,8 @@ const MapDetailCard = forwardRef<HTMLDivElement, MapDetailCardProps>(function Ma
     <Tooltip text="Save"><button className={styles.iconBtn} onClick={saveEdit}><Check size={14} /></button></Tooltip>
   ) : (
     <>
-      <Tooltip text="Share map"><button className={styles.iconBtn} onClick={startShare}><Share2 size={14} /></button></Tooltip>
       <Tooltip text="Edit map"><button className={styles.iconBtn} onClick={startEdit}><Pencil size={14} /></button></Tooltip>
+      <Tooltip text="Share map"><button className={styles.iconBtn} onClick={startShare}><Share2 size={14} /></button></Tooltip>
       {map.origin_map_id && !map.is_admin ? (
         <Tooltip text="Exit map sharing"><button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmLeave(true)}><LogOut size={14} /></button></Tooltip>
       ) : (

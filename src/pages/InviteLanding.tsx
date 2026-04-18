@@ -302,7 +302,7 @@ export default function InviteLanding() {
         {/* Explainer */}
         <p className={styles.explainer}>
           Visually array people, organizations, and information — so
-          you can truly understand and harness your interpersonal landscape.
+          you can truly harness the relationships in your world.
         </p>
         <p className={styles.explainer}>
           Share maps with trusted collaborators to sync your

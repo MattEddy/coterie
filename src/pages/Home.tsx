@@ -14,6 +14,7 @@ import ObjectNode from '../components/ObjectNode'
 import type { ObjectNodeData } from '../components/ObjectNode'
 import RoleEdge from '../components/RoleEdge'
 import { useTheme } from '../contexts/ThemeContext'
+import { useDefaultColorFor } from '../contexts/PillColorsContext'
 import logoNameDark from '../assets/logo-name.svg'
 import logoNameLight from '../assets/logo-name-light.svg'
 import logoIcon from '../assets/logo-icon.svg'
@@ -28,25 +29,27 @@ import styles from './Home.module.css'
 const demoNode = (
   id: string, name: string, cls: string, types: string[],
   x: number, y: number, title?: string,
+  style?: { color?: string; size?: number },
 ): Node => ({
   id, type: 'object', position: { x, y },
   data: {
     id, name, title: title ?? null, class: cls,
-    status: null, types, photo_url: null, data: null,
+    status: null, types, photo_url: null,
+    data: style ? { color: style.color, size: style.size } : null,
     tags: null,
     is_canon: true, created_by: null,
   } satisfies ObjectNodeData as ObjectNodeData & Record<string, unknown>,
 })
 
 const DEMO_NODES: Node[] = [
-  demoNode('ted', 'Ted Sarandos', 'person', ['executive'], 60, -160, 'Co-CEO, Netflix'),
-  demoNode('netflix', 'Netflix', 'org', ['streamer'], 0, 0),
-  demoNode('21laps', '21 Laps Entertainment', 'org', ['production company'], 360, 0),
-  demoNode('shawn', 'Shawn Levy', 'person', ['producer', 'director'], 320, 160, 'Founder, 21 Laps'),
-  demoNode('wme', 'WME', 'org', ['agency'], 600, 160),
+  demoNode('ted', 'Ted Sarandos', 'person', ['executive'], 60, -160, 'Co-CEO, Netflix', { color: '#7860a0' }),
+  demoNode('netflix', 'Netflix', 'org', ['streamer'], 0, 0, undefined, { color: '#8a4d45', size: 1 }),
+  demoNode('21laps', '21 Laps Entertainment', 'org', ['production company'], 360, 0, undefined, { color: '#b08a4a' }),
+  demoNode('shawn', 'Shawn Levy', 'person', ['producer', 'director'], 320, 180, 'Founder, 21 Laps', { size: 2 }),
+  demoNode('wme', 'WME', 'org', ['agency'], 680, 160, undefined, { color: '#8e6040' }),
 ]
 
-const EDGE_STYLE = { stroke: 'var(--color-edge)', strokeWidth: 1.5 }
+const EDGE_STYLE = { stroke: 'var(--color-edge)', strokeWidth: 2 }
 const EDGE_HIGHLIGHT = { stroke: 'var(--color-edge-highlight)', strokeWidth: 2 }
 
 const demoEdge = (
@@ -78,10 +81,13 @@ interface DemoDetail {
   title: string | null
   types: string[]
   cls: string
+  color?: string
 }
 
 function DemoDetailCard({ detail, onClose }: { detail: DemoDetail; onClose: () => void }) {
   const [tab, setTab] = useState<DemoTabId>('contact')
+  const userDefault = useDefaultColorFor(detail.cls)
+  const headerColor = detail.color ?? userDefault
   const tabs: { id: DemoTabId; label: string }[] = [
     { id: 'contact', label: 'Contact' },
     { id: 'notes', label: 'Notes' },
@@ -91,7 +97,11 @@ function DemoDetailCard({ detail, onClose }: { detail: DemoDetail; onClose: () =
 
   return (
     <div className={styles.detailCard}>
-      <div className={styles.detailHeader} data-class={detail.cls}>
+      <div
+        className={styles.detailHeader}
+        data-class={detail.cls}
+        style={{ background: headerColor, color: '#f5f3f0' }}
+      >
         <span className={styles.detailName}>{detail.name}</span>
         {detail.title && <span className={styles.detailTitle}>{detail.title}</span>}
         <span className={styles.detailTypes}>
@@ -186,7 +196,7 @@ function DemoCanvas() {
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     const d = node.data as unknown as ObjectNodeData
-    setDetail({ id: node.id, name: d.name, title: d.title, types: d.types, cls: d.class })
+    setDetail({ id: node.id, name: d.name, title: d.title, types: d.types, cls: d.class, color: d.data?.color })
     clearEdgeHighlights()
   }, [clearEdgeHighlights])
 

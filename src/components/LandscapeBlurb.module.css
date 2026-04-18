@@ -1,0 +1,7 @@
+.explainer {
+  font-size: 15px;
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: 1.6;
+  max-width: 540px;
+}

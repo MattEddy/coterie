@@ -4,6 +4,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   Background,
+  SelectionMode,
   useNodesState,
   useEdgesState,
 } from '@xyflow/react'
@@ -207,8 +208,13 @@ function DemoCanvas() {
         proOptions={{ hideAttribution: true }}
         nodesDraggable
         nodesConnectable={false}
-        panOnDrag
+        panOnScroll
+        panOnDrag={[1]}
+        panActivationKeyCode="Space"
         zoomOnScroll
+        zoomOnPinch
+        selectionOnDrag
+        selectionMode={SelectionMode.Partial}
         minZoom={0.5}
         maxZoom={1.5}
       >

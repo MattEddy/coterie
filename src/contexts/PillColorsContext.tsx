@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useState } from 'react'
 import { ORG_PALETTE, PERSON_PALETTE } from '../constants/palettes'
 
 interface PillColorsContextType {

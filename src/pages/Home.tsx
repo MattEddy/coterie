@@ -289,10 +289,10 @@ export default function Home() {
         {/* Overview */}
         <section id="overview" className={styles.overview}>
           <img src={logoIcon} alt="" className={styles.heroIcon} />
-          <h1 className={styles.headline}>Map your professional world.</h1>
+          <h1 className={styles.headline}>Map your interpersonal landscape.</h1>
           <p className={styles.explainer}>
             Visually array people, organizations, and information — so
-            you can truly harness your interpersonal landscape.
+            you can truly harness the relationships in your world.
           </p>
           <p className={styles.explainer}>
             Connect with trusted collaborators to share and sync your

@@ -43,10 +43,10 @@ const demoNode = (
 
 const DEMO_NODES: Node[] = [
   demoNode('ted', 'Ted Sarandos', 'person', ['executive'], 60, -160, 'Co-CEO, Netflix', { color: '#7860a0' }),
-  demoNode('netflix', 'Netflix', 'org', ['streamer'], 0, 0, undefined, { color: '#8a4d45', size: 1 }),
-  demoNode('21laps', '21 Laps Entertainment', 'org', ['production company'], 360, 0, undefined, { color: '#b08a4a' }),
-  demoNode('shawn', 'Shawn Levy', 'person', ['producer', 'director'], 320, 180, 'Founder, 21 Laps', { size: 2 }),
-  demoNode('wme', 'WME', 'org', ['agency'], 680, 160, undefined, { color: '#8e6040' }),
+  demoNode('netflix', 'Netflix', 'org', ['streamer'], 0, 0, undefined, { color: '#8a4d45', size: 3 }),
+  demoNode('21laps', '21 Laps Entertainment', 'org', ['production company'], 460, 0, undefined, { color: '#b08a4a', size: 1 }),
+  demoNode('shawn', 'Shawn Levy', 'person', ['producer', 'director'], 320, 200, 'Founder, 21 Laps', { size: 1 }),
+  demoNode('wme', 'WME', 'org', ['agency'], 720, 180, undefined, { color: '#8e6040', size: 2 }),
 ]
 
 const EDGE_STYLE = { stroke: 'var(--color-edge)', strokeWidth: 2 }

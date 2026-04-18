@@ -311,7 +311,7 @@ export default function InviteLanding() {
 
         {/* Demo canvas */}
         <div className={styles.canvasWrapper}>
-          <p className={styles.canvasLabel}>Try it out – drag, click, explore:</p>
+          <p className={styles.canvasLabel}>See how it feels – drag, click, explore:</p>
           <ReactFlowProvider>
             <DemoCanvas />
           </ReactFlowProvider>

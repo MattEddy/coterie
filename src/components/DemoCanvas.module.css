@@ -1,0 +1,124 @@
+.canvasWrapper {
+  width: 100%;
+  aspect-ratio: 16 / 7.5;
+  min-height: 350px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--color-bg);
+  position: relative;
+}
+
+.canvasLabel {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  pointer-events: none;
+  z-index: 10;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 6px 16px;
+  white-space: nowrap;
+}
+
+/* ── Detail card ───────────────────────────────────────────────── */
+
+.detailCard {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 220px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+.detailHeader {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detailName {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.detailTitle {
+  font-size: 12px;
+  color: rgba(245, 243, 240, 0.82);
+  margin-top: 1px;
+}
+
+.detailTypes {
+  font-family: var(--font-data);
+  font-size: 11px;
+  text-transform: capitalize;
+  color: rgba(245, 243, 240, 0.72);
+  margin-top: 2px;
+}
+
+.detailBody {
+  padding: 8px 12px 12px;
+}
+
+.detailTabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 6px;
+}
+
+.detailTab, .detailTabActive {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.detailTab:hover {
+  color: var(--color-text);
+}
+
+.detailTabActive {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.detailContent {
+  min-height: 40px;
+}
+
+.detailMuted {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.detailClose {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px;
+}
+
+.detailClose:hover {
+  color: var(--color-text);
+}

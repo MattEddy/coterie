@@ -1,0 +1,14 @@
+.handle {
+  position: fixed;
+  z-index: 160;
+  background: var(--color-accent);
+  border: 2px solid var(--color-text);
+  border-radius: 50%;
+  cursor: nwse-resize;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform 0.1s;
+}
+
+.handle:hover {
+  transform: scale(1.15);
+}

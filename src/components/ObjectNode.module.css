@@ -3,16 +3,17 @@
   border: none;
   color: #f5f3f0;
   cursor: grab;
-  transition: box-shadow 0.15s;
+  transition: box-shadow 0.15s, background 0.12s;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  width: 180px;
-  height: 60px;
+  width: calc(180px * var(--pill-scale, 1));
+  height: calc(60px * var(--pill-scale, 1));
+  font-size: calc(13px * var(--pill-scale, 1));
   overflow: hidden;
-  padding: 0 16px;
+  padding: 0 calc(16px * var(--pill-scale, 1));
 }
 
 .card:hover {
@@ -52,8 +53,7 @@
 }
 
 .name {
-
-  font-size: 13px;
+  font-size: inherit;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -62,12 +62,12 @@
 }
 
 .types {
-  margin-top: 4px;
+  margin-top: calc(4px * var(--pill-scale, 1));
   max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 9px;
+  font-size: calc(9px * var(--pill-scale, 1));
   font-family: var(--font-data);
 }
 

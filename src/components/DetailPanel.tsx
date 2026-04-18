@@ -4,6 +4,7 @@ import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, CalendarCheck, 
 import { supabase } from '../lib/supabase'
 import { getEffectiveConnections, otherObjectId } from '../lib/connections'
 import { useAuth } from '../contexts/AuthContext'
+import { sizeIndexToScale } from '../constants/palettes'
 import type { ObjectNodeData, ContactEntry } from './ObjectNode'
 import type { NodeRect } from '../types'
 import Tooltip from './Tooltip'
@@ -96,15 +97,17 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
     (a, b) => a?.x === b?.x && a?.y === b?.y
   )
 
+  const effectiveScale = sizeIndexToScale(object.data?.size)
+
   const nodeRect: NodeRect | null = useMemo(() => {
     if (!nodePosition) return null
     const topLeft = flowToScreenPosition(nodePosition)
     const bottomRight = flowToScreenPosition({
-      x: nodePosition.x + NODE_WIDTH,
-      y: nodePosition.y + NODE_HEIGHT,
+      x: nodePosition.x + NODE_WIDTH * effectiveScale,
+      y: nodePosition.y + NODE_HEIGHT * effectiveScale,
     })
     return { left: topLeft.x, top: topLeft.y, right: bottomRight.x, bottom: bottomRight.y }
-  }, [nodePosition, viewport, flowToScreenPosition])
+  }, [nodePosition, viewport, flowToScreenPosition, effectiveScale])
 
   const panelRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: 0, top: 0 })

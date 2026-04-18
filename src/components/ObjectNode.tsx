@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
+import { getDefaultColor, sizeIndexToScale } from '../constants/palettes'
 import styles from './ObjectNode.module.css'
 
 export interface ContactEntry {
@@ -17,12 +18,15 @@ export interface ObjectNodeData {
   status: string | null
   types: string[]
   photo_url: string | null
-  data: { contacts?: ContactEntry[] } | null
+  data: { contacts?: ContactEntry[]; color?: string; size?: number } | null
   tags: string[] | null
   is_canon: boolean
   created_by: string | null
   mapHighlighted?: boolean
   mapEditMode?: boolean
+  // Live-preview overrides set while the style toolbar is open
+  previewColor?: string
+  previewScale?: number
   [key: string]: unknown
 }
 
@@ -36,6 +40,17 @@ function ObjectNode({ data, selected }: NodeProps) {
   const nodeData = data as unknown as ObjectNodeData
   const shapeClass = classStyles[nodeData.class] || ''
 
+  const effectiveColor = nodeData.previewColor
+    ?? nodeData.data?.color
+    ?? getDefaultColor(nodeData.class)
+  const effectiveSize = nodeData.previewScale
+    ?? sizeIndexToScale(nodeData.data?.size)
+
+  const cardStyle = {
+    background: effectiveColor,
+    '--pill-scale': effectiveSize,
+  } as React.CSSProperties
+
   return (
     <>
       <Handle type="target" position={Position.Top} id="top" className={styles.handle} />
@@ -44,6 +59,7 @@ function ObjectNode({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Left} id="left" className={styles.handle} />
       <div
         className={`${styles.card} ${shapeClass} ${nodeData.mapHighlighted ? styles.mapHighlighted : ''} ${selected && !nodeData.mapHighlighted && !nodeData.mapEditMode ? styles.selected : ''}`}
+        style={cardStyle}
       >
         <span className={styles.name}>{nodeData.name}</span>
         {nodeData.title ? (

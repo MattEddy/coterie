@@ -1,17 +1,19 @@
 .card {
   background: var(--color-surface);
-  border: 1.5px solid var(--color-border);
+  border: none;
+  color: #f5f3f0;
   cursor: grab;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: box-shadow 0.15s, background 0.12s;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  width: 180px;
-  height: 60px;
+  width: calc(180px * var(--pill-scale, 1));
+  height: calc(60px * var(--pill-scale, 1));
+  font-size: calc(13px * var(--pill-scale, 1));
   overflow: hidden;
-  padding: 0 16px;
+  padding: 0 calc(16px * var(--pill-scale, 1));
 }
 
 .card:hover {
@@ -21,24 +23,21 @@
 /* Org: rounded rectangle */
 .org {
   border-radius: var(--radius);
-  background: var(--color-org-dim);
-  border-color: var(--color-org-border);
+  background: #8e4a52;
 }
 
 /* Person: pill (flat top/bottom, round sides) */
 .person {
-  border-radius: 30px;
-  background: var(--color-person-dim);
-  border-color: var(--color-person-border);
+  border-radius: 9999px;
+  background: #4a9ab0;
 }
 
 .mapHighlighted {
-  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 
 .selected {
-  border-color: var(--color-text);
-  box-shadow: var(--shadow);
+  box-shadow: 0 0 0 2px var(--color-text), var(--shadow);
 }
 
 /* Project: squashed octagon (diamond with cut corners) */
@@ -54,8 +53,7 @@
 }
 
 .name {
-
-  font-size: 13px;
+  font-size: inherit;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -64,12 +62,12 @@
 }
 
 .types {
-  margin-top: 4px;
+  margin-top: calc(4px * var(--pill-scale, 1));
   max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 9px;
+  font-size: calc(9px * var(--pill-scale, 1));
   font-family: var(--font-data);
 }
 
@@ -79,8 +77,8 @@
   color: inherit;
 }
 
-.org .types { color: var(--color-org-type); }
-.person .types { color: var(--color-person-type); }
+.org .types,
+.person .types { color: rgba(245, 243, 240, 0.72); }
 
 .handle {
   width: 6px;

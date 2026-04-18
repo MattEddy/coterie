@@ -6,6 +6,7 @@ import Home from './pages/Home'
 import Landscape from './pages/Landscape'
 import InviteLanding from './pages/InviteLanding'
 import InviteJoin from './pages/InviteJoin'
+import PalettePreview from './pages/PalettePreview'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/invite/:token" element={<InviteLanding />} />
           <Route path="/invite/:token/join" element={<InviteJoin />} />
+          <Route path="/dev/palettes" element={<PalettePreview />} />
           <Route path="/" element={
             <ProtectedRoute>
               <WorkspaceProvider>

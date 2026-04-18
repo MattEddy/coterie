@@ -19,6 +19,9 @@ import ObjectNode from './ObjectNode'
 import type { ObjectNodeData } from './ObjectNode'
 import DetailPanel from './DetailPanel'
 import MultiSelectPanel from './MultiSelectPanel'
+import StyleToolbar from './StyleToolbar'
+import ResizeHandle from './ResizeHandle'
+import { sizeIndexToScale } from '../constants/palettes'
 import CreateObjectForm from './CreateObjectForm'
 import ConnectionRoleForm from './ConnectionRoleForm'
 import RoleEdge from './RoleEdge'
@@ -84,6 +87,12 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
   const selectedItemsRef = useRef<SelectedItem[]>([])
   selectedItemsRef.current = selectedItems
+  // Style toolbar state
+  const [stylePreview, setStylePreview] = useState<{ nodeId: string; color?: string | null; scale?: number } | null>(null)
+  const [resizeModeNodeId, setResizeModeNodeId] = useState<string | null>(null)
+  const [colorModeNodeId, setColorModeNodeId] = useState<string | null>(null)
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const resizeHandleRef = useRef<HTMLDivElement>(null)
   const nodesRef = useRef<Node[]>([])
   nodesRef.current = nodes
   const connectionsRef = useRef<{ id: string; object_a_id: string; object_b_id: string; role_a: string | null; role_b: string | null; isUserCreated: boolean }[]>([])
@@ -244,7 +253,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         sourceHandle,
         targetHandle,
         data: { role_a: conn.role_a, role_b: conn.role_b, highlighted: false },
-        style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 },
+        style: { stroke: 'var(--color-edge)', strokeWidth: 2 },
       }
     })
     setEdges(flowEdges)
@@ -281,7 +290,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       setEdges(current =>
         current.map(e =>
           e.data?.highlighted
-            ? { ...e, data: { ...e.data, highlighted: false }, style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 } }
+            ? { ...e, data: { ...e.data, highlighted: false }, style: { stroke: 'var(--color-edge)', strokeWidth: 2 } }
             : e
         )
       )
@@ -566,6 +575,60 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
     }))
   }, [highlightedObjectIds, setNodes])
 
+  // Push style-toolbar preview (color / raw scale) into the previewed node's data
+  useEffect(() => {
+    const previewId = stylePreview?.nodeId ?? null
+    const needsSync = nodesRef.current.some(n => {
+      const d = n.data as unknown as ObjectNodeData
+      if (n.id === previewId) return d.previewColor !== stylePreview?.color || d.previewScale !== stylePreview?.scale
+      return d.previewColor !== undefined || d.previewScale !== undefined
+    })
+    if (!needsSync) return
+    setNodes(current => current.map(n => {
+      if (n.id === previewId) {
+        return { ...n, data: { ...n.data, previewColor: stylePreview?.color ?? undefined, previewScale: stylePreview?.scale } }
+      }
+      const d = n.data as Record<string, unknown>
+      if (d.previewColor === undefined && d.previewScale === undefined) return n
+      const { previewColor: _pc, previewScale: _ps, ...rest } = d
+      return { ...n, data: rest as typeof n.data }
+    }))
+  }, [stylePreview, setNodes])
+
+  // Outside-click / Esc dismissal for the style toolbar + resize / color modes
+  useEffect(() => {
+    if (selectedItems.length !== 1) return
+    const dismiss = () => {
+      setSelectedItems([])
+      setStylePreview(null)
+      setResizeModeNodeId(null)
+      setColorModeNodeId(null)
+    }
+    const handleDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (toolbarRef.current?.contains(t)) return
+      if (resizeHandleRef.current?.contains(t)) return
+      if (t.closest('.react-flow__node')) return
+      dismiss()
+    }
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      dismiss()
+    }
+    document.addEventListener('mousedown', handleDown)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleDown)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [selectedItems.length])
+
+  // Reset resize/color modes when selection switches to a different pill
+  useEffect(() => {
+    setResizeModeNodeId(null)
+    setColorModeNodeId(null)
+  }, [selectedItems[0]?.nodeId])
+
   // Clear selection and sync edit mode flag to nodes
   useEffect(() => {
     if (mapEditMode) setSelectedItems([])
@@ -634,7 +697,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
           return {
             ...e,
             data: { ...e.data, highlighted: false },
-            style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 },
+            style: { stroke: 'var(--color-edge)', strokeWidth: 2 },
           }
         })
       )
@@ -672,7 +735,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       current.map(e => ({
         ...e,
         data: { ...e.data, highlighted: false },
-        style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 },
+        style: { stroke: 'var(--color-edge)', strokeWidth: 2 },
       }))
     )
   }, [setEdges, screenToFlowPosition])
@@ -798,7 +861,32 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
 
   const clearSelection = useCallback(() => {
     setSelectedItems([])
+    setStylePreview(null)
+    setResizeModeNodeId(null)
   }, [])
+
+  // Commit color/size overrides for a single object
+  const commitStyle = useCallback(async (objectId: string, patch: { color?: string | null; size?: number }) => {
+    if (!user) return
+    const item = selectedItemsRef.current.find(i => i.nodeId === objectId)
+    const existingData = (item?.data.data ?? {}) as Record<string, unknown>
+    const nextData: Record<string, unknown> = { ...existingData }
+    if ('color' in patch) {
+      if (patch.color === null) delete nextData.color
+      else nextData.color = patch.color
+    }
+    if ('size' in patch && patch.size !== undefined) {
+      if (patch.size === 0) delete nextData.size
+      else nextData.size = patch.size
+    }
+    const { error } = await supabase
+      .from('objects_overrides')
+      .update({ data: nextData })
+      .eq('object_id', objectId)
+      .eq('user_id', user.id)
+    if (error) { console.error('Failed to save style:', error); return }
+    await refreshData()
+  }, [user, refreshData])
 
   // Open connection form between the two selected items
   const openPeerConnect = useCallback(() => {
@@ -894,7 +982,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       )}
 
       {/* Level 1: Single selection */}
-      {selectedItems.length === 1 && (
+      {selectedItems.length === 1 && !resizeModeNodeId && !colorModeNodeId && (
         <DetailPanel
           nodeId={selectedItems[0].nodeId}
           object={selectedItems[0].data}
@@ -902,6 +990,53 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
           onObjectUpdated={refreshData}
         />
       )}
+
+      {/* Style toolbar + resize handle for single selection */}
+      {selectedItems.length === 1 && (() => {
+        const sel = selectedItems[0]
+        const persistedColor = sel.data.data?.color ?? null
+        const persistedSize = sel.data.data?.size ?? 0
+        const isResizing = resizeModeNodeId === sel.nodeId
+        const isColoring = colorModeNodeId === sel.nodeId
+        const previewForThis = stylePreview?.nodeId === sel.nodeId ? stylePreview : null
+        const effectiveScale = previewForThis?.scale ?? sizeIndexToScale(persistedSize)
+        return (
+          <>
+            {!isResizing && (
+              <StyleToolbar
+                ref={toolbarRef}
+                nodeId={sel.nodeId}
+                objectClass={sel.data.class}
+                currentColor={persistedColor}
+                currentScale={effectiveScale}
+                colorMode={isColoring}
+                onEnterColorMode={() => setColorModeNodeId(sel.nodeId)}
+                onPreviewColor={hex => setStylePreview(hex === null ? null : { nodeId: sel.nodeId, color: hex })}
+                onCommitColor={async hex => {
+                  setStylePreview({ nodeId: sel.nodeId, color: hex })
+                  await commitStyle(sel.nodeId, { color: hex })
+                  setStylePreview(null)
+                }}
+              />
+            )}
+            {!isColoring && (
+              <ResizeHandle
+                ref={resizeHandleRef}
+                nodeId={sel.nodeId}
+                currentScale={effectiveScale}
+                onEnterResizeMode={() => setResizeModeNodeId(sel.nodeId)}
+                onPreviewScale={scale => setStylePreview({ nodeId: sel.nodeId, scale })}
+                onCommitIndex={async idx => {
+                  // Stay in resize mode after release — click-away / Esc exits
+                  setStylePreview({ nodeId: sel.nodeId, scale: sizeIndexToScale(idx) })
+                  await commitStyle(sel.nodeId, { size: idx })
+                  setStylePreview(null)
+                }}
+              />
+            )}
+          </>
+        )
+      })()}
 
       {/* Level 2: Dual selection — panels on opposite sides */}
       {selectedItems.length === 2 && dualSides && (

@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../contexts/ThemeContext'
-import logoMottoDark from '../assets/logo-name-motto.svg'
-import logoMottoLight from '../assets/logo-name-motto-light.svg'
+import logoDark from '../assets/logo-name.svg'
+import logoLight from '../assets/logo-name-light.svg'
 import thumbLandscape from '../assets/thumb-landscape.svg'
 import thumbDetails from '../assets/thumb-details.svg'
 import thumbMaps from '../assets/thumb-maps.svg'
@@ -55,7 +55,7 @@ export default function InviteJoin() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { resolvedTheme } = useTheme()
-  const logoMotto = resolvedTheme === 'light' ? logoMottoLight : logoMottoDark
+  const logo = resolvedTheme === 'light' ? logoLight : logoDark
   const [invite, setInvite] = useState<InviteData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -110,7 +110,7 @@ export default function InviteJoin() {
     return (
       <div className={styles.container}>
         <div className={styles.errorCard}>
-          <img src={logoMotto} alt="Coterie" className={styles.logo} />
+          <img src={logo} alt="Coterie" className={styles.logo} />
           <p className={styles.errorText}>{error}</p>
           <button className={styles.primaryBtn} onClick={() => navigate('/login')}>
             Go to Login
@@ -124,7 +124,7 @@ export default function InviteJoin() {
     <div className={styles.container}>
       <div className={styles.page}>
         {/* Logo */}
-        <img src={logoMotto} alt="Coterie — Map your professional world" className={styles.logo} />
+        <img src={logo} alt="Coterie" className={styles.logo} />
 
         {/* Feature cards */}
         <div className={styles.features}>

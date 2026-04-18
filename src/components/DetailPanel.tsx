@@ -4,7 +4,7 @@ import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, CalendarCheck, 
 import { supabase } from '../lib/supabase'
 import { getEffectiveConnections, otherObjectId } from '../lib/connections'
 import { useAuth } from '../contexts/AuthContext'
-import { sizeIndexToScale } from '../constants/palettes'
+import { sizeIndexToScale, getDefaultColor } from '../constants/palettes'
 import type { ObjectNodeData, ContactEntry } from './ObjectNode'
 import type { NodeRect } from '../types'
 import Tooltip from './Tooltip'
@@ -1127,7 +1127,14 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   return (
     <div ref={panelRef} tabIndex={-1} className={styles.panel} style={{ left: pos.left, top: pos.top, width: PANEL_WIDTH, visibility: nodeOffScreen ? 'hidden' : 'visible', outline: 'none' } as CSSProperties}>
       {/* ===== HEADER ===== */}
-      <div className={`${styles.header} ${headerClassStyles[object.class] || ''}`}>
+      <div
+        className={`${styles.header} ${headerClassStyles[object.class] || ''}`}
+        style={{
+          background: object.data?.color ?? getDefaultColor(object.class),
+          color: '#f5f3f0',
+          borderColor: 'transparent',
+        }}
+      >
         {object.photo_url && (
           <img className={styles.photo} src={object.photo_url} alt="" />
         )}

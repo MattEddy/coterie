@@ -1,8 +1,8 @@
 import { forwardRef, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useReactFlow, useStore, useViewport } from '@xyflow/react'
-import { Palette, Maximize2 } from 'lucide-react'
+import { Palette } from 'lucide-react'
 import Tooltip from './Tooltip'
-import { getPalette, getDefaultColor, sizeIndexToScale } from '../constants/palettes'
+import { getPalette, getDefaultColor } from '../constants/palettes'
 import { NODE_WIDTH, NODE_HEIGHT } from './Canvas'
 import styles from './StyleToolbar.module.css'
 
@@ -11,12 +11,13 @@ export interface StyleToolbarProps {
   objectClass: string
   currentColor: string | null | undefined
   currentScale: number
+  colorMode: boolean
+  onEnterColorMode: () => void
   onPreviewColor: (hex: string | null) => void
   onCommitColor: (hex: string | null) => void
-  onEnterResizeMode: () => void
 }
 
-const TOOLBAR_APPROX = { w: 82, h: 34 }
+const TOOLBAR_APPROX = { w: 38, h: 34 }
 const PALETTE_APPROX = { w: 260, h: 42 }
 
 function computePosition(
@@ -54,10 +55,10 @@ function computePosition(
 }
 
 const StyleToolbar = forwardRef<HTMLDivElement, StyleToolbarProps>(function StyleToolbar(
-  { nodeId, objectClass, currentColor, currentScale, onPreviewColor, onCommitColor, onEnterResizeMode },
+  { nodeId, objectClass, currentColor, currentScale, colorMode, onEnterColorMode, onPreviewColor, onCommitColor },
   ref
 ) {
-  const [mode, setMode] = useState<'idle' | 'color'>('idle')
+  const mode: 'idle' | 'color' = colorMode ? 'color' : 'idle'
   const { flowToScreenPosition } = useReactFlow()
   const viewport = useViewport()
   const palette = getPalette(objectClass)
@@ -105,10 +106,7 @@ const StyleToolbar = forwardRef<HTMLDivElement, StyleToolbarProps>(function Styl
   return (
     <div ref={ref} className={styles.toolbar} style={{ left: pos.x, top: pos.y }}>
       {mode === 'idle' ? (
-        <>
-          <Tooltip text="Recolor"><button className={styles.btn} onClick={() => setMode('color')}><Palette size={14} /></button></Tooltip>
-          <Tooltip text="Resize"><button className={styles.btn} onClick={onEnterResizeMode}><Maximize2 size={14} /></button></Tooltip>
-        </>
+        <Tooltip text="Recolor"><button className={styles.btn} onClick={onEnterColorMode}><Palette size={14} /></button></Tooltip>
       ) : (
         <>
           <button
@@ -117,7 +115,7 @@ const StyleToolbar = forwardRef<HTMLDivElement, StyleToolbarProps>(function Styl
             title={palette[0].name + ' (default)'}
             onMouseEnter={() => onPreviewColor(defaultHex)}
             onMouseLeave={() => onPreviewColor(null)}
-            onClick={() => { onCommitColor(null); setMode('idle') }}
+            onClick={() => onCommitColor(null)}
           />
           <div className={styles.divider} />
           {palette.slice(1).map(entry => (
@@ -128,7 +126,7 @@ const StyleToolbar = forwardRef<HTMLDivElement, StyleToolbarProps>(function Styl
               title={entry.name}
               onMouseEnter={() => onPreviewColor(entry.hex)}
               onMouseLeave={() => onPreviewColor(null)}
-              onClick={() => { onCommitColor(entry.hex); setMode('idle') }}
+              onClick={() => onCommitColor(entry.hex)}
             />
           ))}
         </>

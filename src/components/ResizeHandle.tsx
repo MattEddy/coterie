@@ -7,6 +7,8 @@ import styles from './ResizeHandle.module.css'
 export interface ResizeHandleProps {
   nodeId: string
   currentScale: number
+  // Fires on mousedown to enter resize mode (hides toolbar + detail panel)
+  onEnterResizeMode: () => void
   // Called continuously during drag with a raw float scale (no snap)
   onPreviewScale: (scale: number) => void
   // Called once on mouseup with the tier-snapped size index
@@ -17,7 +19,7 @@ const MIN_SCALE = SIZE_SCALES[0]
 const MAX_SCALE = SIZE_SCALES[SIZE_SCALES.length - 1]
 
 const ResizeHandle = forwardRef<HTMLDivElement, ResizeHandleProps>(function ResizeHandle(
-  { nodeId, currentScale, onPreviewScale, onCommitIndex },
+  { nodeId, currentScale, onEnterResizeMode, onPreviewScale, onCommitIndex },
   ref
 ) {
   const { flowToScreenPosition } = useReactFlow()
@@ -44,7 +46,8 @@ const ResizeHandle = forwardRef<HTMLDivElement, ResizeHandleProps>(function Resi
     e.preventDefault()
     e.stopPropagation()
     dragStart.current = { x: e.clientX, y: e.clientY, scale: liveScaleRef.current }
-  }, [])
+    onEnterResizeMode()
+  }, [onEnterResizeMode])
 
   useEffect(() => {
     // Sync the ref with prop when no drag is active

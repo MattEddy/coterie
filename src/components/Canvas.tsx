@@ -90,6 +90,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
   // Style toolbar state
   const [stylePreview, setStylePreview] = useState<{ nodeId: string; color?: string | null; scale?: number } | null>(null)
   const [resizeModeNodeId, setResizeModeNodeId] = useState<string | null>(null)
+  const [colorModeNodeId, setColorModeNodeId] = useState<string | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const resizeHandleRef = useRef<HTMLDivElement>(null)
   const nodesRef = useRef<Node[]>([])
@@ -252,7 +253,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         sourceHandle,
         targetHandle,
         data: { role_a: conn.role_a, role_b: conn.role_b, highlighted: false },
-        style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 },
+        style: { stroke: 'var(--color-edge)', strokeWidth: 2 },
       }
     })
     setEdges(flowEdges)
@@ -289,7 +290,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       setEdges(current =>
         current.map(e =>
           e.data?.highlighted
-            ? { ...e, data: { ...e.data, highlighted: false }, style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 } }
+            ? { ...e, data: { ...e.data, highlighted: false }, style: { stroke: 'var(--color-edge)', strokeWidth: 2 } }
             : e
         )
       )
@@ -594,23 +595,25 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
     }))
   }, [stylePreview, setNodes])
 
-  // Outside-click / Esc dismissal for the style toolbar + resize mode
+  // Outside-click / Esc dismissal for the style toolbar + resize / color modes
   useEffect(() => {
     if (selectedItems.length !== 1) return
+    const dismiss = () => {
+      setSelectedItems([])
+      setStylePreview(null)
+      setResizeModeNodeId(null)
+      setColorModeNodeId(null)
+    }
     const handleDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement
       if (toolbarRef.current?.contains(t)) return
       if (resizeHandleRef.current?.contains(t)) return
       if (t.closest('.react-flow__node')) return
-      setSelectedItems([])
-      setStylePreview(null)
-      setResizeModeNodeId(null)
+      dismiss()
     }
     const handleKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      setSelectedItems([])
-      setStylePreview(null)
-      setResizeModeNodeId(null)
+      dismiss()
     }
     document.addEventListener('mousedown', handleDown)
     document.addEventListener('keydown', handleKey)
@@ -619,6 +622,12 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       document.removeEventListener('keydown', handleKey)
     }
   }, [selectedItems.length])
+
+  // Reset resize/color modes when selection switches to a different pill
+  useEffect(() => {
+    setResizeModeNodeId(null)
+    setColorModeNodeId(null)
+  }, [selectedItems[0]?.nodeId])
 
   // Clear selection and sync edit mode flag to nodes
   useEffect(() => {
@@ -688,7 +697,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
           return {
             ...e,
             data: { ...e.data, highlighted: false },
-            style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 },
+            style: { stroke: 'var(--color-edge)', strokeWidth: 2 },
           }
         })
       )
@@ -726,7 +735,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       current.map(e => ({
         ...e,
         data: { ...e.data, highlighted: false },
-        style: { stroke: 'var(--color-edge)', strokeWidth: 1.5 },
+        style: { stroke: 'var(--color-edge)', strokeWidth: 2 },
       }))
     )
   }, [setEdges, screenToFlowPosition])
@@ -973,7 +982,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       )}
 
       {/* Level 1: Single selection */}
-      {selectedItems.length === 1 && !resizeModeNodeId && (
+      {selectedItems.length === 1 && !resizeModeNodeId && !colorModeNodeId && (
         <DetailPanel
           nodeId={selectedItems[0].nodeId}
           object={selectedItems[0].data}
@@ -988,6 +997,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
         const persistedColor = sel.data.data?.color ?? null
         const persistedSize = sel.data.data?.size ?? 0
         const isResizing = resizeModeNodeId === sel.nodeId
+        const isColoring = colorModeNodeId === sel.nodeId
         const previewForThis = stylePreview?.nodeId === sel.nodeId ? stylePreview : null
         const effectiveScale = previewForThis?.scale ?? sizeIndexToScale(persistedSize)
         return (
@@ -999,22 +1009,25 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
                 objectClass={sel.data.class}
                 currentColor={persistedColor}
                 currentScale={effectiveScale}
+                colorMode={isColoring}
+                onEnterColorMode={() => setColorModeNodeId(sel.nodeId)}
                 onPreviewColor={hex => setStylePreview(hex === null ? null : { nodeId: sel.nodeId, color: hex })}
                 onCommitColor={async hex => {
                   setStylePreview({ nodeId: sel.nodeId, color: hex })
                   await commitStyle(sel.nodeId, { color: hex })
                   setStylePreview(null)
                 }}
-                onEnterResizeMode={() => setResizeModeNodeId(sel.nodeId)}
               />
             )}
-            {isResizing && (
+            {!isColoring && (
               <ResizeHandle
                 ref={resizeHandleRef}
                 nodeId={sel.nodeId}
                 currentScale={effectiveScale}
+                onEnterResizeMode={() => setResizeModeNodeId(sel.nodeId)}
                 onPreviewScale={scale => setStylePreview({ nodeId: sel.nodeId, scale })}
                 onCommitIndex={async idx => {
+                  // Stay in resize mode after release — click-away / Esc exits
                   setStylePreview({ nodeId: sel.nodeId, scale: sizeIndexToScale(idx) })
                   await commitStyle(sel.nodeId, { size: idx })
                   setStylePreview(null)

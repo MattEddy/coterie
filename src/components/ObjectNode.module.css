@@ -28,7 +28,7 @@
 
 /* Person: pill (flat top/bottom, round sides) */
 .person {
-  border-radius: 30px;
+  border-radius: 9999px;
   background: #4a9ab0;
 }
 

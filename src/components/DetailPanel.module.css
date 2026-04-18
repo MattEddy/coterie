@@ -130,14 +130,24 @@
   border-radius: 3px;
 }
 
-.headerOrg .type {
-  color: var(--color-org-type);
-  background: color-mix(in srgb, var(--color-org) 15%, transparent);
+/* On colored header: off-white everywhere, hierarchy via opacity */
+.header .title {
+  color: rgba(245, 243, 240, 0.82);
 }
 
-.headerPerson .type {
-  color: var(--color-person-type);
-  background: color-mix(in srgb, var(--color-person) 15%, transparent);
+.header .type {
+  color: rgba(245, 243, 240, 0.75);
+  background: rgba(245, 243, 240, 0.14);
+}
+
+.header .iconButton {
+  color: rgba(245, 243, 240, 0.7);
+}
+
+.header .iconButton:hover {
+  color: #f5f3f0;
+  background: rgba(245, 243, 240, 0.15);
+  border-color: transparent;
 }
 
 .tagRemoveInline {

@@ -125,7 +125,7 @@ function DemoDetailCard({ detail, onClose }: { detail: DemoDetail; onClose: () =
             <p className={styles.detailMuted}>
               {detail.cls === 'person'
                 ? 'Private contact info is never shared without permission.'
-                : 'No contact information yet.'}
+                : 'Store contact information.'}
             </p>
           )}
           {tab === 'notes' && (

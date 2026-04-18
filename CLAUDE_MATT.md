@@ -5,46 +5,81 @@ Matt's working document for Claude Code sessions on Coterie. This is where sessi
 ---
 
 ## Recent Session
-**Date:** 2026-04-15
-**Branch:** dev (merged to main at end of session)
+**Date:** 2026-04-17
+**Branch:** dev (repeatedly merged to main throughout — live on coteriepro.com)
 
 ### Narrative
 
-**Full code review + RPC offloading + test infrastructure + workflow improvements.** Big session covering code quality, performance, and dev process.
+**The "take the app to a new level" session.** Started with small UI fixes, morphed into a full visual-design overhaul: per-pill color + size customization, a whole palette system, and a selection-attached restyle toolbar. Matt's biggest compliment at the end: "AMAZING AMAZING AMAZING."
 
-**Code review** (two parallel agents): Found 2 critical bugs, several high/medium issues, and 17 opportunities to move frontend queries to Supabase RPCs.
+**Warm-up fixes.**
+- Chrome autofill was rendering fields bright-white in dark mode on the share-map form. Fixed globally in `global.css` with `-webkit-box-shadow inset` trick + `-webkit-text-fill-color` to override Chrome's forced color.
+- Standardized Map Detail action order per Matt's new rule: **Edit → Link → Share → Delete → Close**. Applied to `MapsFrame.tsx`.
+- Swapped the `&times;` text glyph in `Frame.tsx` for a Lucide `<X size={16} />` so the close icon reads as slightly larger than the 14px action icons, matching the DetailPanel's relationship.
 
-**Critical bug fixes:**
-- `MultiSelectPanel.tsx` dispatched `coterie:refresh-canvas` (stale event name) — canvas never refreshed after multi-delete. Fixed to `sharing:refresh-canvas`.
-- `DetailPanel.tsx` queried `maps.is_active` (column dropped in earlier migration) — Maps popover was always empty. Removed the filter.
+**Map-hide feature — killed before shipping.** Matt pitched "hide a map (graveyard) so its objects disappear." We jammed on the intersection case (object in hidden map + visible map → which wins?) and together concluded: not worth the complexity tax, existing Focus/Isolate already solves the pragmatic need. Matt's own instinct was right. Shelved.
 
-**Other bug fixes:** HTML escaping in invite email template, optimistic toggle rollback on DB failure, email validation on share input, `navigator.platform` → `navigator.userAgent`, cosmetic coterie→map renames (CSS classes, persistKeys, import variables, comments).
+**DetailPanel drag-follow bug.** Matt noticed the panel follows the pill left-right but stays fixed vertically. Root cause in `DetailPanel.tsx:451-460`: intentional lock after first placement (to prevent content-growth jumps) was over-scoped — it also suppressed Y updates when the node moved. Rewrote as **"compute once, follow forever"**: placement key `${object.id}|${preferredSide}`, record offset on first placement, subsequently `panel = nodeRect + offset`. Same pattern reused later for StyleToolbar.
 
-**11 new RPCs** (migration `20260416000000_rpc_offloading.sql`): `create_object`, `upsert_connection`, `deactivate_connection`, `get_user_maps`, `get_pending_invites`, `get_connected_items`, `preflight_delete_object`, `set_object_types`, `accept_dissonance`, `leave_shared_map`, `get_share_picker_state`. Eliminates ~60 round trips from common user actions, adds transaction safety. All frontend files updated to call RPCs instead of direct queries.
+**The big feature arc — per-pill style customization.**
 
-**Test infrastructure:** Installed Vitest, created `tests/rpc.test.ts` (17 integration tests against local Supabase) and `tests/supabase.ts` (shared client). Added `npm test`, `npm run check`, `npm run test:watch` scripts. Tests caught a real bug in `upsert_connection` (ON CONFLICT on nonexistent unique constraint for roles). Matt asked about testing approach — agreed that RPC integration tests are high-value now, Playwright E2E should wait until UI stabilizes.
+Matt's pitch: *"users will end up with a vast sea of visually nearly identical greenish and pinkish shapes... could we add the ability to change a pill's color and size?"* We jammed on the product philosophy first (utility vs living artifact — Matt's building the artifact). Then specifics:
 
-**Dev branch workflow:** Matt asked about backing up to GitHub without going live. Set up `dev` branch — day-to-day work pushes to `dev`, merge to `main` with `--no-ff` when ready to ship. Explained the `.env.local` toggle for local vs cloud Supabase.
+- **Size = hierarchy channel, tiered not continuous.** Initially Matt wanted continuous smooth resize; I pushed back because continuous kills the "these 5 pills are L" visual grouping. Landed on **hybrid**: drag feels continuous, snaps to nearest tier on release. Geometric progression, not linear — 1x / 1.32x / 1.73x / 2.28x / 3.00x, ~32% per step, because the eye perceives size logarithmically.
+- **Color = per-class palette families.** Matt's elegant solve: warm colors for orgs, cool for people — preserves class identity as silent background grammar while giving expressive freedom within. 8 swatches per family.
+- **Theme-invariant pills.** Matt wanted bolder, not "faded light-mode pills" — switched from the `-dim` class var system to hardcoded saturated hex values (`#8e4a52` Garnet default for orgs, `#4a9ab0` Dusty Teal for people). Off-white text (`#f5f3f0`) at varying opacity for hierarchy on colored surfaces.
 
-**Local dev testing:** Switched `.env.local` to point at local Supabase. Matt tested the full app locally for the first time. Found several bugs during testing:
-- **Delete modal + Enter key:** Pressing Enter toggled edit mode on the panel behind the delete confirmation instead of confirming the delete. Stale closure — `deleteConfirm` wasn't in the `useEffect` dependency array.
-- **Map object count wrong after deletion:** `delete_object_with_cleanup` and `delete_multiple_objects` didn't clean up `maps_objects` rows for canonical objects (FK CASCADE only fires on hard-delete). Fixed in migration `20260416200000`.
-- **Re-invite failure:** `maps_invitations` had unique constraint on `(map_id, email)`. After someone accepted and left, re-inviting them hit the constraint silently.
+**Palette picking jam session.** Built a `/dev/palettes` preview page (`src/pages/PalettePreview.tsx`) rendering candidate palettes as real pills with light/dark toggle. Proposed 4 palettes; Matt iterated — "Warm A but replace Terracotta with Garnet and Antique Gold with Cognac" → Warm C. Then "Mauve is too cool, can we get a red that's different from Garnet?" → added **Cinnabar**. Cool C = Sea Stone base with Deep Teal + Indigo swapped in. Locked.
 
-**Invitations as work queue:** Matt suggested deleting invitation rows after acceptance instead of keeping them with a status. This simplified everything — dropped the `status` column entirely (migration `20260416300000`). Rows exist only while pending. Accept = DELETE. Decline = DELETE. Re-invitations just INSERT fresh rows.
+**Interactive picker UI.** Matt's original pitch had a small frame with recolor + resize icons floating at the opposite corner from DetailPanel. Implementation went through several iterations:
 
-**Exit sharing UX:** Matt felt "Leave shared map" was wrong — should keep the map, just disconnect from sharing. Changed to "Exit map sharing" with confirmation "Stop sharing this map? You'll keep the map and its objects, but will stop receiving updates." Button label: "Stop Sharing". RPC keeps `maps_objects` intact.
+1. Built frame with both icons + separate drag handle behind a mode toggle
+2. Matt: *"do we even need a resize button? What if the knob is always visible on the pill, grabbing it enters resize mode in one gesture?"* — great call. Removed the resize icon; ResizeHandle now renders whenever single-selected, mousedown enters resize mode.
+3. Matt: *"resize mode should stay active until click-away, not exit on release"* — made resize sticky.
+4. Matt: *"color mode should work the same way"* — lifted `mode` state from StyleToolbar internal to a Canvas-level `colorModeNodeId`. Click palette icon → swatch row replaces everything (DetailPanel + knob vanish); click swatches freely; click-away exits. Sticky parallel to resize mode.
 
-**Auto-revert owner map:** Matt noticed that after everyone leaves a shared map, the owner's map still shows as "shared with nobody." Added logic to `leave_shared_map` RPC: when the last member exits, the owner's `origin_map_id` reverts to NULL automatically.
+**Bugs squashed along the way.**
+- After the color-mode refactor, clicking *any* pill blanked the entire screen. I'd removed `useState` from StyleToolbar imports while deleting the internal `mode` state, forgetting that another `useState` call (for `pos`) was still in the file. TypeScript passed because React global type satisfied it, but Vite's runtime module didn't have it. Lesson: **a green `tsc --noEmit` doesn't mean the module loads.**
+- Drag math was `Math.max(dx, dy)` which picks the less-negative on inward drags — shrink only worked on certain angles. Fixed to `dx + dy` for proper signed direction.
+- Jerky drag was snapping the preview to tiers every frame, causing teleport + CSS transition fights. Rewrote preview to carry a raw float `scale` during drag; snap only on mouseup.
+- Removed Cancel X and Done buttons per Matt's spec — outside-click + Esc handle everything.
 
-**Share picker filtering:** Matt asked about the share picker showing all shared maps vs only relevant ones. Changed `get_share_picker_state` to only show maps where the object is actually a member.
+**Visual polish pass.**
+- DetailPanel header uses `object.data?.color ?? userDefault` as background. Applied the "on colored surface, everything is off-white; hierarchy via opacity" rule (primary 100%, title 82%, muted/types 72-75%, icons 70%). Matt caught one spot where `.title` was still rendering at `--color-text-muted` gray — fixed.
+- Person pills now `border-radius: 9999px` (full capsule) — stays oval at every size tier instead of looking rectangular when enlarged.
+- Edges bumped: `--color-edge` `#2e2e30 → #555559` (dark), `#c8c4c0 → #a8a39f` (light); `strokeWidth: 1.5 → 2`. Now reads as connective tissue, not ghost lines.
+- DetailPanel scale-aware: `nodeRect` now uses `NODE_WIDTH * effectiveScale` so panel opens flush against the *actual* pill edge, not the un-scaled one. Flagged remaining unscaled positions (PlacementOverlay, ConnectionRoleForm, MultiSelectPanel bbox) as low-priority cleanup.
 
-**Deployed:** All migrations pushed to Supabase Cloud, `dev` merged to `main` with `--no-ff`, auto-deployed to Vercel.
+**User-configurable defaults.** Matt's "last crazy request": *"can users pick their default pill colors in Settings?"* Built `PillColorsContext` (`src/contexts/PillColorsContext.tsx`) following the ThemeContext pattern — localStorage-persisted, exposes `defaultOrgColor` + `defaultPersonColor` via `useDefaultColorFor(class)` hook. SettingsFrame gained two swatch rows. All pill-rendering consumers (ObjectNode, StyleToolbar, DetailPanel) now use the hook. `orderPaletteByDefault()` helper ensures the style picker's leftmost slot is always the user's current default. Changing the default instantly recolors all default-colored pills on the landscape; per-object overrides stay untouched.
+
+**Marketing demos updated.** Home and InviteLanding interactive demos extended `demoNode` to accept `{color, size}`. Final sizes per Matt: Netflix XL (Brick), WME L (Cognac), 21 Laps M (Saffron), Shawn Levy M (default), Ted Sarandos S (Amethyst). Repositioned 21 Laps and WME to clear the enlarged Netflix. DemoDetailCard reads the pill's color for header. Copy tweak: "No contact information yet" → "Store contact information." (active affordance framing).
+
+**Favicon.** Was serving Vercel default because no `<link rel="icon">` existed. Created `public/favicon.svg` — first as the raw gold logo (melted into Chrome's light blue tab bar), then on a black circle (Matt: *"icon's too small when shrunk"*), finally settled on **black square with icon at native scale** for maximum visibility at 16x16.
+
+**Vercel build fix.** Four production deploys failed on `TS6133: 'useEffect' is declared but its value is never read` in `PillColorsContext`. Local `npm run check` (`tsc --noEmit`) is lenient; Vercel runs `tsc -b` (project references) which is strict. Dropped the unused import, documented in CLAUDE.md. Future rule: run `npx tsc -b` locally before merging when there's unused-import risk.
+
+**Files created this session:**
+- `src/constants/palettes.ts` — palette entries + size scale helpers
+- `src/contexts/PillColorsContext.tsx` — user default color prefs
+- `src/components/StyleToolbar.tsx` + `.module.css`
+- `src/components/ResizeHandle.tsx` + `.module.css`
+- `src/pages/PalettePreview.tsx` — dev-only palette comparison at `/dev/palettes`
+- `public/favicon.svg`
+
+**Files modified (major):**
+- `src/components/Canvas.tsx` — stylePreview + mode state, commit handler, outside-click effect
+- `src/components/ObjectNode.tsx` + `.module.css` — reads color/size, capsule shape, scaled CSS vars
+- `src/components/DetailPanel.tsx` + `.module.css` — drag-follow fix, scale-aware nodeRect, header color match, off-white opacity rules
+- `src/components/SettingsFrame.tsx` + `.module.css` — default color swatch rows
+- `src/styles/global.css` — edge color bump + autofill fix
+- `src/pages/Home.tsx`, `Home.module.css`, `InviteLanding.tsx`, `InviteLanding.module.css` — demo styling
+- `index.html` — favicon link
 
 ### Open Items / Next Steps
-1. **Configure invite email webhook** — Supabase Dashboard → Webhooks → `maps_invitations` INSERT → `send-invite-email` Edge Function
-2. **AWS SES production access** — submitted 2026-04-14, pending approval (sandbox mode limits sending)
-3. **Stripe integration** — wire up Checkout, webhooks to update subscription status
-4. **Polling → Realtime** — NotificationBoxes and UpdatesFrame poll at 30s
-5. **DetailPanel → Frame migration** — back burner
-6. **Light mode polish** — back burner
+1. **Configure invite email webhook** (still pending from last session) — Supabase Dashboard → Webhooks → `maps_invitations` INSERT → `send-invite-email` Edge Function
+2. **AWS SES production access** — still pending approval
+3. **Stripe integration** — wire up Checkout + subscription webhook
+4. **Polling → Realtime** — swap to Supabase Broadcast on cloud
+5. **Scale-aware UI cleanup** — remaining pill-anchored spots (PlacementOverlay, ConnectionRoleForm, MultiSelectPanel) still hardcoded to 180×60
+6. **DetailPanel → Frame migration** — back burner
+7. **Light mode polish** — back burner

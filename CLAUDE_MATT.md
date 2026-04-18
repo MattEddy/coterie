@@ -75,6 +75,13 @@ Matt's pitch: *"users will end up with a vast sea of visually nearly identical g
 - `src/pages/Home.tsx`, `Home.module.css`, `InviteLanding.tsx`, `InviteLanding.module.css` — demo styling
 - `index.html` — favicon link
 
+**Closing polish pass (after the first /handoff this session):**
+- Swapped in Matt's freshly-exported marketing thumbnails (`src/assets/thumb-landscape.svg`, `thumb-details.svg`) showing the new pill palette.
+- Shrank `.heroIcon` from 80px → 56px (~30% smaller) on Home page.
+- New tagline: "Map your professional world" → **"Map your interpersonal landscape."** Updated headline on Home + explainer copy on both Home and InviteLanding (InviteLanding dropped "understand and" to match new phrasing → "harness the relationships in your world").
+- Retired the motto logo entirely. Swapped `logo-name-motto` → `logo-name` in the last two usages in `InviteJoin.tsx`. The "Map your professional world" phrase no longer appears anywhere in the app.
+- Confirmed invite flow has a baked-in demo mode — navigate to `/invite/demo` (landing) or `/invite/demo/join` (post-verify) to preview without a real invitation. The `token === 'demo'` short-circuits the API call and renders mock data.
+
 ### Open Items / Next Steps
 1. **Configure invite email webhook** (still pending from last session) — Supabase Dashboard → Webhooks → `maps_invitations` INSERT → `send-invite-email` Edge Function
 2. **AWS SES production access** — still pending approval

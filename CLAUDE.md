@@ -256,6 +256,14 @@ See `docs/UI_REFERENCE.md` for MapsFrame architecture, workspace persistence, co
 
 **Dev preview page** `/dev/palettes` (`src/pages/PalettePreview.tsx`) renders all candidate palettes as real pills with light/dark toggle. Useful for picking/validating palettes.
 
+### Shared Marketing Components
+Three blocks reused across the public pages (`Home`, `InviteLanding`, `InviteJoin`) live in `src/components/` and own their own data/styles so the pages stay in sync:
+- **`DemoCanvas`** — the interactive React Flow demo (nodes, edges, detail card, gesture config, ReactFlowProvider, label). Single source of truth for demo content — edit here when palette / sizing / cast changes.
+- **`LandscapeBlurb`** — the two explainer paragraphs ("Visually array..." + "Connect with trusted collaborators...").
+- **`FeatureCards`** — four-card grid (Landscape / Details / Maps / Shared Maps) with responsive breakpoints.
+
+The demo's gesture config mirrors the real `Canvas.tsx`: `panOnScroll`, `panOnDrag={[1]}` (middle-click), `panActivationKeyCode="Space"`, `selectionOnDrag`, `selectionMode={Partial}`, `zoomOnPinch`, `zoomOnScroll`. Two-finger scroll pans, pinch zooms, left-drag lassos — same feel from marketing through to app.
+
 ### Typography
 - **Urbanist** (`--font-sans`): primary display font — everything by default
 - **Inter** (`--font-data`): data/functional text only (type labels, data fields in DetailPanel, pill subtitles). 2px smaller for x-height match.

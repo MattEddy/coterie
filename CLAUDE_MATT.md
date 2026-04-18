@@ -82,6 +82,26 @@ Matt's pitch: *"users will end up with a vast sea of visually nearly identical g
 - Retired the motto logo entirely. Swapped `logo-name-motto` → `logo-name` in the last two usages in `InviteJoin.tsx`. The "Map your professional world" phrase no longer appears anywhere in the app.
 - Confirmed invite flow has a baked-in demo mode — navigate to `/invite/demo` (landing) or `/invite/demo/join` (post-verify) to preview without a real invitation. The `token === 'demo'` short-circuits the API call and renders mock data.
 
+**Marketing component refactor (the closer):**
+
+Three blocks were being duplicated across Home / InviteLanding / InviteJoin with real drift risk (edited in parallel ~5 times this session). Extracted into shared components in `src/components/`:
+- **`DemoCanvas`** — owns all demo data (`DEMO_NODES`, `DEMO_EDGES`, `demoNode`, `demoEdge`), the `DemoDetailCard` with its color-aware header, the React Flow component with app-matching gesture config (`panOnScroll`, `panOnDrag={[1]}`, `selectionOnDrag`, `zoomOnPinch`, `panActivationKeyCode="Space"`, `selectionMode={Partial}`), *and* the wrapping `<div>` + label + `<ReactFlowProvider>`. Fully self-contained.
+- **`LandscapeBlurb`** — two explainer paragraphs, unified on Home's wording ("Connect with trusted collaborators to share and sync...").
+- **`FeatureCards`** — four-card grid + responsive breakpoints. Copy tweak Matt requested during extraction: "linked to the people and organizations that matter" → **"linked to specific people and organizations"**.
+
+Also changed demo canvas label copy: "Try it out – drag, click, explore:" → **"See how it feels – drag, click, explore:"** (warmer, sensory rather than utilitarian).
+
+**Dead CSS pruning pass.** After extraction, the three page `.module.css` files carried ~380 lines of now-unused rules. Pruned them:
+- `Home.module.css`: 390 → 211 lines
+- `InviteLanding.module.css`: 284 → 121 lines
+- `InviteJoin.module.css`: 162 → 125 lines
+- Kept `.featuresSection` in Home — still wraps the `#features` nav anchor.
+
+**Line counts after full refactor:**
+- `Home.tsx`: 358 → 93 lines
+- `InviteLanding.tsx`: 340 → 125 lines
+- `InviteJoin.tsx`: lost ~28 lines of dead feature data
+
 ### Open Items / Next Steps
 1. **Configure invite email webhook** (still pending from last session) — Supabase Dashboard → Webhooks → `maps_invitations` INSERT → `send-invite-email` Edge Function
 2. **AWS SES production access** — still pending approval

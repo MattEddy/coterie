@@ -126,6 +126,10 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 | `status` | Active / Left sector | Active / Defunct | Development / Released | — |
 | `event_date` | — | — | — | 2025-01-25 |
 | `data.contacts` | **Override only** | Phones, emails, website | — | — |
+| `data.color` | Per-user hex override | Per-user hex override | — | — |
+| `data.size` | Size tier index 0-4 | Size tier index 0-4 | — | — |
+
+**Per-pill appearance** (`data.color`, `data.size`) lives in `objects_overrides.data` JSONB. Absent keys = use default (user's chosen default color, size tier 0 = S). Never stored as `null` — `commitStyle` in `Canvas.tsx` `delete`s the key when user picks the default. Five size tiers follow a **geometric progression** (1.00x, 1.32x, 1.73x, 2.28x, 3.00x — ~32% per step) defined in `src/constants/palettes.ts`. Two 8-color palette families: **warm** for orgs (Garnet/Rose/Saffron/Umber/Persimmon/Brick/Cinnabar/Cognac), **cool** for people (Dusty Teal/Slate Blue/Moss/Glacier/Deep Teal/Ash Violet/Indigo/Pewter).
 
 ### Guiding Tenet: No Person Private Reachability in Canonical Records
 
@@ -160,6 +164,9 @@ Identity fields are real columns. Contact info lives in `data.contacts` as a typ
 - **Server-side RPCs for all multi-step operations** — SECURITY DEFINER functions for all multi-step DB orchestration. Every future client (iPad, etc.) gets this logic for free. 23 RPCs total after the 2026-04-15 offloading session (migration `20260416000000`): `create_object`, `upsert_connection`, `deactivate_connection`, `get_user_maps`, `get_pending_invites`, `get_connected_items`, `preflight_delete_object`, `set_object_types`, `accept_dissonance`, `leave_shared_map`, `get_share_picker_state` + the 12 originals.
 - **Contact info stays JSONB** — contacts in `objects_overrides.data.contacts` are shared all-or-nothing per person per map group. Intentionally NOT objectified — the access pattern (read/write as a group) doesn't benefit from per-item granularity.
 - **Cross-platform input** — Canvas multi-select checks both `metaKey` (Mac Cmd) and `ctrlKey` (Windows Ctrl). `multiSelectionKeyCode` is platform-detected. Pan via middle-click drag or Space+drag.
+- **Per-user default pill colors** — `PillColorsContext` (`src/contexts/PillColorsContext.tsx`) stores `defaultOrgColor` + `defaultPersonColor` in localStorage. `useDefaultColorFor(class)` is the authoritative fallback for pill rendering; `getDefaultColor()` in `constants/palettes.ts` is a pure helper for non-React contexts only (e.g., `/dev/palettes` preview). Users pick their defaults from the 8-swatch rows in `SettingsFrame`. The style picker's leftmost "default" slot is reordered via `orderPaletteByDefault()` so the user's current default is always on the left of the divider.
+- **Colored-surface text rule** — any UI with a saturated pill-colored background (ObjectNode, DetailPanel header, DemoDetailCard) uses off-white (`#f5f3f0`) as the base text color and layers **opacity** for hierarchy (primary 100%, title 82%, muted/types 72-75%, icons 70% → full on hover). Never color-based hierarchy on colored surfaces — it's unreadable on half the palette.
+- **Pill-anchored UI must be scale-aware** — anything positioned from a pill's rect (DetailPanel, StyleToolbar, ResizeHandle) must multiply `NODE_WIDTH`/`NODE_HEIGHT` by the pill's effective scale (`sizeIndexToScale(data.size)`). Pills grow down-right from their top-left (which is scale-stable); the right/bottom edges require the scale multiplier. Remaining places still unscaled: `PlacementOverlay`, `ConnectionRoleForm` midpoint, `MultiSelectPanel` bounding box (tracked, low-priority).
 
 ## Known Gotchas
 
@@ -217,6 +224,12 @@ If a `useEffect` registers a `keydown` listener, every piece of state read insid
 ### Coterie Acceptance Must Copy Override Data
 When accepting a shared map, the recipient's `objects_overrides` must include `name`, `title`, `status` from the owner's overrides — not just `map_x`/`map_y`. User-created objects have `objects.name = NULL` (skeleton row), so without copying, they render as blank shapes. Same for `connections_overrides`: owner's user-created connections (`connection_id IS NULL`) must be duplicated for the recipient to avoid spurious `new_connection` dissonances.
 
+### Vercel Build is Stricter than Local `npm run check`
+The `npm run check` script runs `tsc --noEmit` which tolerates unused imports. Vercel runs `npm run build` → `tsc -b && vite build`, and `tsc -b` (project references mode) **errors on `TS6133: declared but never read`**. Shipped a production deploy failure this way (`useEffect` import in `PillColorsContext` that wasn't called). Run `npx tsc -b` locally before merging to main when you suspect unused-import risk.
+
+### Hook-Import Desync After Refactor
+When removing internal component state during a refactor, double-check the hook imports. Dropped `useState` from StyleToolbar's import line while deleting one state call but forgot another still in the file — Vite's dev transform silently missed it but the runtime crashed with `useState is not defined`, blanking every selected pill's click handler. `npm run check` passed because TypeScript resolved the global React type. Moral: a green type-check doesn't mean the module loads.
+
 ## UI Architecture
 
 ### Frame System
@@ -232,7 +245,16 @@ Canvas exposes `zoomToNode(nodeId)`, `clearSelection()`, `triggerCreate()` via `
 See `docs/UI_REFERENCE.md` for MapsFrame architecture, workspace persistence, color scheme tables, project structure, and schema overview.
 
 ### Theming
-`data-theme` attribute on `<html>`, dark default. `ThemeContext` manages preference (light/dark/auto), persists to localStorage. Flash prevention via inline script in `index.html`. All colors are CSS variables — no hardcoded colors. **Palette**: dusty rose (org) + teal (person), gold accent. See `src/styles/global.css`.
+`data-theme` attribute on `<html>`, dark default. `ThemeContext` manages preference (light/dark/auto), persists to localStorage. Flash prevention via inline script in `index.html`. Most colors are CSS variables — no hardcoded colors for surfaces/text. **Pills are a deliberate exception**: landscape pills render with a **theme-invariant saturated fill** (same bold look in both modes) — hex values live in `ObjectNode.module.css` and `src/constants/palettes.ts`, not CSS vars. Gold accent, person pills use a full-capsule `border-radius: 9999px`. See `src/styles/global.css` for vars.
+
+### Style Picker & Pill Appearance
+`ObjectNode` renders a pill with `background` = `previewColor ?? data.color ?? userDefaultColor` and `--pill-scale` CSS var driving width/height/font/padding via `calc()`. When a single pill is selected, Canvas renders:
+- **`StyleToolbar`** (`src/components/StyleToolbar.tsx`) — a small floating frame with a palette icon, smart-placed at the opposite corner from DetailPanel (matches panel's vertical extent, opposite horizontal side). Locks a fixed offset from the pill on first placement and follows it on drag/pan/zoom.
+- **`ResizeHandle`** (`src/components/ResizeHandle.tsx`) — a corner drag knob always visible when a pill is selected. `mousedown` enters resize mode (hides DetailPanel + palette icon); drag emits continuous scale via `onPreviewScale`; `mouseup` snaps to the nearest tier and commits via `onCommitIndex`.
+
+**Two canvas-level sticky modes** — `resizeModeNodeId` and `colorModeNodeId` in `Canvas.tsx`. Both stay active after a commit so users can cycle colors or resize repeatedly; outside-click or Esc exits everything (selection + both modes + preview). Selection switching also resets both modes. Preview state (`stylePreview: { nodeId, color?, scale? }`) is pushed into node data via a `useEffect` so `ObjectNode` re-renders live; commits keep the preview visible through the DB round-trip to prevent flicker.
+
+**Dev preview page** `/dev/palettes` (`src/pages/PalettePreview.tsx`) renders all candidate palettes as real pills with light/dark toggle. Useful for picking/validating palettes.
 
 ### Typography
 - **Urbanist** (`--font-sans`): primary display font — everything by default
@@ -302,10 +324,15 @@ Full build history: `docs/IMPLEMENTATION_STATUS.md`
 - [x] Code review + RPC offloading — 11 new RPCs replacing ~60 round trips, bug fixes, invitations as queue
 - [x] Test suite — Vitest RPC integration tests (17 tests), `npm test` / `npm run check`
 - [x] Dev branch workflow — work on `dev`, merge to `main` with `--no-ff` to deploy
+- [x] Per-pill color + size style picker — 8-color palettes (warm/cool), 5 size tiers, selection-attached toolbar + corner resize knob, sticky color/resize modes, user-configurable defaults in Settings
+- [x] Bolder theme-invariant pills + full-capsule person shape + beefier edges
+- [x] DetailPanel + DemoDetailCard header uses object color with off-white opacity hierarchy
+- [x] Favicon — Coterie logo on black square, served from `public/favicon.svg`
 - [ ] Stripe integration for subscription billing
 - [ ] DetailPanel migration to Frame component (back burner)
 - [ ] Light mode polish (back burner)
 - [ ] Map packages (store) — later, possibly post-launch
+- [ ] Scale-aware pill-anchored UI for remaining spots (PlacementOverlay, ConnectionRoleForm midpoint, MultiSelectPanel bbox) — low-priority
 
 ### Planned (Pro)
 - [ ] Operator dedup tooling

@@ -4,7 +4,8 @@ import { Pencil, Check, X, Phone, FileText, Clipboard, Calendar, CalendarCheck, 
 import { supabase } from '../lib/supabase'
 import { getEffectiveConnections, otherObjectId } from '../lib/connections'
 import { useAuth } from '../contexts/AuthContext'
-import { sizeIndexToScale, getDefaultColor } from '../constants/palettes'
+import { sizeIndexToScale } from '../constants/palettes'
+import { useDefaultColorFor } from '../contexts/PillColorsContext'
 import type { ObjectNodeData, ContactEntry } from './ObjectNode'
 import type { NodeRect } from '../types'
 import Tooltip from './Tooltip'
@@ -91,6 +92,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   const { user } = useAuth()
   const { flowToScreenPosition } = useReactFlow()
   const viewport = useViewport()
+  const userDefaultColor = useDefaultColorFor(object.class)
 
   const nodePosition = useStore(
     useCallback(s => s.nodeLookup.get(nodeId)?.position ?? null, [nodeId]),
@@ -1130,7 +1132,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
       <div
         className={`${styles.header} ${headerClassStyles[object.class] || ''}`}
         style={{
-          background: object.data?.color ?? getDefaultColor(object.class),
+          background: object.data?.color ?? userDefaultColor,
           color: '#f5f3f0',
           borderColor: 'transparent',
         }}

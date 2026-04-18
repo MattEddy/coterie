@@ -1,7 +1,8 @@
 import { memo } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
-import { getDefaultColor, sizeIndexToScale } from '../constants/palettes'
+import { sizeIndexToScale } from '../constants/palettes'
+import { useDefaultColorFor } from '../contexts/PillColorsContext'
 import styles from './ObjectNode.module.css'
 
 export interface ContactEntry {
@@ -40,9 +41,10 @@ function ObjectNode({ data, selected }: NodeProps) {
   const nodeData = data as unknown as ObjectNodeData
   const shapeClass = classStyles[nodeData.class] || ''
 
+  const userDefault = useDefaultColorFor(nodeData.class)
   const effectiveColor = nodeData.previewColor
     ?? nodeData.data?.color
-    ?? getDefaultColor(nodeData.class)
+    ?? userDefault
   const effectiveSize = nodeData.previewScale
     ?? sizeIndexToScale(nodeData.data?.size)
 

@@ -2,7 +2,8 @@ import { forwardRef, useCallback, useLayoutEffect, useMemo, useRef, useState } f
 import { useReactFlow, useStore, useViewport } from '@xyflow/react'
 import { Palette } from 'lucide-react'
 import Tooltip from './Tooltip'
-import { getPalette, getDefaultColor } from '../constants/palettes'
+import { getPalette } from '../constants/palettes'
+import { useDefaultColorFor, orderPaletteByDefault } from '../contexts/PillColorsContext'
 import { NODE_WIDTH, NODE_HEIGHT } from './Canvas'
 import styles from './StyleToolbar.module.css'
 
@@ -61,8 +62,8 @@ const StyleToolbar = forwardRef<HTMLDivElement, StyleToolbarProps>(function Styl
   const mode: 'idle' | 'color' = colorMode ? 'color' : 'idle'
   const { flowToScreenPosition } = useReactFlow()
   const viewport = useViewport()
-  const palette = getPalette(objectClass)
-  const defaultHex = getDefaultColor(objectClass)
+  const defaultHex = useDefaultColorFor(objectClass)
+  const palette = orderPaletteByDefault(getPalette(objectClass), defaultHex)
   const effectiveColor = currentColor ?? defaultHex
 
   const nodePosition = useStore(

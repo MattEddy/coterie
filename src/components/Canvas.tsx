@@ -609,6 +609,7 @@ const CanvasInner = forwardRef<CanvasRef, CanvasInnerProps>(function CanvasInner
       if (toolbarRef.current?.contains(t)) return
       if (resizeHandleRef.current?.contains(t)) return
       if (t.closest('.react-flow__node')) return
+      if (t.closest('[data-detail-panel]')) return
       dismiss()
     }
     const handleKey = (e: KeyboardEvent) => {

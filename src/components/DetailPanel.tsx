@@ -1127,7 +1127,7 @@ export default function DetailPanel({ nodeId, object, onClose, onObjectUpdated, 
   }
 
   return (
-    <div ref={panelRef} tabIndex={-1} className={styles.panel} style={{ left: pos.left, top: pos.top, width: PANEL_WIDTH, visibility: nodeOffScreen ? 'hidden' : 'visible', outline: 'none' } as CSSProperties}>
+    <div ref={panelRef} tabIndex={-1} data-detail-panel className={styles.panel} style={{ left: pos.left, top: pos.top, width: PANEL_WIDTH, visibility: nodeOffScreen ? 'hidden' : 'visible', outline: 'none' } as CSSProperties}>
       {/* ===== HEADER ===== */}
       <div
         className={`${styles.header} ${headerClassStyles[object.class] || ''}`}
